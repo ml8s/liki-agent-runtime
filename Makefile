@@ -2,13 +2,17 @@
 #   make lint   静态检查聚合
 #   make check  纯静态契约检查（lint+格式+vet+validate；不跑测试、不写盘）
 #   make test   本仓全部测试（单元/集成；不含 e2e）
-#   make gate   check + test ＝ 推送门槛
+#   make smoke  本仓镜像启动 + operational/public endpoint 冒烟
 #   make build  本仓产物（liki-agents 二进制；镜像由 CI release 构建）
 #   make image  本地镜像（调试用，非发布路径）
 #   make e2e    系统 E2E 聚合（liki-deploy 编排）
 
 GO ?= go
 NPM ?= npm
+NODE_BIN := $(HOME)/.nvm/versions/node/v$(shell cat .nvmrc)/bin
+PYTHON_BIN := $(HOME)/app/python3.12.14/bin
+export PATH := $(PYTHON_BIN):$(HOME)/app/go/bin:$(HOME)/app/go-tools/bin:$(HOME)/go/bin:$(NODE_BIN):$(PATH)
+export GOTOOLCHAIN ?= go1.26.9
 VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo dev)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -20,14 +24,14 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-db db-backup db-verify build run dev dev-down validate gate image
+.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-db db-backup db-verify build run dev dev-down validate gate image smoke
 help:
 	@echo "make check    - static checks: docs, formatting, lint, vet, and artifact"
 	@echo "make lint-readme - lint and test developer documentation"
 	@echo "make test     - run isolated tests (no deployed Engine dependency)"
 	@echo "make test-coverage - run tests and enforce the coverage floor"
 	@echo "make test-db  - run SQLite persistence tests"
-	@echo "make gate     - pre-push gate: static checks and isolated tests"
+	@echo "make smoke    - smoke the local liki-agents image"
 	@echo "make db-backup - create an online SQLite backup"
 	@echo "make db-verify - verify the latest SQLite backup"
 	@echo "make build    - build ./bin/liki-agents"
@@ -95,10 +99,13 @@ image: ## Build liki-agents image locally (debug; production uses CI release)
 		--build-arg GOPROXY=$(GOPROXY) \
 		-t $(IMAGE_REGISTRY)/liki-agents:$(IMAGE_TAG) .
 
+smoke: image ## Smoke the local runtime image with the development deployment
+	IMAGE_TAG=$(IMAGE_TAG) scripts/smoke-image.sh
+
 run:
 	./scripts/dev.sh
 
-gate: check test-coverage
+gate: check test-coverage smoke
 
 check-actions: ## Reject mutable reusable workflow/action references
 	python3 scripts/check_actions_pinned.py
