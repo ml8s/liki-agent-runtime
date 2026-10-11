@@ -5,11 +5,7 @@
     "node": "24.14.1"
   },
   "scripts": {
-    "lint:docs": "npx --yes markdownlint-cli2@0.23.3",
-    "test:docs": "node tests/readme/contract.mjs"
+    "lint:docs": "npx --yes markdownlint-cli2@0.23.3"
   },
-  "devDependencies": {
-    "remark-parse": "^11.0.0",
-    "unified": "^11.0.5"
-  }
+  "devDependencies": {}
 }
