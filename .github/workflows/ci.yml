@@ -44,8 +44,8 @@ jobs:
           version: v2.13.1
       - name: Install Node dependencies
         run: npm ci
-      - name: Run pre-push gate
-        run: make gate
+      - name: Run static checks and tests
+        run: make check test-coverage
 
   vulnerability-scan:
     name: Go vulnerability scan
@@ -100,6 +100,8 @@ jobs:
         with:
           persist-credentials: false
       - run: docker build -t liki-agents:ci .
+      - name: Smoke image
+        run: IMAGE=liki-agents:ci scripts/smoke-image.sh
 
   docker-publish:
     name: Publish runtime image
