@@ -52,7 +52,6 @@ liki 仓 `assembly/Dockerfile`（按 `PROFILE` 构建两套装配镜像）：
 FROM ghcr.io/ml8s/liki-agents:<base>   # 本仓 release 的显式 pin tag
 COPY dist/agents/experts/ /deployment/
 ENV LIKI_AGENTS_DEPLOYMENT_FILE=/deployment/deployment.json
-ENV LIKI_AGENTS_DEPLOYMENT_DIGEST=<digest>  # CI 用本仓镜像 validate 计算
 ```
 
 - 本仓发布**纯运行时镜像**（`Dockerfile`，不打包任何工件）

@@ -42,14 +42,6 @@ func TestLoadValidConfiguration(t *testing.T) {
 	if cfg.MaxConcurrentRuns != 7 {
 		t.Fatalf("max concurrent runs = %d, want 7", cfg.MaxConcurrentRuns)
 	}
-	t.Setenv("LIKI_AGENTS_DEPLOYMENT_DIGEST", "sha256:"+strings.Repeat("a", 64))
-	cfg, err = config.Load()
-	if err != nil {
-		t.Fatalf("Load(deployment digest) error = %v", err)
-	}
-	if cfg.DeploymentDigest != "sha256:"+strings.Repeat("a", 64) {
-		t.Fatalf("deployment digest = %q", cfg.DeploymentDigest)
-	}
 	t.Setenv("LIKI_AGENTS_SKILLS_ROOT", "/tmp/dev/skills")
 	cfg, err = config.Load()
 	if err != nil {
@@ -77,7 +69,6 @@ func TestLoadRejectsInvalidSettings(t *testing.T) {
 		{name: "unsupported environment", key: "LIKI_ENV", value: "staging", wantErr: "LIKI_ENV is unsupported"},
 		{name: "missing llm base url", key: "LIKI_LLM_BASE_URL", value: "", wantErr: "LIKI_LLM_BASE_URL is required"},
 		{name: "missing llm model", key: "LIKI_LLM_MODEL", value: "", wantErr: "LIKI_LLM_MODEL is required"},
-		{name: "invalid deployment digest", key: "LIKI_AGENTS_DEPLOYMENT_DIGEST", value: "sha256:abc", wantErr: "LIKI_AGENTS_DEPLOYMENT_DIGEST must be sha256:<64-hex>"},
 		{name: "multi topology is fail-closed", key: "LIKI_AGENTS_TOPOLOGY", value: "multi", wantErr: "LIKI_AGENTS_TOPOLOGY=multi is not supported yet"},
 		{name: "invalid topology", key: "LIKI_AGENTS_TOPOLOGY", value: "cluster", wantErr: "LIKI_AGENTS_TOPOLOGY is unsupported"},
 		{name: "missing provider", key: "LIKI_LLM_PROVIDER", value: "", wantErr: "LIKI_LLM_PROVIDER is required"},
@@ -112,14 +103,10 @@ func TestProductionConfigurationHardening(t *testing.T) {
 	t.Setenv("LIKI_ENV", "production")
 	t.Setenv("LIKI_AGENTS_INTERNAL_TOKEN", "production-service-token")
 	t.Setenv("LIKI_LLM_API_KEY", "production-model-key")
-	t.Setenv("LIKI_AGENTS_DEPLOYMENT_DIGEST", "sha256:"+strings.Repeat("a", 64))
 
-	cfg, err := config.Load()
+	_, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load(production) error = %v", err)
-	}
-	if cfg.DeploymentDigest == "" {
-		t.Fatal("production deployment digest was not retained")
 	}
 
 	tests := []struct {
@@ -128,7 +115,6 @@ func TestProductionConfigurationHardening(t *testing.T) {
 		value   string
 		wantErr string
 	}{
-		{name: "deployment digest required", key: "LIKI_AGENTS_DEPLOYMENT_DIGEST", value: "", wantErr: "LIKI_AGENTS_DEPLOYMENT_DIGEST is required outside development"},
 		{name: "llm endpoint must be HTTPS", key: "LIKI_LLM_BASE_URL", value: "http://127.0.0.1:8080/v1", wantErr: "LIKI_LLM_BASE_URL must use HTTPS outside development"},
 		{name: "public URL credentials rejected", key: "LIKI_AGENTS_PUBLIC_URL", value: "https://user:secret@agent.internal", wantErr: "LIKI_AGENTS_PUBLIC_URL must not contain embedded credentials"},
 		{name: "LLM URL credentials rejected", key: "LIKI_LLM_BASE_URL", value: "https://key:secret@model.internal/v1", wantErr: "LIKI_LLM_BASE_URL must not contain embedded credentials"},
@@ -186,8 +172,5 @@ func TestDevelopmentAllowsLocalHTTPAndUnpinnedDeployment(t *testing.T) {
 	}
 	if cfg.LLMBaseURL != "http://127.0.0.1:8080/v1" {
 		t.Fatalf("LLM base URL = %q", cfg.LLMBaseURL)
-	}
-	if cfg.DeploymentDigest != "" {
-		t.Fatalf("development deployment digest = %q, want optional/unset", cfg.DeploymentDigest)
 	}
 }

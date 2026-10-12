@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/ml8s/liki-agents/internal/domain"
 )
 
 // DefaultAddr is the default HTTP listen address. The server and the
@@ -26,7 +24,6 @@ type Config struct {
 	InternalToken       string
 	DBPath              string
 	DeploymentFile      string
-	DeploymentDigest    string
 	SkillsRoot          string
 	MCPTimeout          time.Duration
 	MaxConcurrentRuns   int
@@ -70,7 +67,6 @@ func Load() (Config, error) {
 		InternalToken:       getEnv("LIKI_AGENTS_INTERNAL_TOKEN", ""),
 		DBPath:              getEnv("LIKI_AGENTS_DB_PATH", "./data/liki-agents-audit.db"),
 		DeploymentFile:      getEnv("LIKI_AGENTS_DEPLOYMENT_FILE", ""),
-		DeploymentDigest:    strings.TrimSpace(getEnv("LIKI_AGENTS_DEPLOYMENT_DIGEST", "")),
 		SkillsRoot:          strings.TrimSpace(getEnv("LIKI_AGENTS_SKILLS_ROOT", "")),
 		LLMBaseURL:          getEnv("LIKI_LLM_BASE_URL", ""),
 		LLMAPIKey:           getEnv("LIKI_LLM_API_KEY", ""),
@@ -135,12 +131,6 @@ func validate(cfg Config) (Config, error) {
 	}
 	if cfg.DeploymentFile == "" {
 		return Config{}, fmt.Errorf("LIKI_AGENTS_DEPLOYMENT_FILE is required")
-	}
-	if !isDevelopment && cfg.DeploymentDigest == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENTS_DEPLOYMENT_DIGEST is required outside development")
-	}
-	if cfg.DeploymentDigest != "" && !domain.IsValidSHA256Digest(cfg.DeploymentDigest) {
-		return Config{}, fmt.Errorf("LIKI_AGENTS_DEPLOYMENT_DIGEST must be sha256:<64-hex>")
 	}
 	if cfg.SkillsRoot != "" && !isDevelopment {
 		return Config{}, fmt.Errorf("LIKI_AGENTS_SKILLS_ROOT is allowed only in development")

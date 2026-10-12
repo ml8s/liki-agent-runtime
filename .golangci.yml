@@ -2,10 +2,32 @@ version: "2"
 linters:
   default: standard
   enable:
+    - depguard
     - errorlint
     - misspell
     - revive
   settings:
+    depguard:
+      rules:
+        domain-purity:
+          files:
+            - "!**_test.go"
+            - "**/internal/domain/**.go"
+          deny:
+            - pkg: "net/http"
+              desc: domain must stay transport-free
+            - pkg: "database/sql"
+              desc: domain must stay storage-free
+            - pkg: "gorm.io/gorm"
+              desc: domain must stay storage-free
+            - pkg: "github.com/modelcontextprotocol"
+              desc: domain must stay MCP-free
+            - pkg: "google.golang.org/adk"
+              desc: domain must stay framework-free
+            - pkg: "google.golang.org/genai"
+              desc: domain must stay provider-free
+            - pkg: "github.com/ml8s/liki-agents/internal/"
+              desc: domain must not import sibling packages
     revive:
       rules:
         - name: blank-imports

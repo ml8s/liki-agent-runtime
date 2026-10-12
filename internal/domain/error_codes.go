@@ -36,8 +36,6 @@ const (
 	CodeAuditRecorderMissing              = "audit_recorder_missing"
 	CodeAgentDefinitionMissing            = "agent_definition_missing"
 	CodeAgentDefinitionInvalid            = "agent_definition_invalid"
-	CodeDeploymentDigestMismatch          = "deployment_digest_mismatch"
-	CodeDeploymentDigestInvalid           = "deployment_digest_invalid"
 	CodeStructuredOutputCapabilityInvalid = "structured_output_capability_invalid"
 
 	// Runtime execution codes (internal/agent Run / audit)

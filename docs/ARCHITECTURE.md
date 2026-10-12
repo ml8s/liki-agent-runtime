@@ -48,10 +48,11 @@ placeholders.
 The manifest is decoded strictly by the runtime, then graph, file, MCP, and
 model-setting invariants are evaluated before startup.
 The deployment digest covers the manifest plus resolved instruction and output
-schema artifacts and the ADK graph semantics; it is not a hash of the manifest
-alone. Production may pin that complete digest with
-`LIKI_AGENTS_DEPLOYMENT_DIGEST`; startup fails closed when the loaded artifact
-does not match.
+schema artifacts and the ADK graph semantics; it is an audit provenance label,
+not a startup gate. Deployment integrity is owned by the immutable assembly
+image digest: liki builds the assembly image from a digest-pinned runtime base
+and liki-deploy pins the resulting image digest, so runtime binary, manifest,
+instructions, schemas, and skills roll out and roll back as one unit.
 
 ## Principles
 

@@ -93,7 +93,6 @@ func run() (err error) {
 		StructuredOutput:  cfg.LLMStructuredOutput,
 		MaxOutputTokens:   cfg.LLMMaxOutputTokens,
 		Deployment:        deployment,
-		DeploymentDigest:  cfg.DeploymentDigest,
 		SkillsRoot:        cfg.SkillsRoot,
 		MCPTimeout:        cfg.MCPTimeout,
 		MaxConcurrentRuns: cfg.MaxConcurrentRuns,

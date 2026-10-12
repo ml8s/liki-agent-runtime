@@ -138,15 +138,6 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if config.Deployment == nil {
 		return nil, domain.NewError(domain.CodeAgentDefinitionMissing, "AgentDefinition is required", domain.ErrInvalidInput)
 	}
-	config.DeploymentDigest = strings.TrimSpace(config.DeploymentDigest)
-	if config.DeploymentDigest != "" {
-		if !domain.IsValidSHA256Digest(config.DeploymentDigest) {
-			return nil, domain.NewError(domain.CodeDeploymentDigestInvalid, "expected deployment digest must be sha256:<64-hex>", domain.ErrInvalidInput)
-		}
-		if config.DeploymentDigest != config.Deployment.Digest {
-			return nil, domain.NewError(domain.CodeDeploymentDigestMismatch, "loaded AgentDeployment digest does not match the pinned digest", domain.ErrInvalidInput)
-		}
-	}
 	entrypoint, err := config.Deployment.EntrypointDefinition()
 	if err != nil {
 		return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, "select entrypoint AgentDefinition", err)

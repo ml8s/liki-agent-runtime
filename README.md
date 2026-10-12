@@ -53,8 +53,9 @@ invariants; external boundaries follow [`docs/STANDARDS.md`](docs/STANDARDS.md).
 Its digest covers the manifest, referenced instruction and schema files, and the
 ADK graph semantics.
 Audit provenance uses the immutable deployment version and digest already
-carried by the artifact; no separate tool version is configured by the
-environment.
+carried by the artifact. Deployment integrity is owned by the immutable
+assembly image digest pinned by the liki/liki-deploy release chain; no
+duplicate artifact pin is configured by the environment.
 
 ## Protocols
 
@@ -92,9 +93,8 @@ authentication, while AG-UI still requires `X-Liki-User-ID`. Invalid attempts
 are throttled per socket source and return HTTP 429 (`rate_limited`).
 
 MCP access is allowlisted per Agent and server, and evidence never contains
-prompts, raw model output, or tool payloads. Outside development the deployment
-digest is mandatory and the LLM endpoint is HTTPS-only without embedded
-credentials.
+prompts, raw model output, or tool payloads. Outside development the LLM
+endpoint is HTTPS-only without embedded credentials.
 
 ## Configuration
 
@@ -102,7 +102,7 @@ credentials.
 
 | Prefix / variable | Purpose |
 |---|---|
-| `LIKI_AGENTS_*` | service address, token, audit DB path, topology, deployment file and digest pin |
+| `LIKI_AGENTS_*` | service address, token, audit DB path, topology, deployment file |
 | `LIKI_MCP_*` | endpoint/token bindings for logical MCP servers (`LIKI_MCP_<NAME>_URL` / `LIKI_MCP_<NAME>_TOKEN`) |
 | `LIKI_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
 | `LIKI_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
@@ -116,7 +116,7 @@ MCP endpoint values are complete URLs; the gateway may own service prefixes
 Empty `LIKI_LLM_STRUCTURED_OUTPUT` derives the mode from the deployment and
 provider; explicit modes fail closed without an output schema. Per-Agent model
 settings live in the artifact. Concurrency is bounded to 1–1024; development
-alone permits local HTTP LLMs and unpinned deployment digests.
+alone permits local HTTP LLMs.
 
 ## Operations
 

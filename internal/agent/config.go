@@ -25,9 +25,8 @@ type Config struct {
 	StructuredOutput string
 	// MaxOutputTokens bounds every model response; 0 leaves the provider
 	// default unbounded.
-	MaxOutputTokens  int
-	Deployment       *Deployment
-	DeploymentDigest string
+	MaxOutputTokens int
+	Deployment      *Deployment
 
 	// SkillsRoot overrides every agent's skills.root from the deployment so
 	// that development host and container layouts can point at the same
