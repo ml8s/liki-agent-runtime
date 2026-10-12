@@ -14,7 +14,8 @@ Required controls:
 - Internet-facing request rate limiting is owned by the gateway; the runtime's
   internal per-source limiter only resists token brute force.
 - Bounded per-source throttling of invalid bearer or identity attempts.
-- Mandatory deployment digest pinning outside development.
+- Deployment integrity owned by the immutable assembly image digest locked
+  by liki-deploy; no duplicate artifact pin at runtime.
 - HTTPS-only LLM endpoints outside development and no credentials embedded in
   configured URLs.
 - Explicit per-Agent MCP tool allowlists.
