@@ -53,7 +53,7 @@ func StructuredOutputStateKey(agentName string) string {
 	return structuredOutputStateKeyPrefix + agentName
 }
 
-// Metrics is the runtime observation contract for execution evidence.
+// Metrics is the runtime observation interface for execution evidence.
 type Metrics interface {
 	ObserveLLMCall(model, status string, usage domain.LLMTokenUsage)
 	ObserveToolCall(agent, tool, status string, duration time.Duration)

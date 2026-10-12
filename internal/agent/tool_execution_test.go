@@ -255,8 +255,8 @@ func TestToolAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 	}
 }
 
-// TestToolAuditorFailPendingRetainsRecordForRetry guards the reconciliation
-// contract: a transient append failure must not dequeue the pending record, so
+// TestToolAuditorFailPendingRetainsRecordForRetry guards reconciliation:
+// a transient append failure must not dequeue the pending record, so
 // EndAuditRun's cleanup retry can still emit terminal evidence.
 func TestToolAuditorFailPendingRetainsRecordForRetry(t *testing.T) {
 	recorder := &failOnceStubAudit{eventType: audit.EventToolCallFailed}

@@ -36,13 +36,17 @@ incoming-edge-free Agent is the entrypoint. Each Agent definition supplies:
   fall back to the runtime-wide configuration;
 - version.
 
+Deployment metadata carries the producer/runtime version. Audit provenance uses
+that version, the artifact digest, instruction digest, and runtime graph label;
+it does not require a separate tool version.
+
 Prompt, output schema, and tool semantics are not built into Go.
 Instructions are installed through ADK's `InstructionProvider` path because
 AgentDeployment prompts are immutable text artifacts and may contain literal
 JSON/code braces. ADK must not interpret those braces as session-state
 placeholders.
-The manifest is validated against the canonical JSON Schema 2020-12 contract
-before graph and file semantics are evaluated.
+The manifest is decoded strictly by the runtime, then graph, file, MCP, and
+model-setting invariants are evaluated before startup.
 The deployment digest covers the manifest plus resolved instruction and output
 schema artifacts and the ADK graph semantics; it is not a hash of the manifest
 alone. Production may pin that complete digest with
@@ -86,12 +90,12 @@ Protocol adapters never import each other. Database technology is confined to
 | `internal/protocol/a2a` | Agent Card and official A2A JSON-RPC binding |
 | `internal/protocol/agui` | Official AG-UI request decoding and SSE binding |
 | `internal/agent` | AgentDeployment loader, ADK graph, model adapter, MCP tools, audit hooks |
-| `internal/domain` | Runtime audit and validation contracts |
-| `internal/audit` | Immutable audit event contract and recorder port |
+| `internal/domain` | Runtime audit and validation invariants |
+| `internal/audit` | Immutable audit event format and recorder port |
 | `internal/audit/sqlite` | Append-only audit persistence |
 | `internal/observability` | Metric interfaces |
 | `internal/observability/prometheus` | Prometheus implementation |
-| `internal/platform` | Configuration, identity, health contracts, build metadata |
+| `internal/platform` | Configuration, identity, health interfaces, build metadata |
 | `internal/transport` | Routes, bearer auth, identity propagation, body limit, readiness |
 
 ## Runtime execution

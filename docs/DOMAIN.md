@@ -34,7 +34,7 @@ skill/project.
 2. Tool input/output are audited as canonical digests and sizes, never raw payload.
 3. Run, thread, and user identifiers are required; an active RunID is exclusive.
 4. ADK working sessions are run-scoped and removed at terminal execution.
-5. Plain text is the default output contract.
+5. Plain text is the default output mode.
 6. Structured output is optional and validated against the Agent's external
    JSON Schema.
 7. `RunResult.Output` is generic validated JSON for structured Agents.

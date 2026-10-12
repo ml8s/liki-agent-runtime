@@ -9,7 +9,6 @@ import (
 
 type auditEventModel struct {
 	ID                    string    `gorm:"column:id;primaryKey"`
-	SchemaVersion         string    `gorm:"column:schema_version"`
 	EventType             string    `gorm:"column:event_type;index"`
 	OccurredAt            time.Time `gorm:"column:occurred_at;index"`
 	RootRunID             string    `gorm:"column:root_run_id;index"`
@@ -53,7 +52,6 @@ func newAuditEventModel(event *audit.Event) (auditEventModel, error) {
 	}
 	return auditEventModel{
 		ID:                    event.ID,
-		SchemaVersion:         event.SchemaVersion,
 		EventType:             string(event.Type),
 		OccurredAt:            event.OccurredAt,
 		RootRunID:             string(event.RootRunID),

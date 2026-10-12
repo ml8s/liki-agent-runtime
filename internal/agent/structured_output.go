@@ -2,7 +2,7 @@ package agent
 
 // This file adapts provider-specific structured output wire formats. ADK's
 // OpenAI model maps ResponseSchema to json_schema; some OpenAI-compatible
-// providers only expose json_object while retaining the same output contract.
+// providers only expose json_object while retaining the same output semantics.
 
 import (
 	"context"

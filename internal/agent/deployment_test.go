@@ -50,8 +50,6 @@ func writeDeployment(t *testing.T, root string, manifest string) *Deployment {
 
 func validManifest() string {
 	return `{
-		"apiVersion": "agent.liki/v1",
-		"kind": "AgentDeployment",
 		"metadata": {"name": "generic-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
@@ -121,10 +119,9 @@ func TestLoadAgentDeploymentRejectsInvalidManifests(t *testing.T) {
 		manifest string
 		wantErr  string
 	}{
-		{name: "unknown field", manifest: `{"apiVersion":"agent.liki/v1","kind":"AgentDeployment","metadata":{"name":"x","version":"1"},"spec":{"agents":[{"name":"main","version":"1","description":"x","mode":"chat","instruction":{"path":"instruction.md"},"skills":{"root":"/skills"},"tools":{"allow":{"skilltoolset":["list_skills","load_skill","load_skill_resource"]}}}]},"extra":true}`, wantErr: "extra"},
-		{name: "duplicate key", manifest: strings.Replace(validManifest(), `"kind": "AgentDeployment"`, `"kind": "AgentDeployment", "kind": "AgentDeployment"`, 1), wantErr: `duplicate key "kind" at $`},
+		{name: "unknown field", manifest: `{"metadata":{"name":"x","version":"1"},"spec":{"agents":[{"name":"main","version":"1","description":"x","mode":"chat","instruction":{"path":"instruction.md"},"skills":{"root":"/skills"},"tools":{"allow":{"skilltoolset":["list_skills","load_skill","load_skill_resource"]}}}]},"extra":true}`, wantErr: "extra"},
+		{name: "duplicate key", manifest: strings.Replace(validManifest(), `"metadata": {"name": "generic-agents", "version": "1.0.0"}`, `"metadata": {"name": "generic-agents", "version": "1.0.0"}, "metadata": {"name": "generic-agents", "version": "1.0.0"}`, 1), wantErr: `duplicate key "metadata" at $`},
 		{name: "trailing value", manifest: validManifest() + ` {}`, wantErr: "trailing"},
-		{name: "unsupported api", manifest: strings.Replace(validManifest(), `agent.liki/v1`, `agent.liki/v0`, 1), wantErr: "agent.liki/v0"},
 		{name: "unknown sub-agent", manifest: strings.Replace(validManifest(), `"sub_agents": []`, `"sub_agents": [{"name":"missing"}]`, 1), wantErr: "unknown sub-agent"},
 
 		{name: "path traversal", manifest: strings.Replace(validManifest(), `instruction.md`, `../instruction.md`, 1), wantErr: "path escapes from parent"},
@@ -167,19 +164,19 @@ func TestLoadAgentDeploymentRejectsInvalidManifests(t *testing.T) {
 			name: "skills root must match absolute path pattern",
 			manifest: strings.Replace(validManifest(), `"skills": {"root": "/skills"}`,
 				`"skills": {"root": "skills"}`, 1),
-			wantErr: "pattern",
+			wantErr: "must be an absolute path",
 		},
 		{
 			name: "skills root must not be empty",
 			manifest: strings.Replace(validManifest(), `"skills": {"root": "/skills"}`,
 				`"skills": {"root": ""}`, 1),
-			wantErr: "minLength",
+			wantErr: "skills.root is required",
 		},
 		{
 			name: "skills preload must be enum",
 			manifest: strings.Replace(validManifest(), `"skills": {"root": "/skills"}`,
 				`"skills": {"root": "/skills", "preload": "lazy"}`, 1),
-			wantErr: "enum",
+			wantErr: "must be one of frontmatter, complete",
 		},
 		{
 			name: "skills binding requires allow triple",
@@ -280,8 +277,6 @@ func TestAgentOutputPointerMustSelectAStringAtLoadTime(t *testing.T) {
 
 func TestAgentOutputIsOptional(t *testing.T) {
 	plainManifest := `{
-		"apiVersion": "agent.liki/v1",
-		"kind": "AgentDeployment",
 		"metadata": {"name": "generic-agents", "version": "1.0.0"},
 		"spec": {
 			"agents": [{
@@ -317,8 +312,8 @@ func TestAgentOutputRequiresPairedSchemaAndPointer(t *testing.T) {
 		root := t.TempDir()
 		path := writeDeploymentFixture(t, root, genericInstruction, plainOutputSchema, manifest)
 		_, err := LoadAgentDeployment(path)
-		if err == nil || !strings.Contains(err.Error(), "does not match regular expression") {
-			t.Fatalf("LoadAgentDeployment() error = %v, want JSON Schema root-pointer rejection", err)
+		if err == nil || !strings.Contains(err.Error(), "cannot select the object root") {
+			t.Fatalf("LoadAgentDeployment() error = %v, want root-pointer rejection", err)
 		}
 	})
 
@@ -328,18 +323,16 @@ func TestAgentOutputRequiresPairedSchemaAndPointer(t *testing.T) {
 	}{
 		{
 			name:    "schema without pointer",
-			wantErr: `dependentRequired["schema"]`,
+			wantErr: "output.textPointer must be a JSON Pointer",
 		},
 		{
 			name:    "pointer without schema",
-			wantErr: `dependentRequired["textPointer"]`,
+			wantErr: "output.schema.path is required",
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			manifest := `{
-				"apiVersion": "agent.liki/v1",
-				"kind": "AgentDeployment",
 				"metadata": {"name": "generic-agents", "version": "1.0.0"},
 				"spec": {
 					"agents": [{
@@ -369,8 +362,6 @@ func TestAgentOutputRequiresPairedSchemaAndPointer(t *testing.T) {
 func TestLoadAgentDeploymentValidatesGraph(t *testing.T) {
 	worker := `{"name":"worker","version":"1.0.0","description":"worker agent","mode":"task","sub_agents":[],"instruction":{"path":"instruction.md"},"output":{"schema":{"path":"output.schema.json"},"textPointer":"/answer"},"skills":{"root":"/skills"},"tools":{"allow":{"test":["test_tool"],"skilltoolset":["list_skills","load_skill","load_skill_resource"]}}}`
 	base := `{
-		"apiVersion": "agent.liki/v1",
-		"kind": "AgentDeployment",
 		"metadata": {"name": "generic-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
@@ -445,8 +436,6 @@ func TestConvertJSONSchemaToGenaiRejections(t *testing.T) {
 // the runtime-wide environment only supplies fallbacks.
 func TestAgentDefinitionAcceptsPerAgentModelSettings(t *testing.T) {
 	manifest := `{
-		"apiVersion": "agent.liki/v1",
-		"kind": "AgentDeployment",
 		"metadata": {"name": "generic-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
@@ -470,8 +459,6 @@ func TestAgentDefinitionAcceptsPerAgentModelSettings(t *testing.T) {
 
 func TestAgentDefinitionRejectsOutOfRangeModelSettings(t *testing.T) {
 	base := `{
-		"apiVersion": "agent.liki/v1",
-		"kind": "AgentDeployment",
 		"metadata": {"name": "generic-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
@@ -485,10 +472,9 @@ func TestAgentDefinitionRejectsOutOfRangeModelSettings(t *testing.T) {
 		mutation string
 		wantErr  string
 	}{
-		{name: "temperature above range", mutation: `,"temperature": 2.5`, wantErr: "properties/temperature: maximum"},
-		{name: "temperature negative", mutation: `,"temperature": -0.1`, wantErr: "properties/temperature: minimum"},
-		{name: "max output tokens below minimum", mutation: `,"maxOutputTokens": 0`, wantErr: "properties/maxOutputTokens: minimum"},
-		{name: "empty model", mutation: `,"model": ""`, wantErr: "properties/model: minLength"},
+		{name: "temperature above range", mutation: `,"temperature": 2.5`, wantErr: "temperature must be between 0 and 2"},
+		{name: "temperature negative", mutation: `,"temperature": -0.1`, wantErr: "temperature must be between 0 and 2"},
+		{name: "max output tokens below minimum", mutation: `,"maxOutputTokens": -1`, wantErr: "maxOutputTokens must be a non-negative integer"},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {

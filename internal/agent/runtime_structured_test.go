@@ -27,8 +27,6 @@ func buildTestDeployment(t testing.TB) (*Deployment, error) {
 	root := t.TempDir()
 	files := map[string]string{
 		"agent-deployment.json": `{
-			"apiVersion": "agent.liki/v1",
-			"kind": "AgentDeployment",
 			"metadata": {"name": "test-agent", "version": "1.0.0"},
 			"spec": {
 				"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
@@ -231,7 +229,7 @@ func (r *recordingAudit) eventsOfType(eventType audit.EventType) []audit.Event {
 }
 
 // newTestRuntime wires a fake model and an in-memory MCP server. This avoids
-// network dependencies while retaining ADK's real runner and toolset contract.
+// network dependencies while retaining ADK's real runner and toolset behavior.
 func newTestRuntime(t *testing.T, deployment *Deployment, events *recordingAudit, llm model.LLM) *Runtime {
 	return newTestRuntimeWithLimit(t, deployment, events, llm, 0)
 }
@@ -261,7 +259,6 @@ func newTestRuntimeWithLimit(
 		Model:             "fake-model",
 		Deployment:        deployment,
 		AuditRecorder:     events,
-		ContractVersion:   "test-contract",
 		MaxConcurrentRuns: maxRuns,
 		modelOverride:     llm,
 		mcpTransportOverrides: map[string]mcp.Transport{
@@ -488,7 +485,7 @@ func TestRuntimeRunExecutesMCPToolBeforeAuditCompletion(t *testing.T) {
 }
 
 // TestRuntimeRunProducesStructuredAnswerWithoutPayloadLeak is the keystone
-// regression test for the ADK structured-output contract: the Runner clears
+// regression test for ADK structured output: the Runner clears
 // Event.Output before yielding, so the runtime must read the parsed answer
 // from session state, must never expose payload JSON to protocol observers,
 // and must still persist the LLM audit lifecycle.

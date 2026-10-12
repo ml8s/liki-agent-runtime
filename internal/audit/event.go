@@ -1,4 +1,4 @@
-// Package audit defines the durable execution evidence contract used by the
+// Package audit defines the durable execution evidence format used by the
 // Agent runtime. Audit events are immutable facts; they are not telemetry and
 // must never contain user prompts, model raw output, secrets, or tool payloads.
 package audit
@@ -10,9 +10,6 @@ import (
 
 	"github.com/ml8s/liki-agents/internal/domain"
 )
-
-// SchemaV1 is the stable contract for all v1 audit events.
-const SchemaV1 = "audit.liki/v1"
 
 // Audit event type identifiers.
 const (
@@ -30,7 +27,7 @@ const (
 	EventDelegationFailed    EventType = "agent.delegation.failed"
 )
 
-// EventType identifies a lifecycle fact. Event names are stable contracts.
+// EventType identifies a lifecycle fact. Event names are stable identifiers.
 type EventType string
 
 // Status is the outcome represented by a lifecycle event.
@@ -46,7 +43,6 @@ const (
 // Event is one immutable execution fact.
 type Event struct {
 	ID                    string
-	SchemaVersion         string
 	Type                  EventType
 	OccurredAt            time.Time
 	RootRunID             domain.ID
@@ -80,7 +76,6 @@ type Event struct {
 // Normalize trims whitespace from identifier fields.
 func (e *Event) Normalize() {
 	e.ID = strings.TrimSpace(e.ID)
-	e.SchemaVersion = strings.TrimSpace(e.SchemaVersion)
 	e.Type = EventType(strings.TrimSpace(string(e.Type)))
 	e.UserID = strings.TrimSpace(e.UserID)
 	e.Protocol = strings.TrimSpace(e.Protocol)
@@ -102,8 +97,6 @@ func (e *Event) Validate() error {
 	switch {
 	case e.ID == "":
 		return NewError(CodeIDRequired, "audit event id is required")
-	case e.SchemaVersion != SchemaV1:
-		return NewError(CodeSchemaUnsupported, "unsupported audit event schema", fmt.Errorf("%q", e.SchemaVersion))
 	case e.Type == "":
 		return NewError(CodeTypeRequired, "audit event type is required")
 	case !knownEventType(e.Type):
@@ -223,11 +216,10 @@ func NewError(code string, message string, cause ...error) error {
 	return domain.NewError(code, message, wrapped)
 }
 
-// Common audit error codes. They live beside the event contract so all audit
+// Common audit error codes. They live beside the event format so all audit
 // adapters return the same stable identifiers.
 const (
 	CodeIDRequired                   = "audit_event_id_required"
-	CodeSchemaUnsupported            = "audit_event_schema_unsupported"
 	CodeTypeRequired                 = "audit_event_type_required"
 	CodeTypeInvalid                  = "audit_event_type_invalid"
 	CodeErrorCodeRequired            = "audit_event_error_code_required"

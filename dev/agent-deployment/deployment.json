@@ -1,6 +1,4 @@
 {
-  "apiVersion": "agent.liki/v1",
-  "kind": "AgentDeployment",
   "metadata": {
     "name": "liki-agents-deployment",
     "version": "1.0.0"

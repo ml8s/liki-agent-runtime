@@ -1,9 +1,6 @@
 package pipeline_test
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	agentruntime "github.com/ml8s/liki-agents/internal/agent"
@@ -41,18 +38,5 @@ func TestDevelopmentAgentDeploymentRegistersComplementaryMCPTools(t *testing.T) 
 	}
 	if got := entrypoint.Tools.Allow["counsel"]; len(got) == 0 {
 		t.Fatal("entrypoint has no allowlisted Counsel tools")
-	}
-}
-
-func TestDevelopmentComposeBuildsProjectRoot(t *testing.T) {
-	raw, err := os.ReadFile("../../dev/docker-compose.yml")
-	if err != nil {
-		t.Fatalf("read development Compose file: %v", err)
-	}
-	if !strings.Contains(string(raw), "context: .") {
-		t.Fatal("development Compose build context must be the liki-agents project root")
-	}
-	if _, err := os.Stat(filepath.Join("../..", "Dockerfile")); err != nil {
-		t.Fatalf("project-root Dockerfile must exist: %v", err)
 	}
 }

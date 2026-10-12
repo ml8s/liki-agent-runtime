@@ -10,15 +10,15 @@ machine client ──A2A JSON-RPC──┐
 liki-web ──AG-UI SSE→ liki-agents ──MCP→ external tools
 ```
 
-The runtime is domain-neutral: deployments supply instructions, output
-contracts, delegation topology, and tool allowlists; `liki-agents` provides
+The runtime is domain-neutral: deployments supply instructions, output schemas,
+delegation topology, and tool allowlists; `liki-agents` provides
 execution, protocol adaptation, security, evidence, and observability.
 
 ## Install
 
-Requires Go 1.26+, Node.js 24.14.1 (see `.nvmrc`), Docker Compose, golangci-lint
-2.x, and the SQLite CLI (`sqlite3`) for `make db-backup`. Clone the repository
-and run `make build`; the binary is written to `bin/liki-agents`.
+Requires Go 1.26+, Node.js 24.14.1 (see `.nvmrc`), Docker Compose, and
+golangci-lint 2.x. Clone the repository and run `make build`; the binary is
+written to `bin/liki-agents`.
 
 ## Quick start
 
@@ -39,7 +39,7 @@ from the Liki project) and loads `.env`. Browser testing uses
 ## Runtime model
 
 An `AgentDeployment` is the sole source of Agent behavior and topology: each
-Agent has an ADK mode, instruction file, optional output contract, and an explicit
+Agent has an ADK mode, instruction file, optional output schema, and an explicit
 `tools.allow`; `mcpServers` binds logical servers to endpoint/token environment
 variables; the unique root (no incoming `sub_agents` edge) is the entrypoint and
 ADK owns delegation and execution.
@@ -48,11 +48,13 @@ Prompts are external files and plain text is the default; typed output declares
 a JSON Schema plus a JSON Pointer to the user-facing string. Tool access is
 denied unless the tool is listed in the Agent's server-scoped `tools.allow`.
 
-The artifact is validated against
-[`contracts/agent-definition.schema.json`](contracts/agent-definition.schema.json);
-external boundaries follow [`docs/STANDARDS.md`](docs/STANDARDS.md). Its digest
-covers the manifest, referenced instruction and schema files, and the ADK graph
-semantics.
+The artifact is validated by this runtime's strict JSON decoder and deployment
+invariants; external boundaries follow [`docs/STANDARDS.md`](docs/STANDARDS.md).
+Its digest covers the manifest, referenced instruction and schema files, and the
+ADK graph semantics.
+Audit provenance uses the immutable deployment version and digest already
+carried by the artifact; no separate tool version is configured by the
+environment.
 
 ## Protocols
 
@@ -102,7 +104,7 @@ credentials.
 |---|---|
 | `LIKI_AGENTS_*` | service address, token, audit DB path, topology, deployment file and digest pin |
 | `LIKI_MCP_*` | endpoint/token bindings for logical MCP servers (`LIKI_MCP_<NAME>_URL` / `LIKI_MCP_<NAME>_TOKEN`) |
-| `LIKI_TOOL_CONTRACT_VERSION` (optional), `LIKI_MAX_CONCURRENT_RUNS` | provenance label and bounded concurrent executions |
+| `LIKI_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
 | `LIKI_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
 | `LIKI_LOG_*` | structured logging |
 | `OTEL_*` | standard OpenTelemetry tracing settings |
@@ -118,10 +120,10 @@ alone permits local HTTP LLMs and unpinned deployment digests.
 
 ## Operations
 
-Use `make run` for the host and `make dev` for Compose; `make dev-down` removes
-the workload and `make db-backup` backs up SQLite online. Compose and release
-images probe `/readyz` via the built-in `healthcheck` subcommand; the runtime
-is single-replica (see [`docs/STANDARDS.md`](docs/STANDARDS.md) for scaling).
+Use `make run` for the host and `make dev` for Compose; `make dev-down`
+removes the workload. Release images probe `/readyz` via the built-in
+`healthcheck` subcommand; the runtime is single-replica (see
+[`docs/STANDARDS.md`](docs/STANDARDS.md) for scaling).
 
 ## Observability
 
@@ -147,7 +149,7 @@ failures, never editing history; records exclude conversation or domain payloads
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | runtime architecture and protocol mapping |
 | [`docs/DOMAIN.md`](docs/DOMAIN.md) | stable runtime domain invariants |
-| [`contracts/agent-definition.schema.json`](contracts/agent-definition.schema.json) | deployment contract |
+| [`dev/agent-deployment/deployment.json`](dev/agent-deployment/deployment.json) | runtime validation fixture |
 | [`SECURITY.md`](SECURITY.md) | security policy and required controls |
 
 ## Development

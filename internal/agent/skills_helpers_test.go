@@ -7,7 +7,7 @@ import (
 )
 
 // writeMinimalSkillTree creates a valid ADK skill rootFS with one skill
-// directory whose frontmatter name matches the directory name (ADK contract).
+// directory whose frontmatter name matches the directory name (ADK layout rule).
 func writeMinimalSkillTree(t testing.TB, root string) {
 	t.Helper()
 	dir := filepath.Join(root, "testskill")

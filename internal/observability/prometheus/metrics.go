@@ -12,7 +12,7 @@ import (
 )
 
 // Metrics is the Prometheus implementation of the protocol and runtime
-// observation contracts.
+// observation interfaces.
 type Metrics struct {
 	registry          *prometheus.Registry
 	protocolRequests  *prometheus.CounterVec

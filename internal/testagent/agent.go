@@ -18,8 +18,6 @@ func Deployment(t *testing.T) *agent.Deployment {
 	root := t.TempDir()
 	files := map[string]string{
 		"agent-deployment.json": `{
-			"apiVersion": "agent.liki/v1",
-			"kind": "AgentDeployment",
 			"metadata": {"name": "adapter-agent", "version": "1.0.0"},
 			"spec": {
 				"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],

@@ -47,8 +47,6 @@ type LLMCall struct {
 	DurationMS            int64
 	ErrorCode             string
 	ErrorMessage          string
-	GraphVersion          string
-	ContractVersion       string
 	PromptVersion         string
 	DefinitionName        string
 	DefinitionVersion     string

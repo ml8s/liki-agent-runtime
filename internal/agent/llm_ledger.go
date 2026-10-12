@@ -32,8 +32,6 @@ type llmRunScope struct {
 	startedAt         time.Time
 	protocol          string
 	model             string
-	graph             string
-	contract          string
 	instructionDigest string
 	traceID           string
 	spanID            string
@@ -150,8 +148,6 @@ func (l *llmLedger) beforeModel(ctx agent.Context, request *model.LLMRequest) (*
 		Model:             modelName,
 		Provider:          l.provider,
 		Status:            domain.LLMCallRunning,
-		GraphVersion:      scope.graph,
-		ContractVersion:   scope.contract,
 		PromptVersion:     scope.instructionDigest,
 		DefinitionName:    scope.definitionName,
 		DefinitionVersion: scope.definitionVersion,
@@ -209,8 +205,6 @@ func (l *llmLedger) afterModel(ctx agent.Context, response *model.LLMResponse, r
 		Model:             modelName,
 		Provider:          l.provider,
 		Status:            domain.LLMCallCompleted,
-		GraphVersion:      scope.graph,
-		ContractVersion:   scope.contract,
 		PromptVersion:     scope.instructionDigest,
 		DefinitionName:    scope.definitionName,
 		DefinitionVersion: scope.definitionVersion,
@@ -284,7 +278,7 @@ func (l *llmLedger) onModelError(ctx agent.Context, request *model.LLMRequest, r
 	scope.mu.Unlock()
 	if !exists {
 		// ADK invoked the model-error callback without a matching BeforeModel
-		// callback, so no started fact exists yet. The audit contract requires
+		// callback, so no started fact exists yet. Audit evidence requires
 		// started and terminal evidence for every model call; synthesize the
 		// missing started fact before recording the failure.
 		if err := l.recordCallStarted(ctx, scope, runtime); err != nil {
@@ -301,8 +295,6 @@ func (l *llmLedger) onModelError(ctx agent.Context, request *model.LLMRequest, r
 		Model:             modelName,
 		Provider:          l.provider,
 		Status:            domain.LLMCallFailed,
-		GraphVersion:      scope.graph,
-		ContractVersion:   scope.contract,
 		PromptVersion:     scope.instructionDigest,
 		DefinitionName:    scope.definitionName,
 		DefinitionVersion: scope.definitionVersion,
@@ -345,7 +337,6 @@ func (l *llmLedger) failActive(scope *llmRunScope, err error, finishedAt time.Ti
 			ID: runtime.id, RunID: scope.runID, ThreadID: scope.threadID,
 			UserID: scope.userID, AgentName: runtime.agentName, Model: runtime.model,
 			Provider: l.provider, Status: domain.LLMCallFailed,
-			GraphVersion: scope.graph, ContractVersion: scope.contract,
 			PromptVersion: runtime.instructionDigest,
 			StartedAt:     runtime.startedAt, FinishedAt: finishedAt,
 		}
@@ -381,7 +372,7 @@ func (l *llmLedger) applyAgent(call *domain.LLMCall, name string) {
 }
 
 // recordCallStarted appends the started fact for a model call that ADK reported
-// without a matching BeforeModel callback, preserving the audit contract that
+// without a matching BeforeModel callback, preserving the audit rule that
 // every model call has started and terminal evidence.
 func (l *llmLedger) recordCallStarted(ctx agent.Context, scope *llmRunScope, runtime llmCallRuntime) error {
 	call := &domain.LLMCall{
@@ -393,8 +384,6 @@ func (l *llmLedger) recordCallStarted(ctx agent.Context, scope *llmRunScope, run
 		Model:             runtime.model,
 		Provider:          l.provider,
 		Status:            domain.LLMCallRunning,
-		GraphVersion:      scope.graph,
-		ContractVersion:   scope.contract,
 		PromptVersion:     scope.instructionDigest,
 		DefinitionName:    scope.definitionName,
 		DefinitionVersion: scope.definitionVersion,
@@ -435,8 +424,6 @@ func (l *llmLedger) recordCall(ctx context.Context, scope *llmRunScope, call *do
 		event.SpanID = scope.spanID
 	}
 	event.Payload = map[string]any{
-		"graph_version":     call.GraphVersion,
-		"contract_version":  call.ContractVersion,
 		"prompt_version":    call.PromptVersion,
 		"prompt_tokens":     call.PromptTokens,
 		"completion_tokens": call.CompletionTokens,

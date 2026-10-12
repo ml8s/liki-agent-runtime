@@ -56,7 +56,7 @@ func (r *AuditEventRepository) append(ctx context.Context, db *gorm.DB, event *a
 
 // RecoverInterrupted appends terminal failure evidence for every started audit
 // lifecycle that has no completed or failed event. It runs before the runtime
-// accepts traffic and relies on the stable event-ID contract; malformed legacy
+// accepts traffic and relies on the stable event-ID rule; malformed legacy
 // IDs fail closed instead of being silently transformed.
 func (r *AuditEventRepository) RecoverInterrupted(ctx context.Context, now time.Time) error {
 	if now.IsZero() {
@@ -104,7 +104,7 @@ AND NOT EXISTS (
 			if !ok || base == "" {
 				return audit.NewError(
 					audit.CodeAuditAppendFailed,
-					fmt.Sprintf("audit event %q does not follow the stable lifecycle ID contract", original.ID),
+					fmt.Sprintf("audit event %q does not follow the stable lifecycle ID rule", original.ID),
 					nil,
 				)
 			}
@@ -144,7 +144,6 @@ func recoveryEvent(original auditEventModel, terminalType, id string, now time.T
 
 	event := &audit.Event{
 		ID:                    id,
-		SchemaVersion:         original.SchemaVersion,
 		Type:                  audit.EventType(terminalType),
 		OccurredAt:            now,
 		RootRunID:             domain.ID(original.RootRunID),

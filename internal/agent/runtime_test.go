@@ -28,7 +28,7 @@ func (r *interruptingAuditRecorder) RecoverInterrupted(context.Context, time.Tim
 	return r.err
 }
 
-func TestNewRuntimeValidatesContract(t *testing.T) {
+func TestNewRuntimeValidatesDeployment(t *testing.T) {
 	tests := []struct {
 		name     string
 		config   agent.Config

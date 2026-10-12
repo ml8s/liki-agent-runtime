@@ -4,8 +4,7 @@ package buildinfo
 // Build metadata, overridden via -ldflags at build time; defaults target local
 // builds.
 var (
-	Version      = "dev"
-	Commit       = "unknown"
-	BuildTime    = "unknown"
-	GraphVersion = "adk-generic-runtime-v1"
+	Version   = "local"
+	Commit    = "unknown"
+	BuildTime = "unknown"
 )

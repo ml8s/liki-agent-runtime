@@ -3,7 +3,7 @@ package domain
 import "errors"
 
 // ErrInvalidInput marks a caller-supplied value that violates a domain
-// contract.
+// invariant.
 var ErrInvalidInput = errors.New("invalid input")
 
 // Error is the runtime's coded error. Code is a stable externally visible

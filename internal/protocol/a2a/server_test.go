@@ -75,8 +75,6 @@ func testRuntimeWithDeployment(t *testing.T, deployment *agent.Deployment) (*age
 		ModelBaseURL:     modelServer.URL + "/v1",
 		Deployment:       deployment,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
-		GraphVersion:     "test-graph",
-		ContractVersion:  "test-contract",
 		Provider:         "test-provider",
 		AuditRecorder:    recorder,
 	})

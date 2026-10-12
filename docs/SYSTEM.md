@@ -1,7 +1,7 @@
 # Liki 系统全况与本仓对齐
 
 > 本文档描述 Liki 多 Agent 系统的全局架构，以及本仓（通用运行时仓）在其中
-> 的角色与对齐点。让本仓负责人知道：我产什么、谁消费、契约在哪、变更如何传播。
+> 的角色与对齐点。让本仓负责人知道：我产什么、谁消费、边界在哪、变更如何传播。
 
 ## 一、系统全局架构
 
@@ -16,7 +16,7 @@ Liki 是多 Agent 命理专家系统，四仓分工：
 | 仓 | 角色 | 产物 |
 |---|---|---|
 | liki | 内容/领域仓 | 专家内容、engine/counsel MCP、deployment 工件、装配镜像、web skill bundle |
-| **liki-agents（本仓）** | 通用运行时仓 | **纯运行时镜像**、**AgentDeployment schema 契约** |
+| **liki-agents（本仓）** | 通用运行时仓 | **纯运行时镜像**、**AgentDeployment 运行时校验** |
 | liki-web | 产品 BFF 仓 | liki-web 镜像（BFF + 前端） |
 | liki-deploy | 发布编排仓 | 纯清单：compose + env + Caddyfile，只 pin 版本 |
 
@@ -33,17 +33,16 @@ Liki 是多 Agent 命理专家系统，四仓分工：
 
 ## 三、关键对齐点（负责人必读）
 
-### 3.1 契约：AgentDeployment schema（本仓拥有）
+### 3.1 AgentDeployment 工件（本仓运行时校验）
 
-`contracts/agent-definition.schema.json` 是本仓**拥有并发布**的契约：
+`AgentDeployment` 是 liki 生成的内部 deployment 工件。本仓不发布独立
+schema artifact：
 
-- **schema 使用独立契约版本**：`contracts/agent-definition.version` 固定契约
-  SemVer 与 schema digest，随仓库提交发布
-- **liki 消费该契约**：liki 仓 `contracts/agent-definition.version` 同步一份
-  version+digest，生成工件时校验本地 schema digest 一致
-- 本仓 `contracts.go` 内嵌 schema，运行时加载工件时用 `jsonschema-go` 校验
+- 工件由本仓 `LoadAgentDeployment` 严格解码并校验
+- liki 生成工件后，用本仓 pinned runtime 执行 `validate`
+- 工件 digest、runtime base digest、装配镜像 digest 提供可复现 provenance
 
-**发布顺序硬约束**：schema/镜像先发布（liki-agents release），liki 后发布（装配镜像 FROM + 按新 schema 生成工件）。
+**发布顺序硬约束**：liki-agents 镜像先发布，liki 后发布装配镜像（FROM pinned runtime，并用该 runtime 验证工件）。
 
 ### 3.2 装配镜像（liki 侧构建，本仓是 base）
 
@@ -66,12 +65,11 @@ ENV LIKI_AGENTS_DEPLOYMENT_DIGEST=<digest>  # CI 用本仓镜像 validate 计算
 
 | env | 说明 |
 |---|---|
-| `LIKI_MCP_ENGINE_URL` / `LIKI_MCP_ENGINE_TOKEN` | 契约 mcpServers `engine` 的 endpointEnv/tokenEnv |
-| `LIKI_MCP_COUNSEL_URL` / `LIKI_MCP_COUNSEL_TOKEN` | 契约 mcpServers `counsel` 的 endpointEnv/tokenEnv |
-| `LIKI_TOOL_CONTRACT_VERSION` | 可选审计标签：工具契约版本（通常由装配镜像内置）；空=审计记空串 |
+| `LIKI_MCP_ENGINE_URL` / `LIKI_MCP_ENGINE_TOKEN` | 工件 mcpServers `engine` 的 endpointEnv/tokenEnv |
+| `LIKI_MCP_COUNSEL_URL` / `LIKI_MCP_COUNSEL_TOKEN` | 工件 mcpServers `counsel` 的 endpointEnv/tokenEnv |
 | `LIKI_LLM_*`、`LIKI_RUN_*`、`LIKI_LOG_*` | 模型（`BASE_URL`/`MODEL`/`PROVIDER` 必填；`MAX_OUTPUT_TOKENS` 可选）/超时/日志 |
 
-**命名必须与工件声明一致**（`runtime.go` 用 `os.LookupEnv(endpointEnv)` 读取），deploy 有契约一致性检查。
+**命名必须与工件声明一致**（`runtime.go` 用 `os.LookupEnv(endpointEnv)` 读取），deploy 有环境一致性检查。审计使用工件版本与 digest，不单独配置工具版本。
 
 ### 3.4 协议与编排（已实现）
 
@@ -84,7 +82,7 @@ ENV LIKI_AGENTS_DEPLOYMENT_DIGEST=<digest>  # CI 用本仓镜像 validate 计算
 
 | 本仓变更 | 影响 | 传播路径 |
 |---|---|---|
-| 改 schema 契约 | 所有工件格式 | 发 schema → liki 更新 `agent-definition.version` → 重新生成工件 → 重发装配镜像 |
+| 改工件格式 | 所有 deployment 工件 | 本仓 runtime/校验先发布 → liki 重新生成并用 pinned runtime validate → 重发装配镜像 |
 | 改运行时行为 | 装配镜像运行逻辑 | 发新运行时镜像 → liki 重发装配镜像（FROM 新 base） |
 | 新增协议能力 | 对 web/A2A 客户端 | 同步 liki-web 消费逻辑 |
 
@@ -93,11 +91,11 @@ ENV LIKI_AGENTS_DEPLOYMENT_DIGEST=<digest>  # CI 用本仓镜像 validate 计算
 ## 五、本仓 CI 发布链（release 触发）
 
 - `check`/`build`/`vulnerability-scan`/`node-audit`：质量门
-- `docker-publish`：push `liki-agents:<version>` + schema OCI artifact
+- `docker-publish`：push `liki-agents:<version>`
 
 ## 六、相关文档
 
-- `docs/ARCHITECTURE.md`：运行时内部架构与 AgentDeployment 契约详解
+- `docs/ARCHITECTURE.md`：运行时内部架构与 AgentDeployment 工件详解
 - `docs/DOMAIN.md`、`docs/STANDARDS.md`：领域与标准约定
 - `liki/docs/SYSTEM.md`：内容仓视角的全况
-- `liki-deploy/docs/ARCHITECTURE.md`：系统落地计划与发布时序
+- `liki-deploy/docs/ARCHITECTURE.md`：系统架构与发布时序

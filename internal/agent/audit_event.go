@@ -10,7 +10,6 @@ import "github.com/ml8s/liki-agents/internal/audit"
 // instead of at every event-construction site.
 func scopedEvent(scope *llmRunScope) audit.Event {
 	return audit.Event{
-		SchemaVersion:     audit.SchemaV1,
 		RootRunID:         scope.runID,
 		RunID:             scope.runID,
 		ThreadID:          scope.threadID,

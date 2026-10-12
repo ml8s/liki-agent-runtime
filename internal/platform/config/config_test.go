@@ -11,7 +11,6 @@ func baseEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("LIKI_ENV", "development")
 	t.Setenv("LIKI_AGENTS_PUBLIC_URL", "https://agent.internal")
-	t.Setenv("LIKI_TOOL_CONTRACT_VERSION", "test-tool-contract")
 	t.Setenv("LIKI_AGENTS_DEPLOYMENT_FILE", "/tmp/agent-deployment.json")
 	t.Setenv("LIKI_LLM_PROVIDER", "zhipu")
 	t.Setenv("LIKI_LLM_STRUCTURED_OUTPUT", "json_object")
@@ -144,24 +143,6 @@ func TestProductionConfigurationHardening(t *testing.T) {
 				t.Fatalf("Load() error = %v, want %q", err, test.wantErr)
 			}
 		})
-	}
-}
-
-// Regression guard: the development PublicURL default is derived from
-// DefaultAddr so the two cannot drift when the port changes.
-// The tool contract version is an upper-layer provenance label: the runtime
-// records it into audit evidence but never gates on it, so it must not be
-// required to boot (Configuration ownership: labels travel with the assembly
-// artifact, not as a runtime prerequisite).
-func TestLoadAllowsMissingToolContract(t *testing.T) {
-	baseEnv(t)
-	t.Setenv("LIKI_TOOL_CONTRACT_VERSION", "")
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.ToolContract != "" {
-		t.Fatalf("tool contract = %q, want empty", cfg.ToolContract)
 	}
 }
 

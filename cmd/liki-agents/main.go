@@ -92,8 +92,6 @@ func run() (err error) {
 		Provider:          cfg.LLMProvider,
 		StructuredOutput:  cfg.LLMStructuredOutput,
 		MaxOutputTokens:   cfg.LLMMaxOutputTokens,
-		ContractVersion:   cfg.ToolContract,
-		GraphVersion:      buildinfo.GraphVersion,
 		Deployment:        deployment,
 		DeploymentDigest:  cfg.DeploymentDigest,
 		SkillsRoot:        cfg.SkillsRoot,
@@ -166,7 +164,6 @@ func run() (err error) {
 			"protocols", "A2A,AG-UI,MCP",
 			"env", cfg.Env,
 			"mcp_servers", mcpServerNames(deployment),
-			"graph", buildinfo.GraphVersion,
 		)
 		errCh <- httpServer.ListenAndServe()
 	}()

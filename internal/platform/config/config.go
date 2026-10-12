@@ -25,7 +25,6 @@ type Config struct {
 	PublicURL           string
 	InternalToken       string
 	DBPath              string
-	ToolContract        string
 	DeploymentFile      string
 	DeploymentDigest    string
 	SkillsRoot          string
@@ -45,7 +44,7 @@ type Config struct {
 	LogLevel            string
 }
 
-// Topology declares the process-state contract required by the deployment.
+// Topology declares the process state required by the deployment.
 type Topology string
 
 const (
@@ -70,7 +69,6 @@ func Load() (Config, error) {
 		PublicURL:           getEnv("LIKI_AGENTS_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
 		InternalToken:       getEnv("LIKI_AGENTS_INTERNAL_TOKEN", ""),
 		DBPath:              getEnv("LIKI_AGENTS_DB_PATH", "./data/liki-agents-audit.db"),
-		ToolContract:        getEnv("LIKI_TOOL_CONTRACT_VERSION", ""),
 		DeploymentFile:      getEnv("LIKI_AGENTS_DEPLOYMENT_FILE", ""),
 		DeploymentDigest:    strings.TrimSpace(getEnv("LIKI_AGENTS_DEPLOYMENT_DIGEST", "")),
 		SkillsRoot:          strings.TrimSpace(getEnv("LIKI_AGENTS_SKILLS_ROOT", "")),

@@ -6,7 +6,7 @@ import (
 )
 
 // eventProjector converts internal ADK events into the runtime's observable
-// event contract. It is the single place that decides whether partial model
+// event format. It is the single place that decides whether partial model
 // output, finalized model output, and tool facts are visible to protocols.
 type eventProjector struct {
 	definitions map[string]*AgentDefinition

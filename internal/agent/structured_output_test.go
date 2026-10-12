@@ -30,7 +30,7 @@ func (m *capturingLLM) GenerateContent(
 	}
 }
 
-func TestJSONObjectModelKeepsOneStructuredContractOnJSONMode(t *testing.T) {
+func TestJSONObjectModelKeepsStructuredSemanticsOnJSONMode(t *testing.T) {
 	inner := &capturingLLM{response: &model.LLMResponse{
 		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "{}"}}},
 	}}

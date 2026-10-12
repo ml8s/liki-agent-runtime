@@ -19,16 +19,11 @@ import (
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/ml8s/liki-agents/contracts"
 	jsonpointer "github.com/qri-io/jsonpointer"
 	"google.golang.org/genai"
 )
 
-// AgentDeployment contract constants.
 const (
-	AgentAPIVersion = "agent.liki/v1"
-	AgentKind       = "AgentDeployment"
-
 	maxManifestBytes       = 2 << 20
 	maxTextArtifactBytes   = 2 << 20
 	maxSchemaArtifactBytes = 4 << 20
@@ -36,10 +31,8 @@ const (
 
 // Deployment is the validated AgentDeployment artifact and its derived digest.
 type Deployment struct {
-	APIVersion string             `json:"apiVersion"`
-	Kind       string             `json:"kind"`
-	Metadata   DeploymentMetadata `json:"metadata"`
-	Spec       DeploymentSpec     `json:"spec"`
+	Metadata DeploymentMetadata `json:"metadata"`
+	Spec     DeploymentSpec     `json:"spec"`
 
 	Digest string `json:"-"`
 }
@@ -78,7 +71,7 @@ type AgentReference struct {
 	Name string `json:"name"`
 }
 
-// AgentDefinition is one deployed Agent: instruction, optional output contract,
+// AgentDefinition is one deployed Agent: instruction, optional output schema,
 // tool allowlist, and delegation edges.
 type AgentDefinition struct {
 	Name        string           `json:"name"`
@@ -114,14 +107,14 @@ type FileReference struct {
 	Path string `json:"path"`
 }
 
-// OutputDefinition declares an Agent's optional structured-output contract and
+// OutputDefinition declares an Agent's optional structured-output schema and
 // the JSON Pointer selecting its user-facing text.
 type OutputDefinition struct {
 	Schema      FileReference `json:"schema"`
 	TextPointer string        `json:"textPointer"`
 }
 
-// Structured reports whether the Agent declares a structured-output contract.
+// Structured reports whether the Agent declares a structured-output schema.
 func (o OutputDefinition) Structured() bool {
 	return o.Schema.Path != "" || o.TextPointer != ""
 }
@@ -214,9 +207,6 @@ func LoadAgentDeployment(path string) (*Deployment, error) {
 	if len(raw) > maxManifestBytes {
 		return nil, fmt.Errorf("agent deployment manifest exceeds %d bytes", maxManifestBytes)
 	}
-	if err := validateAgainstContract(raw); err != nil {
-		return nil, fmt.Errorf("validate agent deployment contract: %w", err)
-	}
 	deployment, err := decodeAgentDeployment(raw)
 	if err != nil {
 		return nil, err
@@ -231,21 +221,6 @@ func LoadAgentDeployment(path string) (*Deployment, error) {
 		return nil, fmt.Errorf("deployment digest: %w", err)
 	}
 	return deployment, nil
-}
-
-func validateAgainstContract(raw []byte) error {
-	contract, err := contracts.AgentDefinition()
-	if err != nil {
-		return fmt.Errorf("resolve JSON Schema contract: %w", err)
-	}
-	var document any
-	if err := decodeStrictJSON(raw, &document); err != nil {
-		return err
-	}
-	if err := contract.Validate(document); err != nil {
-		return fmt.Errorf("JSON Schema validation failed: %w", err)
-	}
-	return nil
 }
 
 // Validate rechecks an in-memory deployment, including its derived graph
@@ -347,12 +322,6 @@ func rejectDuplicateKeysInValue(decoder *json.Decoder, path string) error {
 }
 
 func (d *Deployment) validate() error {
-	if d.APIVersion != AgentAPIVersion {
-		return fmt.Errorf("unsupported agent deployment apiVersion %q", d.APIVersion)
-	}
-	if d.Kind != AgentKind {
-		return fmt.Errorf("unsupported agent deployment kind %q", d.Kind)
-	}
 	if strings.TrimSpace(d.Metadata.Name) == "" {
 		return fmt.Errorf("agent deployment metadata.name is required")
 	}
@@ -506,6 +475,12 @@ func (a *AgentDefinition) validate(mcpServers map[string]struct{}) error {
 	}
 	if strings.TrimSpace(a.Instruction.Path) == "" {
 		return fmt.Errorf("instruction.path is required")
+	}
+	if a.Temperature != nil && (*a.Temperature < 0 || *a.Temperature > 2) {
+		return fmt.Errorf("temperature must be between 0 and 2")
+	}
+	if a.MaxOutputTokens < 0 {
+		return fmt.Errorf("maxOutputTokens must be a non-negative integer")
 	}
 	if a.Skills != nil {
 		if strings.TrimSpace(a.Skills.Root) == "" {

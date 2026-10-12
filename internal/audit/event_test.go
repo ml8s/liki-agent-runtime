@@ -10,7 +10,7 @@ import (
 
 func TestEventValidate(t *testing.T) {
 	valid := Event{
-		ID: "run_1:started", SchemaVersion: SchemaV1,
+		ID:   "run_1:started",
 		Type: EventRunStarted, OccurredAt: time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC),
 		RootRunID: "run_1", RunID: "run_1", ThreadID: "thread_1",
 		UserID: "user_1", AgentName: "coordinator", Status: StatusRunning,
@@ -25,7 +25,6 @@ func TestEventValidate(t *testing.T) {
 		wantCode string
 	}{
 		{name: "missing id", mutate: func(e *Event) { e.ID = "" }, wantCode: CodeIDRequired},
-		{name: "unsupported schema", mutate: func(e *Event) { e.SchemaVersion = "audit.liki/v0" }, wantCode: CodeSchemaUnsupported},
 		{name: "missing type", mutate: func(e *Event) { e.Type = "" }, wantCode: CodeTypeRequired},
 		{name: "unknown type", mutate: func(e *Event) { e.Type = "run.deleted" }, wantCode: CodeTypeInvalid},
 		{name: "missing occurred at", mutate: func(e *Event) { e.OccurredAt = time.Time{} }, wantCode: CodeOccurredAtRequired},

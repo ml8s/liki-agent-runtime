@@ -1,7 +1,6 @@
 /bin/
 /node_modules/
 /data/
-/backups/
 /coverage.out
 /coverage.html
 .env

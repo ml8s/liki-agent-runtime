@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   check:
-    name: Contracts and static checks
+    name: Static checks and tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

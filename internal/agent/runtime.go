@@ -39,7 +39,7 @@ const (
 	// structuredOutputStateKeyPrefix matches llmagent.Config.OutputKey. ADK parses
 	// the model reply against OutputSchema, clears Event.Output before
 	// yielding it, and persists the parsed value into session state under
-	// this key. Session state is the framework contract for consuming it.
+	// this key. Session state is the framework mechanism for consuming it.
 	structuredOutputStateKeyPrefix = "structured_analysis:"
 
 	// maxCompletedRunIDs bounds duplicate-run detection without turning the
@@ -515,8 +515,6 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Aud
 		userID:            scope.UserID,
 		protocol:          scope.Protocol,
 		model:             r.config.Model,
-		graph:             r.config.GraphVersion,
-		contract:          r.config.ContractVersion,
 		instructionDigest: r.entrypoint.InstructionDigest,
 		traceID:           traceIDFromContext(ctx),
 		spanID:            spanIDFromContext(ctx),
@@ -726,8 +724,6 @@ func (r *Runtime) Run(
 		userID:            request.UserID,
 		protocol:          request.Protocol,
 		model:             r.config.Model,
-		graph:             r.config.GraphVersion,
-		contract:          r.config.ContractVersion,
 		instructionDigest: r.entrypoint.InstructionDigest,
 		traceID:           traceIDFromContext(ctx),
 		spanID:            spanIDFromContext(ctx),

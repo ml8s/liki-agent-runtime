@@ -286,12 +286,11 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"service":       "liki-agents",
-		"version":       buildinfo.Version,
-		"commit":        buildinfo.Commit,
-		"build_time":    buildinfo.BuildTime,
-		"graph_version": buildinfo.GraphVersion,
-		"protocols":     []string{"a2a", "ag-ui", "mcp-client"},
+		"service":    "liki-agents",
+		"version":    buildinfo.Version,
+		"commit":     buildinfo.Commit,
+		"build_time": buildinfo.BuildTime,
+		"protocols":  []string{"a2a", "ag-ui", "mcp-client"},
 	})
 }
 

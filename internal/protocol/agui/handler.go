@@ -38,7 +38,7 @@ type Handler struct {
 	writer     *aguisse.SSEWriter
 }
 
-// runtime is the single ADK runtime contract consumed by this protocol adapter.
+// runtime is the single ADK runtime dependency consumed by this protocol adapter.
 type runtime interface {
 	Run(ctx context.Context, request agent.RunRequest, observe func(*session.Event) error) (agent.RunResult, error)
 	Entrypoint() *agent.AgentDefinition

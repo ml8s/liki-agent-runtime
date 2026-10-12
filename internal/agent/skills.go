@@ -51,7 +51,7 @@ func skillBinding(config Config, definition *AgentDefinition) *SkillsBinding {
 }
 
 // newSkillToolset builds the ADK skilltoolset for a binding. The filesystem
-// source lists immediate subdirectories as skills (ADK layout contract); the
+// source lists immediate subdirectories as skills (ADK layout rule); the
 // preload wrapper reads all frontmatters eagerly so invalid frontmatter
 // (including name/directory mismatch) fails at build time, not per request.
 func newSkillToolset(binding *SkillsBinding) (tool.Toolset, error) {

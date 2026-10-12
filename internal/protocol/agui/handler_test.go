@@ -35,8 +35,6 @@ func newRuntime(t *testing.T) *agent.Runtime {
 		ModelAPIKey:      "test-key",
 		Deployment:       deployment,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
-		GraphVersion:     "test-graph",
-		ContractVersion:  "test-contract",
 		AuditRecorder:    &recordingAuditEvents{},
 	})
 	if err != nil {

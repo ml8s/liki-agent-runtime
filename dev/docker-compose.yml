@@ -1,6 +1,6 @@
 services:
   engine-mcp:
-    image: liki-engine:latest
+    image: liki-engine:local
     entrypoint: ["/usr/local/bin/engine-mcp", "--addr", ":8085"]
     profiles: ["mcp"]
     expose: ["8085"]
@@ -15,7 +15,7 @@ services:
           cpus: "1"
 
   counsel-mcp:
-    image: liki-counsel:latest
+    image: liki-counsel:local
     profiles: ["mcp"]
     expose: ["8086"]
     environment:
@@ -33,12 +33,12 @@ services:
           cpus: "0.5"
 
   liki-agents:
-    image: liki-agents:latest
+    image: liki-agents:local
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${LIKI_AGENTS_VERSION:-dev}
+        VERSION: ${LIKI_AGENTS_VERSION:-local}
         COMMIT: ${LIKI_AGENTS_COMMIT:-unknown}
         BUILD_TIME: ${LIKI_AGENTS_BUILD_TIME:-unknown}
     environment:
@@ -53,7 +53,6 @@ services:
       LIKI_MCP_COUNSEL_TOKEN: ${LIKI_MCP_COUNSEL_TOKEN:-}
       LIKI_MCP_TIMEOUT_SECONDS: ${LIKI_MCP_TIMEOUT_SECONDS:-30}
       LIKI_MAX_CONCURRENT_RUNS: ${LIKI_MAX_CONCURRENT_RUNS:-32}
-      LIKI_TOOL_CONTRACT_VERSION: ${LIKI_TOOL_CONTRACT_VERSION:-}
       LIKI_AGENTS_DEPLOYMENT_FILE: /agent-deployment/deployment.json
       LIKI_AGENTS_DEPLOYMENT_DIGEST: ${LIKI_AGENTS_DEPLOYMENT_DIGEST:-}
       LIKI_AGENTS_SKILLS_ROOT: /agent-deployment/skills

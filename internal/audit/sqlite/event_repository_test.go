@@ -36,7 +36,7 @@ func TestAuditEventRepositoryAppendsImmutableEvents(t *testing.T) {
 	}
 	occurred := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	started := audit.Event{
-		ID: "call_1:started", SchemaVersion: audit.SchemaV1,
+		ID:   "call_1:started",
 		Type: audit.EventLLMCallStarted, OccurredAt: occurred,
 		RootRunID: "run_1", RunID: "run_1", ThreadID: "thread_1",
 		UserID: "user_1", AgentName: "coordinator",
@@ -148,7 +148,6 @@ func TestAuditEventRepositoryPreservesProvenance(t *testing.T) {
 	recorder := NewAuditEventRepository(store.GORM())
 	event := audit.Event{
 		ID:                    "run_1:tool.completed",
-		SchemaVersion:         audit.SchemaV1,
 		Type:                  audit.EventToolCallCompleted,
 		OccurredAt:            time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC),
 		RootRunID:             "run_1",
@@ -215,28 +214,28 @@ func TestAuditEventRepositoryRecoversInterruptedEvents(t *testing.T) {
 	occurred := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
 	startedEvents := []audit.Event{
 		{
-			ID: "run_1:run.started", SchemaVersion: audit.SchemaV1,
+			ID:   "run_1:run.started",
 			Type: audit.EventRunStarted, OccurredAt: occurred,
 			RootRunID: "run_1", RunID: "run_1", ThreadID: "thread_1",
 			UserID: "user_1", Protocol: "ag_ui", AgentName: "coordinator",
 			Status: audit.StatusRunning,
 		},
 		{
-			ID: "call_1:llm.call.started", SchemaVersion: audit.SchemaV1,
+			ID:   "call_1:llm.call.started",
 			Type: audit.EventLLMCallStarted, OccurredAt: occurred,
 			RootRunID: "run_1", RunID: "run_1", ThreadID: "thread_1",
 			UserID: "user_1", Protocol: "ag_ui", AgentName: "coordinator",
 			Model: "test-model", Provider: "test", Status: audit.StatusRunning,
 		},
 		{
-			ID: "run_1/coordinator/call_1:tool.call.started", SchemaVersion: audit.SchemaV1,
+			ID:   "run_1/coordinator/call_1:tool.call.started",
 			Type: audit.EventToolCallStarted, OccurredAt: occurred,
 			RootRunID: "run_1", RunID: "run_1", ThreadID: "thread_1",
 			UserID: "user_1", Protocol: "ag_ui", AgentName: "coordinator",
 			ToolCallID: "call_1", ToolName: "test_tool", Status: audit.StatusRunning,
 		},
 		{
-			ID: "run_1/coordinator/worker:agent.delegation.started", SchemaVersion: audit.SchemaV1,
+			ID:   "run_1/coordinator/worker:agent.delegation.started",
 			Type: audit.EventDelegationStarted, OccurredAt: occurred,
 			RootRunID: "run_1", RunID: "run_1", ThreadID: "thread_1",
 			UserID: "user_1", Protocol: "ag_ui", CallerAgent: "coordinator",
@@ -305,14 +304,14 @@ func TestAuditEventRepositoryRecoveryRespectsExistingTerminalEvidence(t *testing
 	}{
 		{
 			started: audit.Event{
-				ID: "run_1:run.started", SchemaVersion: audit.SchemaV1,
+				ID:   "run_1:run.started",
 				Type: audit.EventRunStarted, OccurredAt: time.Now().UTC(),
 				RootRunID: "run_1", RunID: "run_1", Status: audit.StatusRunning,
 			},
 		},
 		{
 			started: audit.Event{
-				ID: "call_1:llm.call.started", SchemaVersion: audit.SchemaV1,
+				ID:   "call_1:llm.call.started",
 				Type: audit.EventLLMCallStarted, OccurredAt: time.Now().UTC(),
 				RootRunID: "run_1", RunID: "run_1", AgentName: "coordinator",
 				Model: "test-model", Status: audit.StatusRunning,
@@ -320,7 +319,7 @@ func TestAuditEventRepositoryRecoveryRespectsExistingTerminalEvidence(t *testing
 		},
 		{
 			started: audit.Event{
-				ID: "run_1/coordinator/call_1:tool.call.started", SchemaVersion: audit.SchemaV1,
+				ID:   "run_1/coordinator/call_1:tool.call.started",
 				Type: audit.EventToolCallStarted, OccurredAt: time.Now().UTC(),
 				RootRunID: "run_1", RunID: "run_1", ToolCallID: "call_1",
 				ToolName: "test_tool", Status: audit.StatusRunning,
@@ -328,7 +327,7 @@ func TestAuditEventRepositoryRecoveryRespectsExistingTerminalEvidence(t *testing
 		},
 		{
 			started: audit.Event{
-				ID: "run_1/coordinator/worker:agent.delegation.started", SchemaVersion: audit.SchemaV1,
+				ID:   "run_1/coordinator/worker:agent.delegation.started",
 				Type: audit.EventDelegationStarted, OccurredAt: time.Now().UTC(),
 				RootRunID: "run_1", RunID: "run_1", CallerAgent: "coordinator",
 				TargetAgent: "worker", Status: audit.StatusRunning,
@@ -392,7 +391,7 @@ func TestAuditEventRepositoryRecoveryFailsClosed(t *testing.T) {
 			name:       "malformed lifecycle ID",
 			eventID:    "legacy-started",
 			recoverAt:  func(occurred time.Time) time.Time { return occurred.Add(time.Second) },
-			wantErrStr: "stable lifecycle ID contract",
+			wantErrStr: "stable lifecycle ID rule",
 		},
 		{
 			name:       "clock moved backwards",
@@ -414,7 +413,7 @@ func TestAuditEventRepositoryRecoveryFailsClosed(t *testing.T) {
 			})
 			occurred := time.Date(2026, 9, 26, 9, 0, 0, 0, time.UTC)
 			event := audit.Event{
-				ID: test.eventID, SchemaVersion: audit.SchemaV1,
+				ID:   test.eventID,
 				Type: audit.EventRunStarted, OccurredAt: occurred,
 				RootRunID: "run_1", RunID: "run_1", Status: audit.StatusRunning,
 			}

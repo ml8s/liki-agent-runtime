@@ -1,4 +1,4 @@
-// Package observability defines protocol observation contracts.
+// Package observability defines protocol observation interfaces.
 package observability
 
 import "time"

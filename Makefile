@@ -1,10 +1,10 @@
 # 统一语义（四仓一致）：
 #   make lint   静态检查聚合
-#   make check  纯静态契约检查（lint+格式+vet+validate；不跑测试、不写盘）
+#   make check  纯静态检查（lint+格式+vet+validate；不跑测试、不写盘）
 #   make test   本仓全部测试（单元/集成；不含 e2e）
 #   make smoke  本仓镜像启动 + operational/public endpoint 冒烟
 #   make build  本仓产物（liki-agents 二进制；镜像由 CI release 构建）
-#   make image  本地镜像（调试用，非发布路径）
+#   make image  本地候选镜像（local tag；正式镜像由 CI release 发布）
 #   make e2e    系统 E2E 聚合（liki-deploy 编排）
 
 GO ?= go
@@ -13,7 +13,7 @@ NODE_BIN := $(HOME)/.nvm/versions/node/v$(shell cat .nvmrc)/bin
 PYTHON_BIN := $(HOME)/app/python3.12.14/bin
 export PATH := $(PYTHON_BIN):$(HOME)/app/go/bin:$(HOME)/app/go-tools/bin:$(HOME)/go/bin:$(NODE_BIN):$(PATH)
 export GOTOOLCHAIN ?= go1.26.9
-VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo dev)
+VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo local)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GOPROXY ?= https://goproxy.cn,direct
@@ -24,7 +24,7 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-db db-backup db-verify build run dev dev-down validate gate image smoke
+.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-db build run dev dev-down validate gate image smoke
 help:
 	@echo "make check    - static checks: docs, formatting, lint, vet, and artifact"
 	@echo "make lint-readme - lint and test developer documentation"
@@ -32,10 +32,8 @@ help:
 	@echo "make test-coverage - run tests and enforce the coverage floor"
 	@echo "make test-db  - run SQLite persistence tests"
 	@echo "make smoke    - smoke the local liki-agents image"
-	@echo "make db-backup - create an online SQLite backup"
-	@echo "make db-verify - verify the latest SQLite backup"
 	@echo "make build    - build ./bin/liki-agents"
-	@echo "make image    - build the liki-agents Docker image locally (debug; CI builds for release)"
+	@echo "make image    - build the local candidate image (CI builds for release)"
 	@echo "make dev      - run the development Agent and MCP containers in the foreground"
 	@echo "make dev-down - remove the development Agent workload"
 	@echo "make validate - validate the AgentDeployment artifact without starting the server"
@@ -70,30 +68,15 @@ check: lint-readme fmt-check lint-engine vet validate check-actions
 test-db:
 	$(GO) test -race -count=1 ./internal/audit/sqlite/...
 
-db-backup:
-	@bash -eu -o pipefail -c '\
-		DB_PATH="$${LIKI_AGENTS_DB_PATH:-./data/liki-agents-audit.db}"; \
-		BACKUP_DIR="$${LIKI_BACKUP_DIR:-./backups}"; \
-		mkdir -p "$$BACKUP_DIR"; \
-		OUT="$$BACKUP_DIR/liki-agents-audit-$$(date +%Y%m%d-%H%M%S).db"; \
-		sqlite3 "$$DB_PATH" ".backup '"'"'$$OUT'"'"'"; \
-		echo "$$OUT"'
-
-db-verify:
-	@bash -eu -o pipefail -c '\
-		LATEST="$$(ls -1t "$${LIKI_BACKUP_DIR:-./backups}"/liki-agents-*.db 2>/dev/null | head -1)"; \
-		if [ -z "$$LATEST" ]; then echo "no backup found" >&2; exit 1; fi; \
-		sqlite3 "$$LATEST" "PRAGMA integrity_check;"'
-
 build: ## Build the local liki-agents binary. 镜像由 CI release 构建，非本地。
 	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/liki-agents ./cmd/liki-agents
 
-# ── 镜像（本地调试用，非发布路径）──
-# 生产镜像由 CI release 构建并推送 GHCR；此目标仅用于本地构建/调试。
+# ── 镜像（本地候选，非发布路径）──
+# 生产镜像由 CI release 构建并推送 GHCR；此目标使用明确的 local 候选 tag。
 IMAGE_REGISTRY ?= ghcr.io/ml8s
-IMAGE_TAG ?= dev
+IMAGE_TAG ?= local
 
-image: ## Build liki-agents image locally (debug; production uses CI release)
+image: ## Build the local candidate image (production uses CI release)
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_TIME=$(BUILD_TIME) \
 		--build-arg GOPROXY=$(GOPROXY) \
 		-t $(IMAGE_REGISTRY)/liki-agents:$(IMAGE_TAG) .

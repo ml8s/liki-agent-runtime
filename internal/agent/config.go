@@ -26,8 +26,6 @@ type Config struct {
 	// MaxOutputTokens bounds every model response; 0 leaves the provider
 	// default unbounded.
 	MaxOutputTokens  int
-	ContractVersion  string
-	GraphVersion     string
 	Deployment       *Deployment
 	DeploymentDigest string
 

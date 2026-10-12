@@ -13,8 +13,6 @@ import (
 func TestFourAgentArtifactIsLoadable(t *testing.T) {
 	root := t.TempDir()
 	manifest := `{
-		"apiVersion": "agent.liki/v1",
-		"kind": "AgentDeployment",
 		"metadata": {"name": "generic-four-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],

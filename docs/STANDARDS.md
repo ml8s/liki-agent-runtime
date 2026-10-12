@@ -26,10 +26,11 @@ rule is:
 
 ## Deliberate non-protocols
 
-The following are private application contracts rather than wire protocols.
+The following are private application artifacts rather than wire protocols.
 They must not be exposed through A2A, AG-UI, or MCP fields:
 
-- `AgentDeployment` is a local deployment artifact validated by JSON Schema.
+- `AgentDeployment` is a local deployment artifact validated by the runtime
+  loader.
   It configures ADK and MCP authorization; it is not an agent-to-agent message.
 - The SQLite audit ledger is internal execution evidence. Its schema is not an
   event-delivery protocol. OpenTelemetry supplies trace IDs, but does not
@@ -43,7 +44,7 @@ Deployment-description candidates were also reviewed. A2A Agent Card describes
 discovery, not a private executable graph; Google Cloud Agent Registry schemas
 are cloud discovery records; and the JSON Agents Portable Agent Manifest is an
 explicit draft without standards-body adoption or community consensus. No
-reviewed candidate replaces this service's local loader contract.
+reviewed candidate replaces this service's local loader behavior.
 
 ## Rejected custom designs
 
@@ -52,7 +53,7 @@ reviewed candidate replaces this service's local loader contract.
 | Mapping every A2A TaskID to a separate ADK session while preserving ContextID only as correlation | Contradicted the SDK/ADK ContextID mapping and silently changed multi-task context behavior | Use ADK's default ContextID session mapping. |
 | A private AgentDeployment `tools.visibility` field that emitted empty tool arguments/results | No A2A/AG-UI/MCP semantics for selective payload redaction; AG-UI args/result values are required to be non-empty | Do not emit the feature. If opaque tools are required later, omit the complete standard tool-call event sequence rather than redefine its fields. |
 | Unconditional multi-replica startup reconciliation | No external audit-recovery standard; concurrent owners could race or rewrite evidence | Keep `multi` fail-closed. Single-process startup uses one transaction, stable lifecycle IDs, and append-only synthetic failures before traffic is accepted. |
-| Publishing `https://liki.hk/contracts/agent-deployment-v1` as an A2A extension | A2A extensions require an identified, published specification and client opt-in behavior | Advertise no private extension. Standard Agent Card fields and internal audit already carry required identity and provenance. |
+| Publishing the private deployment manifest as an A2A extension | A2A extensions require an identified, published specification and client opt-in behavior | Advertise no private extension. Standard Agent Card fields and internal audit already carry required identity and provenance. |
 | Carrying the structured user-facing text in a private A2A `Part.Metadata` key (`liki.answer`) | No published specification for a private metadata key; the full validated output is already the answer | A structured Agent emits a standard `application/json` `DataPart`; the user-facing text is the JSON field selected by its `textPointer`. No private metadata on the wire. |
 | Local RFC 6901 escape parser | Duplicated an existing RFC implementation already used by the runtime | Parse pointers with `github.com/qri-io/jsonpointer`. |
 
@@ -62,10 +63,10 @@ reviewed candidate replaces this service's local loader contract.
 
 | Phase | Scope | Acceptance gate |
 |---|---|---|
-| 1. Safe single-process contract | Explicit topology guard, official ADK session and A2A task-store injection points, readiness drain | Default behavior is unchanged; `multi` fails closed; official-interface injection is tested; no experimental cluster mode |
+| 1. Safe single-process mode | Explicit topology guard, official ADK session and A2A task-store injection points, readiness drain | Default behavior is unchanged; `multi` fails closed; official-interface injection is tested; no experimental cluster mode |
 | 2. Shared state design | Select PostgreSQL/Spanner (or official Vertex AI) ADK sessions, database A2A tasks, and transactional audit/run ownership | Official conformance tests plus cross-replica uniqueness, cancellation, drain, and failure tests pass |
 | 3. Routing design | Choose A2A distributed execution, task ownership routing, or explicit AG-UI stream affinity | `GetTask`/`CancelTask` work on any A2A replica and AG-UI stream behavior is deterministic during rollout |
-| 4. Rollout authorization | Mandatory digest pin, schema compatibility policy, orchestration manifests, chaos tests | New/old replicas cannot execute mismatched behavior unexpectedly; kill/drain tests preserve audit invariants |
+| 4. Rollout authorization | Mandatory digest pin, orchestration manifests, chaos tests | New/old replicas cannot execute mismatched behavior unexpectedly; kill/drain tests preserve audit invariants |
 
 Only phase 1 is implemented. Later phases require measured capacity or availability requirements and a reviewed design.
 
@@ -79,7 +80,7 @@ The service is deliberately **single-process/single-replica**:
 - audit evidence is in a local SQLite file;
 - MCP toolsets and the ADK graph are process-local.
 
-`LIKI_AGENTS_TOPOLOGY` makes that contract explicit. Its default and only
+`LIKI_AGENTS_TOPOLOGY` makes that mode explicit. Its default and only
 supported value is `single`; `multi` is recognized but fails closed so an
 orchestrator cannot accidentally scale an unsafe process.
 
@@ -105,14 +106,13 @@ does not claim to support it on the standard RPC surface today.
 
 Every setting lives in exactly one of the three product layers:
 
-Audit labels (provider, contract_version, graph_version, prompt_version) travel
-with the assembly artifact and are never required to boot; they are recorded
-verbatim into audit evidence but never gate runtime behavior.
+Audit labels (provider and prompt digest) travel with the assembly artifact;
+they are recorded verbatim into audit evidence but never gate runtime behavior.
 
 - **image** — protocol, security, and audit behavior; never configurable
   (HTTP timeouts, audit durability, rate limits stay at the gateway);
 - **AgentDeployment artifact** — capability: Agents, tools, skills, output
-  contracts, and per-Agent model settings (`model`, `temperature`,
+  schemas, and per-Agent model settings (`model`, `temperature`,
   `maxOutputTokens`), pinned by digest;
 - **environment** — wiring: addresses, tokens, MCP endpoints, the LLM client
   (base URL, model, provider label), and timeouts.

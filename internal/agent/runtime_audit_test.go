@@ -49,8 +49,6 @@ func newAuditRuntime(t *testing.T) (*agent.Runtime, *recordingAuditEvents) {
 		ModelAPIKey:      "test-key",
 		Deployment:       deployment,
 		StructuredOutput: "json_schema",
-		GraphVersion:     "test-graph",
-		ContractVersion:  "test-contract",
 		Provider:         "test-provider",
 		AuditRecorder:    events,
 	})
@@ -94,8 +92,6 @@ func newAuditRuntimeWithClock(t *testing.T, recorder audit.Recorder, maxConcurre
 		ModelAPIKey:       "test-key",
 		Deployment:        deployment,
 		StructuredOutput:  "json_schema",
-		GraphVersion:      "test-graph",
-		ContractVersion:   "test-contract",
 		Provider:          "test-provider",
 		AuditRecorder:     recorder,
 		MaxConcurrentRuns: maxConcurrent,
