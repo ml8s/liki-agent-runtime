@@ -397,6 +397,68 @@ func TestRuntimeRunDeletesRunScopedSession(t *testing.T) {
 	}
 }
 
+func TestRunAuditUsesEntrypointModelOverride(t *testing.T) {
+	deployment := NewTestDeployment(t)
+	deployment.Spec.Agents[0].Model = "artifact-model"
+	events := &recordingAudit{}
+	runtime := newTestRuntime(t, deployment, events, &fakeLLM{responses: []*model.LLMResponse{{
+		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"ok"}`}}},
+	}}})
+
+	if _, err := runtime.Run(context.Background(), RunRequest{
+		RunID: "run_model", ThreadID: "thread_model", UserID: "user_1", UserMessage: "hello",
+	}, nil); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	started := events.eventsOfType(audit.EventRunStarted)
+	if len(started) != 1 || started[0].Model != "artifact-model" {
+		t.Fatalf("run started model = %#v, want artifact-model", started)
+	}
+}
+
+type failingDeleteSessionService struct {
+	session.Service
+}
+
+func (s *failingDeleteSessionService) Delete(context.Context, *session.DeleteRequest) error {
+	return errors.New("session backend unavailable")
+}
+
+func TestExternalSessionCleanupFailureDoesNotFlipSuccessfulRun(t *testing.T) {
+	deployment := NewTestDeployment(t)
+	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
+	events := &recordingAudit{}
+	runtime, err := NewRuntime(Config{
+		Model:             "fake-model",
+		Deployment:        deployment,
+		AuditRecorder:     events,
+		MaxConcurrentRuns: 1,
+		modelOverride: &fakeLLM{responses: []*model.LLMResponse{{
+			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"ok"}`}}},
+		}}},
+		SessionService: &failingDeleteSessionService{session.InMemoryService()},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntime() error = %v", err)
+	}
+
+	scope := AuditRunScope{
+		RunID: "external_cleanup_failure", ThreadID: "external_context", UserID: "user_1", Protocol: "a2a",
+	}
+	if err := runtime.BeginAuditRun(context.Background(), "external_context", scope); err != nil {
+		t.Fatalf("BeginAuditRun() error = %v", err)
+	}
+	err = runtime.EndAuditRun(context.Background(), "external_context", nil)
+	if err != nil {
+		t.Fatalf("EndAuditRun() error = %v, want successful execution despite cleanup failure", err)
+	}
+	completed := events.eventsOfType(audit.EventRunCompleted)
+	failed := events.eventsOfType(audit.EventRunFailed)
+	if len(completed) != 1 || len(failed) != 0 {
+		t.Fatalf("run terminal events = completed:%d failed:%d, want 1/0", len(completed), len(failed))
+	}
+}
+
 func TestExternalAuditRunDeletesExternalSession(t *testing.T) {
 	events := &recordingAudit{}
 	runtime := newTestRuntime(t, NewTestDeployment(t), events, &fakeLLM{})

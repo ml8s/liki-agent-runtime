@@ -123,7 +123,11 @@ func (l *llmLedger) beforeModel(ctx agent.Context, request *model.LLMRequest) (*
 	}
 	scope, ok := l.scope(ctx.SessionID())
 	if !ok || l.recorder == nil {
-		return nil, nil
+		return nil, domain.NewError(
+			domain.CodeAuditScopeMissing,
+			"LLM callback has no active audit scope",
+			domain.ErrInvalidInput,
+		)
 	}
 	callbackKey, err := llmCallbackKey(ctx)
 	if err != nil {

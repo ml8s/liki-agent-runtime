@@ -368,6 +368,25 @@ func TestReadyzDoesNotInheritClientCancellation(t *testing.T) {
 	}
 }
 
+func TestReadinessHasIndependentBudget(t *testing.T) {
+	handler := mustNewServer(t, transport.Services{
+		AgentCard:    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A:          http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		AGUI:         http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		HealthChecks: []platform.HealthChecker{deadlineChecker{}},
+	})
+	response := httptest.NewRecorder()
+	started := time.Now()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("readiness status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if elapsed := time.Since(started); elapsed >= 2*time.Second {
+		t.Fatalf("readiness elapsed = %v, want less than the 2s healthcheck client timeout", elapsed)
+	}
+}
+
 type unhealthyChecker struct {
 	name   string
 	detail string
@@ -377,6 +396,13 @@ type contextAwareChecker struct{}
 
 func (contextAwareChecker) CheckHealth(ctx context.Context) platform.DependencyHealth {
 	return platform.DependencyHealth{Name: "context", OK: ctx.Err() == nil}
+}
+
+type deadlineChecker struct{}
+
+func (deadlineChecker) CheckHealth(ctx context.Context) platform.DependencyHealth {
+	<-ctx.Done()
+	return platform.DependencyHealth{Name: "deadline", OK: false, Detail: "timeout"}
 }
 
 func (c *unhealthyChecker) CheckHealth(context.Context) platform.DependencyHealth {

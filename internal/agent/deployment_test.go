@@ -474,7 +474,8 @@ func TestAgentDefinitionRejectsOutOfRangeModelSettings(t *testing.T) {
 	}{
 		{name: "temperature above range", mutation: `,"temperature": 2.5`, wantErr: "temperature must be between 0 and 2"},
 		{name: "temperature negative", mutation: `,"temperature": -0.1`, wantErr: "temperature must be between 0 and 2"},
-		{name: "max output tokens below minimum", mutation: `,"maxOutputTokens": -1`, wantErr: "maxOutputTokens must be a non-negative integer"},
+		{name: "max output tokens below minimum", mutation: `,"maxOutputTokens": -1`, wantErr: "maxOutputTokens must be between 0 and MaxInt32"},
+		{name: "max output tokens above int32", mutation: `,"maxOutputTokens": 2147483648`, wantErr: "maxOutputTokens must be between 0 and MaxInt32"},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {

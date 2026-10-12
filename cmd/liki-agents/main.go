@@ -109,6 +109,7 @@ func run() (err error) {
 	a2aServer, err := a2aadapter.New(runtime, a2aadapter.Config{
 		PublicURL:  publicURL,
 		RunTimeout: cfg.RunTimeout,
+		Logger:     logger,
 	})
 	if err != nil {
 		return err

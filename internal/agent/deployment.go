@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -479,8 +480,8 @@ func (a *AgentDefinition) validate(mcpServers map[string]struct{}) error {
 	if a.Temperature != nil && (*a.Temperature < 0 || *a.Temperature > 2) {
 		return fmt.Errorf("temperature must be between 0 and 2")
 	}
-	if a.MaxOutputTokens < 0 {
-		return fmt.Errorf("maxOutputTokens must be a non-negative integer")
+	if a.MaxOutputTokens < 0 || a.MaxOutputTokens > math.MaxInt32 {
+		return fmt.Errorf("maxOutputTokens must be between 0 and MaxInt32")
 	}
 	if a.Skills != nil {
 		if strings.TrimSpace(a.Skills.Root) == "" {

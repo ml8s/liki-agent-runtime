@@ -49,6 +49,7 @@ const (
 	authFailureLimit      = 10
 	authFailureWindow     = time.Minute
 	maxAuthFailureSources = 10000
+	readinessBudget       = 1500 * time.Millisecond
 )
 
 type authFailure struct {
@@ -248,7 +249,11 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	// A disconnected readiness client is not a dependency failure. Health
 	// checks own their deadlines and must run with request values but without
 	// the request's cancellation signal.
-	checkContext := context.WithoutCancel(r.Context())
+	checkContext, cancelChecks := context.WithTimeout(
+		context.WithoutCancel(r.Context()),
+		readinessBudget,
+	)
+	defer cancelChecks()
 	healthResults := make([]platform.DependencyHealth, len(s.services.HealthChecks))
 	var wait sync.WaitGroup
 	for index, checker := range s.services.HealthChecks {

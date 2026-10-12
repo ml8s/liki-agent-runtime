@@ -221,6 +221,18 @@ func TestLedgerLifecycleCompletesNormally(t *testing.T) {
 	}
 }
 
+func TestBeforeModelRejectsMissingAuditScope(t *testing.T) {
+	ledger, _ := newTestLedger(t)
+	_, err := ledger.beforeModel(
+		&fakeAgentContext{sessionID: "missing", invocationID: "inv_missing", agentName: "coordinator"},
+		&model.LLMRequest{Model: "test-model"},
+	)
+	var domainErr *domain.Error
+	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeAuditScopeMissing {
+		t.Fatalf("beforeModel() error = %v, want %s", err, domain.CodeAuditScopeMissing)
+	}
+}
+
 func TestLedgerRetainsActiveCallWhenTerminalAuditWriteFails(t *testing.T) {
 	recorder := &failOnceStubAudit{eventType: audit.EventLLMCallCompleted}
 	ledger := newLLMLedger(recorder, nil, "test", NewTestDeployment(t), fixedLedgerNow)

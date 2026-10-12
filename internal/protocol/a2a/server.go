@@ -7,6 +7,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -39,6 +40,7 @@ func init() {
 type Config struct {
 	PublicURL  *url.URL
 	RunTimeout time.Duration
+	Logger     *slog.Logger
 
 	// TaskStore is the official A2A taskstore.Store injection point. A shared
 	// database implementation can be supplied without changing A2A wire
@@ -62,6 +64,9 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 	}
 	if config.RunTimeout <= 0 {
 		config.RunTimeout = 10 * time.Minute
+	}
+	if config.Logger == nil {
+		config.Logger = slog.Default()
 	}
 	root := runtime.RootAgent()
 	deployment := runtime.Deployment()
@@ -140,9 +145,11 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 		A2AExecutionCleanupCallback: func(ctx context.Context, request *a2asrv.ExecutorContext, _ []*a2a.AgentCard, _ a2a.SendMessageResult, cause error) {
 			cancelExecution(ctx)
 			if auditErr := runtime.EndAuditRun(ctx, request.ContextID, cause); auditErr != nil {
-				// Cleanup has no error channel; a failed append is deliberately fatal to the process boundary only
-				// when the enclosing execution reports it. Keep the call explicit here.
-				_ = auditErr
+				config.Logger.WarnContext(ctx, "a2a_cleanup_audit_failed",
+					"task_id", request.TaskID,
+					"context_id", request.ContextID,
+					"error", auditErr.Error(),
+				)
 			}
 		},
 	})

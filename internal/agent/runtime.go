@@ -514,7 +514,7 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Aud
 		threadID:          domain.ID(scope.ThreadID),
 		userID:            scope.UserID,
 		protocol:          scope.Protocol,
-		model:             r.config.Model,
+		model:             r.entrypoint.EffectiveModel(r.config.Model),
 		instructionDigest: r.entrypoint.InstructionDigest,
 		traceID:           traceIDFromContext(ctx),
 		spanID:            spanIDFromContext(ctx),
@@ -594,13 +594,17 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 		return recordErr
 	}
 
-	// Terminal evidence is durable: release process state exactly once.
+	// Terminal evidence is durable: release process state exactly once. Cleanup
+	// is operational noise and must not change the durable execution outcome.
 	if deleteErr := r.sessions.Delete(ctx, &session.DeleteRequest{
 		AppName:   r.config.AppName,
 		UserID:    scope.userID,
 		SessionID: sessionID,
-	}); deleteErr != nil && terminalErr == nil {
-		terminalErr = domain.NewError(domain.CodeRuntimeSessionCleanupFailed, "delete external ADK session", deleteErr)
+	}); deleteErr != nil {
+		r.config.Logger.WarnContext(ctx, "external_run_session_cleanup_failed",
+			"run_id", string(scope.runID),
+			"error", runtimeError(deleteErr).Error(),
+		)
 	}
 	r.llm.forget(sessionID)
 	if scope.releaseRun != nil {
@@ -627,7 +631,7 @@ func (r *Runtime) runEvent(
 	event.AgentName = r.entrypoint.Name
 	event.AgentVersion = r.entrypoint.Version
 	event.AgentDefinitionDigest = r.entrypoint.Digest
-	event.Model = r.config.Model
+	event.Model = r.entrypoint.EffectiveModel(r.config.Model)
 	event.Provider = r.config.Provider
 	event.Status = status
 	event.DurationMS = r.config.Now().Sub(scope.startedAt).Milliseconds()
@@ -723,7 +727,7 @@ func (r *Runtime) Run(
 		threadID:          domain.ID(request.ThreadID),
 		userID:            request.UserID,
 		protocol:          request.Protocol,
-		model:             r.config.Model,
+		model:             r.entrypoint.EffectiveModel(r.config.Model),
 		instructionDigest: r.entrypoint.InstructionDigest,
 		traceID:           traceIDFromContext(ctx),
 		spanID:            spanIDFromContext(ctx),
@@ -783,14 +787,19 @@ func (r *Runtime) Run(
 		if auditErr := r.recordRunAudit(auditCtx, scope, eventType, status, auditFailure); auditErr != nil && runErr == nil {
 			runErr = auditErr
 		}
-		// Terminal evidence has been attempted; release process state now.
+		// Terminal evidence has been attempted; release process state now. A
+		// cleanup failure is operational noise, not a change to the already
+		// durable execution outcome.
 		r.llm.forget(sessionID)
 		if deleteErr := r.sessions.Delete(auditCtx, &session.DeleteRequest{
 			AppName:   r.config.AppName,
 			UserID:    request.UserID,
 			SessionID: sessionID,
-		}); deleteErr != nil && runErr == nil {
-			runErr = domain.NewError(domain.CodeRuntimeSessionCleanupFailed, "delete run-scoped ADK session", deleteErr)
+		}); deleteErr != nil {
+			r.config.Logger.WarnContext(ctx, "agent_run_session_cleanup_failed",
+				"run_id", request.RunID,
+				"error", runtimeError(deleteErr).Error(),
+			)
 		}
 		if runErr != nil {
 			runtimeErr := runtimeError(runErr)
@@ -803,7 +812,7 @@ func (r *Runtime) Run(
 			"run_id", request.RunID,
 			"thread_id", request.ThreadID,
 			"user_id", request.UserID,
-			"model", r.config.Model,
+			"model", r.entrypoint.EffectiveModel(r.config.Model),
 		)...)
 
 	events := r.runner.Run(
@@ -856,7 +865,7 @@ func (r *Runtime) Run(
 			"run_id", request.RunID,
 			"agent", r.entrypoint.Name,
 			"tools_used", state.tools.Names(),
-			"model", r.config.Model,
+			"model", r.entrypoint.EffectiveModel(r.config.Model),
 		)...)
 
 	return RunResult{
