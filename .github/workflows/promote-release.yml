@@ -1,0 +1,110 @@
+name: Promote release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without v prefix'
+        required: true
+        type: string
+      candidate_run_id:
+        description: 'Successful candidate run id'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-promote-release-${{ inputs.version }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  promote:
+    name: Promote tested digest
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: v${{ inputs.version }}
+          persist-credentials: false
+
+      - name: Validate release ref
+        run: |
+          set -euo pipefail
+          expected="v${{ inputs.version }}"
+          actual="${GITHUB_REF_NAME}"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::workflow must be dispatched on tag $expected" >&2
+            exit 1
+          fi
+
+      - name: Download candidate digest manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download '${{ inputs.candidate_run_id }}' -n candidate-digests -D candidate
+
+      - name: Validate candidate manifest
+        run: |
+          python3 - <<'PY'
+          import json
+          m = json.load(open('candidate/candidate-digests.json'))
+          assert m['images']['agents'].startswith('sha256:')
+          assert m['candidate_run_id'] == '${{ inputs.candidate_run_id }}'
+          PY
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote same digest to release tag
+        run: |
+          digest="$(python3 -c 'import json; print(json.load(open("candidate/candidate-digests.json"))["images"]["agents"])')"
+          source="ghcr.io/${{ github.repository_owner }}/liki-agents@$digest"
+          target="ghcr.io/${{ github.repository_owner }}/liki-agents:${{ inputs.version }}"
+          docker buildx imagetools create -t "$target" "$source"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+        id: promote
+
+      - name: Smoke promoted digest
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/liki-agents@${{ steps.promote.outputs.digest }}
+        run: scripts/smoke-image.sh
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v2.4.1
+
+      - name: Request Sigstore OIDC token
+        env:
+          OIDC_AUDIENCE: sigstore
+        run: |
+          set -euo pipefail
+          response="$(mktemp)"
+          curl -fsSL \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            -H 'Accept: application/json' \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}" > "$response"
+          python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["value"])' "$response" > "$RUNNER_TEMP/oidc-token"
+          chmod 600 "$RUNNER_TEMP/oidc-token"
+
+      - name: Sign promoted digest
+        run: cosign sign --yes --identity-token "$RUNNER_TEMP/oidc-token" "ghcr.io/${{ github.repository_owner }}/liki-agents@${{ steps.promote.outputs.digest }}"
+
+      - name: Verify promoted digest
+        run: cosign verify --certificate-identity-regexp '^https://github\.com/ml8s/liki-agents/\.github/workflows/promote-release\.yml@refs/tags/' --certificate-oidc-issuer https://token.actions.githubusercontent.com "ghcr.io/${{ github.repository_owner }}/liki-agents@${{ steps.promote.outputs.digest }}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            --verify-tag \
+            --title "liki-agents v${{ inputs.version }}" \
+            --notes "Promoted tested candidate ${{ inputs.candidate_run_id }}; image digest ${{ steps.promote.outputs.digest }}."

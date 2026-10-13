@@ -1,0 +1,95 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Source ref to build'
+        required: true
+        default: main
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-release-candidate-${{ github.event.inputs.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  candidate:
+    name: Build and smoke candidate image
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Source gate
+        run: make gate
+
+      - id: meta
+        run: echo "tag=candidate-${GITHUB_SHA::7}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          push: true
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            VERSION=candidate
+            COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ github.run_started_at }}
+          tags: ghcr.io/${{ github.repository_owner }}/liki-agents:${{ steps.meta.outputs.tag }}
+
+      - name: Smoke exact candidate digest
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/liki-agents@${{ steps.image.outputs.digest }}
+        run: scripts/smoke-image.sh
+
+      - name: Write candidate digest manifest
+        run: |
+          python3 - <<'PY'
+          import json, os
+          manifest = {
+              "repository": "${{ github.repository }}",
+              "source_commit": "${{ github.sha }}",
+              "candidate_run_id": "${{ github.run_id }}",
+              "candidate_tag": "${{ steps.meta.outputs.tag }}",
+              "images": {
+                  "agents": "${{ steps.image.outputs.digest }}"
+              }
+          }
+          with open("candidate-digests.json", "w") as f:
+              json.dump(manifest, f, sort_keys=True, indent=2)
+              f.write("\n")
+          PY
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: candidate-digests
+          path: candidate-digests.json
+          retention-days: 30
