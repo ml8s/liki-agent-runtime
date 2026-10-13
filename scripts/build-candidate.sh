@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build and publish the single local candidate image, record its
-# digest, and smoke that immutable digest.
+# Build and validate the local candidate image, record its digest,
+# smoke it, and only then publish the same immutable image.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,7 +39,7 @@ MANIFEST_FILE="$BUILD_DIR/candidate-digests.json"
 mkdir -p "$BUILD_DIR"
 rm -f "$METADATA_FILE" "$MANIFEST_FILE"
 
-docker buildx build --push \
+docker buildx build \
   --file Dockerfile \
   --build-arg VERSION="$RELEASE_VERSION" \
   --build-arg COMMIT="$SOURCE_COMMIT" \
@@ -60,6 +60,7 @@ python3 scripts/build_candidate_manifest.py \
   --output "$MANIFEST_FILE"
 
 IMAGE="$IMAGE_REPOSITORY@$AGENTS_DIGEST" scripts/smoke-image.sh
+docker push "$IMAGE_REPOSITORY:$CANDIDATE_TAG"
 
-echo "✅ candidate $CANDIDATE_TAG published"
+echo "✅ candidate $CANDIDATE_TAG validated and published"
 echo "$AGENTS_DIGEST"

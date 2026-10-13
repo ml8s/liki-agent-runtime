@@ -23,6 +23,13 @@ _SPEC.loader.exec_module(module)
 def test_candidate_build_fails_fast_before_expensive_gate() -> None:
     script = Path(__file__).with_name("build-candidate.sh").read_text(encoding="utf-8")
     assert script.index("RELEASE_VERSION=") < script.index("make gate")
+
+
+def test_candidate_smokes_locally_before_registry_push() -> None:
+    script = Path(__file__).with_name("build-candidate.sh").read_text(encoding="utf-8")
+    assert script.index("docker buildx build") < script.index("scripts/smoke-image.sh")
+    assert script.index("scripts/smoke-image.sh") < script.index("docker push")
+    assert "--push" not in script
     
 class CandidateManifestTest(unittest.TestCase):
     def test_generates_exact_contract(self) -> None:
