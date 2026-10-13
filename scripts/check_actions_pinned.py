@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail CI when a reusable GitHub Action is referenced by a mutable ref."""
+"""Validate workflow references and signing-token policy."""
 
 from __future__ import annotations
 
@@ -27,10 +27,29 @@ def main() -> int:
             files.extend(pattern.rglob("*.yaml"))
     for path in sorted(set(files)):
         try:
-            yaml.safe_load(path.read_text(encoding="utf-8"))
+            document = yaml.safe_load(path.read_text(encoding="utf-8"))
         except yaml.YAMLError as error:
             errors.append(f"{path.relative_to(ROOT)}: invalid YAML: {error}")
             continue
+        for job_id, job in (document.get("jobs") or {}).items():
+            if not isinstance(job, dict):
+                continue
+            for step in job.get("steps") or []:
+                if not isinstance(step, dict) or not isinstance(step.get("run"), str):
+                    continue
+                run_script = step["run"]
+                if re.search(r"--identity-token\s+[\"']?\$RUNNER_TEMP/", run_script):
+                    errors.append(
+                        f"{path.relative_to(ROOT)}: job {job_id!r} passes an OIDC token "
+                        "file path to cosign; consume the token string in the same step"
+                    )
+                if '--identity-token "$oidc_token"' in run_script and not re.search(
+                    r"oidc_token=\"\$\(.*\)\"", run_script, flags=re.DOTALL
+                ):
+                    errors.append(
+                        f"{path.relative_to(ROOT)}: job {job_id!r} uses oidc_token "
+                        "without fetching it in the same shell step"
+                    )
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             match = USES_RE.match(line)
             if not match:

@@ -81,7 +81,7 @@ jobs:
         with:
           cosign-release: v2.4.1
 
-      - name: Request Sigstore OIDC token
+      - name: Sign promoted digest with Sigstore OIDC identity
         env:
           OIDC_AUDIENCE: sigstore
         run: |
@@ -90,12 +90,9 @@ jobs:
           curl -fsSL \
             -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             -H 'Accept: application/json' \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}" > "$response"
-          python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["value"])' "$response" > "$RUNNER_TEMP/oidc-token"
-          chmod 600 "$RUNNER_TEMP/oidc-token"
-
-      - name: Sign promoted digest
-        run: cosign sign --yes --identity-token "$RUNNER_TEMP/oidc-token" "ghcr.io/${{ github.repository_owner }}/liki-agents@${{ steps.promote.outputs.digest }}"
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}" > "$response"
+          oidc_token="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["value"])' "$response")"
+          cosign sign --yes --identity-token "$oidc_token" "ghcr.io/${{ github.repository_owner }}/liki-agents@${{ steps.promote.outputs.digest }}"
 
       - name: Verify promoted digest
         run: cosign verify --certificate-identity-regexp '^https://github\.com/ml8s/liki-agents/\.github/workflows/promote-release\.yml@refs/tags/' --certificate-oidc-issuer https://token.actions.githubusercontent.com "ghcr.io/${{ github.repository_owner }}/liki-agents@${{ steps.promote.outputs.digest }}"
