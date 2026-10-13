@@ -89,20 +89,6 @@ jobs:
           cache-dependency-path: go.sum
       - run: make build
 
-  docker-build:
-    name: Build image
-    runs-on: ubuntu-latest
-    needs:
-      - vulnerability-scan
-      - node-audit
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - run: docker build -t liki-agents:ci .
-      - name: Smoke image
-        run: IMAGE=liki-agents:ci scripts/smoke-image.sh
-
   docker-publish:
     name: Publish runtime image
     if: github.event_name == 'release'
@@ -144,7 +130,11 @@ jobs:
             BUILD_TIME=${{ github.event.release.published_at }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/liki-agents:${{ steps.tags.outputs.version }}
-      - name: Record released image digest
+      - name: Smoke published image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/liki-agents@${{ steps.agents-image.outputs.digest }}
+        run: scripts/smoke-image.sh
+      - name: Record and sign released image digest
         run: |
           echo "liki-agents=${{ steps.agents-image.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
           cosign sign --yes "ghcr.io/${{ github.repository_owner }}/liki-agents@${{ steps.agents-image.outputs.digest }}"

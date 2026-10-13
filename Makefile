@@ -5,6 +5,7 @@
 #   make smoke  本仓镜像启动 + operational/public endpoint 冒烟
 #   make build  本仓产物（liki-agents 二进制；镜像由 CI release 构建）
 #   make image  本地候选镜像（local tag；正式镜像由 CI release 发布）
+#   make release-gate 发版门槛（gate + published image smoke；由 release workflow 执行）
 #   make e2e    系统 E2E 聚合（liki-deploy 编排）
 
 GO ?= go
@@ -87,7 +88,8 @@ smoke: image ## Smoke the local runtime image with the development deployment
 run:
 	./scripts/dev.sh
 
-gate: check test-coverage smoke
+gate: check test-coverage
+release-gate: gate smoke
 
 check-actions: ## Reject mutable reusable workflow/action references
 	python3 scripts/check_actions_pinned.py
