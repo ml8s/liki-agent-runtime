@@ -101,8 +101,11 @@ image: ## Build a local candidate image (Actions never builds images)
 smoke: image ## Smoke the local runtime image with the development deployment
 	IMAGE_TAG=$(IMAGE_TAG) scripts/smoke-image.sh
 
-candidate: ## Build, publish, manifest, and smoke a clean-tree candidate image (requires RELEASE_VERSION)
+candidate: ## Build, smoke, and record a clean-tree candidate image in the local registry (requires RELEASE_VERSION)
 	scripts/build-candidate.sh
+
+candidate-publish: ## Publish a system-tested local candidate to GHCR
+	scripts/publish-candidate.sh
 
 run:
 	./scripts/dev.sh

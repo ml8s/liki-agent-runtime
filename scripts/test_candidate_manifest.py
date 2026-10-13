@@ -25,15 +25,18 @@ def test_candidate_build_fails_fast_before_expensive_gate() -> None:
     assert script.index("RELEASE_VERSION=") < script.index("make gate")
 
 
-def test_candidate_smokes_locally_before_registry_push() -> None:
+def test_candidate_smokes_locally_before_remote_publication() -> None:
     script = Path(__file__).with_name("build-candidate.sh").read_text(encoding="utf-8")
     assert script.index("docker buildx build") < script.index("scripts/smoke-image.sh")
-    assert script.index("scripts/smoke-image.sh") < script.index("docker push")
+    assert "docker push" not in script
     assert "--push" not in script
+    assert script.index("ensure_candidate_registry") < script.index("scripts/smoke-image.sh")
+    assert "candidate-publish" not in script
     
 class CandidateManifestTest(unittest.TestCase):
     def test_generates_exact_contract(self) -> None:
         manifest = module.generate_manifest(
+            registry="127.0.0.1:5000",
             repository="ml8s/liki-agents",
             source_commit="a" * 40,
             candidate_tag="candidate-aaaaaaa-20260101010101",
@@ -41,6 +44,7 @@ class CandidateManifestTest(unittest.TestCase):
         )
         self.assertEqual(
             {
+                "registry": "127.0.0.1:5000",
                 "repository": "ml8s/liki-agents",
                 "source_commit": "a" * 40,
                 "candidate_tag": "candidate-aaaaaaa-20260101010101",

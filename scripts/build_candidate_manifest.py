@@ -14,6 +14,7 @@ DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 def generate_manifest(
     *,
+    registry: str,
     repository: str,
     source_commit: str,
     candidate_tag: str,
@@ -22,6 +23,8 @@ def generate_manifest(
     """Return the stable candidate manifest representation."""
     if repository != "ml8s/liki-agents":
         raise ValueError("repository must be ml8s/liki-agents")
+    if not registry or registry.startswith(("http://", "https://")):
+        raise ValueError("registry must be a registry host without a scheme")
     if not COMMIT_RE.fullmatch(source_commit):
         raise ValueError("source_commit must be a full 40-character SHA")
     if not TAG_RE.fullmatch(candidate_tag):
@@ -29,6 +32,7 @@ def generate_manifest(
     if not DIGEST_RE.fullmatch(agents_digest):
         raise ValueError("agents image digest must use an immutable sha256 digest")
     return {
+        "registry": registry,
         "repository": repository,
         "source_commit": source_commit,
         "candidate_tag": candidate_tag,
@@ -45,6 +49,7 @@ def write_manifest(path: Path, manifest: dict[str, object]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--registry", required=True)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--candidate-tag", required=True)
@@ -52,6 +57,7 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     manifest = generate_manifest(
+        registry=args.registry,
         repository=args.repository,
         source_commit=args.source_commit,
         candidate_tag=args.candidate_tag,
