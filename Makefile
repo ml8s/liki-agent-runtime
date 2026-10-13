@@ -3,10 +3,12 @@
 #   make check  纯静态检查（lint+格式+vet+validate；不跑测试、不写盘）
 #   make test   本仓全部测试（单元/集成；不含 e2e）
 #   make smoke  本仓镜像启动 + operational/public endpoint 冒烟
-#   make build  本仓产物（liki-agents 二进制；镜像由 CI release 构建）
-#   make image  本地候选镜像（local tag；正式镜像由 CI release 发布）
-#   make release-gate 发版门槛（gate + published image smoke；由 release workflow 执行）
+#   make build  本仓产物（liki-agents 二进制）
+#   make candidate RELEASE_VERSION=... 本地构建候选镜像并生成 digests（Actions 不构建镜像）
 #   make e2e    系统 E2E 聚合（liki-deploy 编排）
+
+RELEASE_VERSION ?=
+export RELEASE_VERSION
 
 GO ?= go
 NPM ?= npm
@@ -25,16 +27,17 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-db build run dev dev-down validate gate image smoke
+.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions check-candidate test-db test-coverage-report build run dev dev-down validate gate image candidate smoke
 help:
 	@echo "make check    - static checks: docs, formatting, lint, vet, and artifact"
 	@echo "make lint-readme - lint and test developer documentation"
 	@echo "make test     - run isolated tests (no deployed Engine dependency)"
 	@echo "make test-coverage - run tests and enforce the coverage floor"
 	@echo "make test-db  - run SQLite persistence tests"
+	@echo "make check-candidate - run candidate manifest regression tests"
 	@echo "make smoke    - smoke the local liki-agents image"
 	@echo "make build    - build ./bin/liki-agents"
-	@echo "make image    - build the local candidate image (CI builds for release)"
+	@echo "make image    - build a local candidate image (Actions never builds images)"
 	@echo "make dev      - run the development Agent and MCP containers in the foreground"
 	@echo "make dev-down - remove the development Agent workload"
 	@echo "make validate - validate the AgentDeployment artifact without starting the server"
@@ -58,26 +61,39 @@ test:
 	$(GO) test -race -count=1 -coverprofile=$(COVER_PROFILE) $(TEST_PACKAGES)
 
 test-coverage: test
+test-coverage-report: ## Run tests and emit terminal + HTML coverage reports
+	$(GO) test -race -count=1 -coverprofile=$(COVER_PROFILE) $(TEST_PACKAGES)
+	@COV=$$($(GO) tool cover -func=$(COVER_PROFILE) | tail -1 | awk '{print $$3}' | sed 's/%//'); \
+		echo "coverage: $$COV% (floor $(COVER_MIN)%)"; \
+		if awk -v c="$$COV" -v m="$(COVER_MIN)" 'BEGIN {exit !(c < m)}'; then \
+			echo "❌ coverage $$COV% < $(COVER_MIN)%" >&2; exit 1; \
+		fi
+	$(GO) tool cover -html=$(COVER_PROFILE) -o coverage.html
+
 	@COV=$$($(GO) tool cover -func=$(COVER_PROFILE) | tail -1 | awk '{print $$3}' | sed 's/%//'); \
 	echo "coverage: $$COV% (floor $(COVER_MIN)%)"; \
 	if awk -v c="$$COV" -v m="$(COVER_MIN)" 'BEGIN {exit !(c < m)}'; then \
 		echo "❌ coverage $$COV% < $(COVER_MIN)%" >&2; exit 1; \
 	fi
 
-check: lint-readme fmt-check lint-engine vet validate check-actions
+check: lint-readme fmt-check lint-engine vet validate check-actions check-candidate
 
 test-db:
 	$(GO) test -race -count=1 ./internal/audit/sqlite/...
 
-build: ## Build the local liki-agents binary. 镜像由 CI release 构建，非本地。
+
+build: ## Build the local liki-agents binary.
 	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/liki-agents ./cmd/liki-agents
 
+check-candidate: ## Validate candidate release manifest generation
+	python3 scripts/test_candidate_manifest.py
+
 # ── 镜像（本地候选，非发布路径）──
-# 生产镜像由 CI release 构建并推送 GHCR；此目标使用明确的 local 候选 tag。
+# GitHub Actions 不构建镜像；正式发布只 promote 本地候选 digest。
 IMAGE_REGISTRY ?= ghcr.io/ml8s
 IMAGE_TAG ?= local
 
-image: ## Build the local candidate image (production uses CI release)
+image: ## Build a local candidate image (Actions never builds images)
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_TIME=$(BUILD_TIME) \
 		--build-arg GOPROXY=$(GOPROXY) \
 		-t $(IMAGE_REGISTRY)/liki-agents:$(IMAGE_TAG) .
@@ -85,11 +101,13 @@ image: ## Build the local candidate image (production uses CI release)
 smoke: image ## Smoke the local runtime image with the development deployment
 	IMAGE_TAG=$(IMAGE_TAG) scripts/smoke-image.sh
 
+candidate: ## Build, publish, manifest, and smoke a clean-tree candidate image (requires RELEASE_VERSION)
+	scripts/build-candidate.sh
+
 run:
 	./scripts/dev.sh
 
 gate: check test-coverage
-release-gate: gate smoke
 
 check-actions: ## Reject mutable reusable workflow/action references
 	python3 scripts/check_actions_pinned.py

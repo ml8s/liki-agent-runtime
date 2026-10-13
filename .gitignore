@@ -1,4 +1,5 @@
 /bin/
+/build/candidate/
 /node_modules/
 /data/
 /coverage.out
@@ -7,3 +8,5 @@
 .env.*
 !.env.example
 .DS_Store
+
+__pycache__/

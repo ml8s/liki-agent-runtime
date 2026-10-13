@@ -43,7 +43,13 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
       - name: Run static checks and tests
-        run: make check test-coverage
+        run: make check test-coverage-report
+      - name: Upload Go coverage HTML
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: go-coverage-html
+          path: coverage.html
+          if-no-files-found: error
 
   vulnerability-scan:
     name: Go vulnerability scan

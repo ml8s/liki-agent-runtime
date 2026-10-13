@@ -4,6 +4,10 @@ Thanks for improving `liki-agents`.
 
 ## Development
 
+`main` is the only long-lived branch. Do not use `dev`, `master`, or long-lived
+release branches. Keep changes small and commit them to tested `main`; release
+tags are created only from those commits.
+
 1. Install Go 1.26+, Node.js 24.14.1 (see `.nvmrc`), Docker, and golangci-lint 2.x.
 2. Run `npm ci`.
 3. Start from a focused, small change.

@@ -87,10 +87,11 @@ ENV LIKI_AGENTS_DEPLOYMENT_FILE=/deployment/deployment.json
 
 **任何运行时改动都必须**：`make check` 通过（含 `validate` 校验 dev fixture 工件）。
 
-## 五、本仓 CI 发布链（release 触发）
+## 五、本仓发布链（本地候选 + Actions promotion）
 
-- `check`/`build`/`vulnerability-scan`/`node-audit`：质量门
-- `docker-publish`：push `liki-agents:<version>`
+- 本地执行 `make candidate RELEASE_VERSION=<calver>` 构建、冒烟并生成
+  `build/candidate/candidate-digests.json`
+- GitHub Actions 不构建镜像；`promote-release` 校验 tag、commit 与 digest manifest，复用 candidate digest 并签名发布
 
 ## 六、相关文档
 
