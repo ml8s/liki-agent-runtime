@@ -39,8 +39,8 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: Source gate
-        run: make gate
+      - name: Build binary
+        run: make build
 
       - id: meta
         run: echo "tag=candidate-${GITHUB_SHA::7}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
