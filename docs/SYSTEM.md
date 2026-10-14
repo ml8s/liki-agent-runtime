@@ -91,7 +91,7 @@ ENV LIKI_AGENTS_DEPLOYMENT_FILE=/deployment/deployment.json
 
 - 本地执行 `make candidate RELEASE_VERSION=<calver>` 构建、冒烟并生成
   `build/candidate/candidate-digests.json`
-- GitHub Actions 不构建镜像；`promote-release` 校验 tag、commit 与 digest manifest，复用 candidate digest 并签名发布
+- GitHub Actions 不构建镜像；`promote-release` 校验 tag、commit 与 digest manifest，复用 candidate digest、签名并验证签名
 
 ## 六、相关文档
 

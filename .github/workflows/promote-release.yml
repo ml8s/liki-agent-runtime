@@ -112,11 +112,6 @@ jobs:
           docker buildx imagetools create -t "$target" "$source"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke promoted digest
-        env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/liki-agents@${{ steps.promote.outputs.digest }}
-        run: scripts/smoke-image.sh
-
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v2.4.1
@@ -139,13 +134,20 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             "$image"
 
-      - name: Create GitHub Release
+      - name: Record release evidence
         env:
-          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
           DIGEST: ${{ steps.promote.outputs.digest }}
         run: |
           set -euo pipefail
-          gh release create "v$VERSION" \
-            --verify-tag \
-            --title "liki-agents v$VERSION" \
-            --notes "Source commit: $SOURCE_COMMIT"$'\n'"Image digest: $DIGEST"
+          mkdir -p release-evidence
+          printf 'source_commit=%s\nimage_digest=%s\n' "$SOURCE_COMMIT" "$DIGEST" \
+            > "release-evidence/liki-agents-v$VERSION.env"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: liki-agents-release-evidence-v${{ inputs.version }}
+          path: release-evidence/**
+          retention-days: 30
+          if-no-files-found: error
