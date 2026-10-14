@@ -2,7 +2,7 @@
 
 ## System boundary
 
-`liki-agents` is a generic multi-agent runtime. `liki-web` owns users,
+`liki-agent-runtime` is a generic multi-agent runtime. `liki-web` owns users,
 authentication, products, payments, entitlements, quota, and durable product
 conversations. The Liki skill/project owns prompts, skills, domain policy, and
 tool semantics. External MCP servers expose deterministic and judgment tools.
@@ -11,7 +11,7 @@ tool semantics. External MCP servers expose deterministic and judgment tools.
 Server / machine client
   ↓ A2A JSON-RPC
 ┌────────────┐   MCP Streamable HTTP
-│ liki-agents │──────────────────────→ MCP tools (Engine, Counsel, ...)
+│ liki-agent-runtime │──────────────────────→ MCP tools (Engine, Counsel, ...)
 └────────────┘
   ↑ AG-UI SSE
 liki-web gateway
@@ -68,7 +68,7 @@ instructions, schemas, and skills roll out and roll back as one unit.
 ## Dependencies and modules
 
 ```text
-cmd/liki-agents
+cmd/liki-agent-runtime
   → internal/transport
   → internal/protocol/a2a
   → internal/protocol/agui

@@ -28,12 +28,17 @@ const (
 	maxManifestBytes       = 2 << 20
 	maxTextArtifactBytes   = 2 << 20
 	maxSchemaArtifactBytes = 4 << 20
+
+	// ContractVersion identifies the AgentDeployment JSON shape. Runtime
+	// releases reject artifacts written for an incompatible contract.
+	ContractVersion = "liki.agent-deployment.v1"
 )
 
 // Deployment is the validated AgentDeployment artifact and its derived digest.
 type Deployment struct {
-	Metadata DeploymentMetadata `json:"metadata"`
-	Spec     DeploymentSpec     `json:"spec"`
+	SchemaVersion string             `json:"schema_version"`
+	Metadata      DeploymentMetadata `json:"metadata"`
+	Spec          DeploymentSpec     `json:"spec"`
 
 	Digest string `json:"-"`
 }
@@ -236,6 +241,12 @@ func decodeAgentDeployment(raw []byte) (*Deployment, error) {
 	if err := decodeStrictJSON(raw, &deployment); err != nil {
 		return nil, fmt.Errorf("decode agent deployment: %w", err)
 	}
+	if deployment.SchemaVersion != ContractVersion {
+		return nil, fmt.Errorf("unsupported schema_version %q; want %q", deployment.SchemaVersion, ContractVersion)
+	}
+	if err := deployment.validate(); err != nil {
+		return nil, err
+	}
 	return &deployment, nil
 }
 
@@ -323,6 +334,9 @@ func rejectDuplicateKeysInValue(decoder *json.Decoder, path string) error {
 }
 
 func (d *Deployment) validate() error {
+	if d.SchemaVersion != ContractVersion {
+		return fmt.Errorf("unsupported schema_version %q; want %q", d.SchemaVersion, ContractVersion)
+	}
 	if strings.TrimSpace(d.Metadata.Name) == "" {
 		return fmt.Errorf("agent deployment metadata.name is required")
 	}

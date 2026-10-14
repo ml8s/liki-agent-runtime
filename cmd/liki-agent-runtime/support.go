@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ml8s/liki-agents/internal/platform/config"
+	"github.com/ml8s/liki-agent-runtime/internal/platform/config"
 )
 
 func newLogger(cfg config.Config) *slog.Logger {

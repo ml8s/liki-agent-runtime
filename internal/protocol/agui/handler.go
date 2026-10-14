@@ -16,10 +16,10 @@ import (
 	aguievents "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	aguitypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	aguisse "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/encoding/sse"
-	"github.com/ml8s/liki-agents/internal/agent"
-	"github.com/ml8s/liki-agents/internal/domain"
-	"github.com/ml8s/liki-agents/internal/observability"
-	"github.com/ml8s/liki-agents/internal/platform/identity"
+	"github.com/ml8s/liki-agent-runtime/internal/agent"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/observability"
+	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
 	"google.golang.org/adk/v2/session"
 )
 

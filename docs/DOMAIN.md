@@ -1,6 +1,6 @@
 # Runtime Domain Model
 
-`liki-agents` is a generic multi-agent runtime. Prompts, skill workflow, tool
+`liki-agent-runtime` is a generic multi-agent runtime. Prompts, skill workflow, tool
 semantics, domain schemas, and domain evaluation belong to the Liki
 skill/project.
 
@@ -66,5 +66,5 @@ skill/project.
 
 `liki-web` owns users, products, entitlements, quota, and durable conversations.
 The Liki skill/project owns domain behavior and MCP tool semantics.
-`liki-agents` owns generic execution, protocol adaptation, evidence, and
+`liki-agent-runtime` owns generic execution, protocol adaptation, evidence, and
 operations.

@@ -14,10 +14,10 @@ import (
 	a2atypes "github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
-	"github.com/ml8s/liki-agents/internal/agent"
-	"github.com/ml8s/liki-agents/internal/audit"
-	"github.com/ml8s/liki-agents/internal/protocol/a2a"
-	"github.com/ml8s/liki-agents/internal/testagent"
+	"github.com/ml8s/liki-agent-runtime/internal/agent"
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/protocol/a2a"
+	"github.com/ml8s/liki-agent-runtime/internal/testagent"
 )
 
 type testAuditRecorder struct {

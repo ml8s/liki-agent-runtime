@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for improving `liki-agents`.
+Thanks for improving `liki-agent-runtime`.
 
 ## Development
 

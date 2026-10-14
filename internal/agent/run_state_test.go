@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
 
 func TestJSONStringAtPointerFollowsRFC6901(t *testing.T) {

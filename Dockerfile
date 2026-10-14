@@ -10,24 +10,24 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd ./cmd
 COPY internal ./internal
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -buildvcs=false -ldflags="-s -w -X github.com/ml8s/liki-agents/internal/platform/buildinfo.Version=${VERSION} -X github.com/ml8s/liki-agents/internal/platform/buildinfo.Commit=${COMMIT} -X github.com/ml8s/liki-agents/internal/platform/buildinfo.BuildTime=${BUILD_TIME}" -o /out/liki-agents ./cmd/liki-agents
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -buildvcs=false -ldflags="-s -w -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.Version=${VERSION} -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.Commit=${COMMIT} -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.BuildTime=${BUILD_TIME}" -o /out/liki-agent-runtime ./cmd/liki-agent-runtime
 RUN mkdir -p /data && chown 65532:65532 /data
 
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 ARG VERSION=local
 ARG COMMIT=unknown
 ARG BUILD_TIME=unknown
-COPY --from=build /out/liki-agents /liki-agents
+COPY --from=build /out/liki-agent-runtime /liki-agent-runtime
 COPY --from=build --chown=nonroot:nonroot /data /data
 LABEL org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}" \
       org.opencontainers.image.created="${BUILD_TIME}" \
-      org.opencontainers.image.title="liki-agents" \
+      org.opencontainers.image.title="liki-agent-runtime" \
       org.opencontainers.image.description="Domain-neutral Liki multi-agent runtime"
-ENV LIKI_ENV=production LIKI_AGENTS_ADDR=:8083 LIKI_AGENTS_DB_PATH=/data/liki-agents-audit.db LIKI_LOG_FORMAT=json
-ENV LIKI_AGENTS_PUBLIC_URL=http://localhost:8083
+ENV LIKI_ENV=production LIKI_AGENT_RUNTIME_ADDR=:8083 LIKI_AGENT_RUNTIME_DB_PATH=/data/liki-agent-runtime-audit.db LIKI_LOG_FORMAT=json
+ENV LIKI_AGENT_RUNTIME_PUBLIC_URL=http://localhost:8083
 VOLUME ["/data"]
 EXPOSE 8083
 USER nonroot:nonroot
-ENTRYPOINT ["/liki-agents"]
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["/liki-agents", "healthcheck"]
+ENTRYPOINT ["/liki-agent-runtime"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["/liki-agent-runtime", "healthcheck"]

@@ -1,11 +1,11 @@
 # Security Policy
 
-`liki-agents` is an internal runtime and must not be exposed directly to the
+`liki-agent-runtime` is an internal runtime and must not be exposed directly to the
 public internet.
 
 Required controls:
 
-- Internal bearer token between the gateway and `liki-agents` outside local
+- Internal bearer token between the gateway and `liki-agent-runtime` outside local
   development.
 - The same internal token for protocol calls and `/metrics`.
 - Verified user context supplied by the gateway for AG-UI.

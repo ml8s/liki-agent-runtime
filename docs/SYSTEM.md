@@ -9,18 +9,18 @@ Liki 是多 Agent 命理专家系统，四仓分工：
 
 ```text
 浏览器 → Caddy → liki-web (BFF)
-                   └─AG-UI→ liki-agents (装配镜像: 运行时+组合工件) ──MCP──> engine-mcp / counsel-mcp
+                   └─AG-UI→ liki-agent-runtime (装配镜像: 运行时+组合工件) ──MCP──> engine-mcp / counsel-mcp
                               router → 全功能领域专家委派，审计留痕
 ```
 
 | 仓 | 角色 | 产物 |
 |---|---|---|
 | liki | 内容/领域仓 | 专家内容、engine/counsel MCP、deployment 工件、装配镜像、web skill bundle |
-| **liki-agents（本仓）** | 通用运行时仓 | **纯运行时镜像**、**AgentDeployment 运行时校验** |
+| **liki-agent-runtime（本仓）** | 通用运行时仓 | **纯运行时镜像**、**AgentDeployment 运行时校验** |
 | liki-web | 产品 BFF 仓 | liki-web 镜像（BFF + 前端） |
 | liki-deploy | 发布编排仓 | 纯清单：compose + env + Caddyfile，只 pin 版本 |
 
-## 二、本仓角色（liki-agents 运行时仓）
+## 二、本仓角色（liki-agent-runtime 运行时仓）
 
 本仓是 **domain-neutral 多 Agent 运行时**：
 
@@ -42,25 +42,24 @@ schema artifact：
 - liki 生成工件后，用本仓 pinned runtime 执行 `validate`
 - 工件 digest、runtime base digest、装配镜像 digest 提供可复现 provenance
 
-**发布顺序硬约束**：liki-agents 镜像先发布，liki 后发布装配镜像（FROM pinned runtime，并用该 runtime 验证工件）。
+**发布顺序硬约束**：liki-agent-runtime 镜像先发布，liki 后发布装配镜像（FROM pinned runtime，并用该 runtime 验证工件）。
 
 ### 3.2 装配镜像（liki 侧构建，本仓是 base）
 
 liki 仓 `assembly/Dockerfile`（按 `PROFILE` 构建两套装配镜像）：
 
 ```dockerfile
-FROM ghcr.io/ml8s/liki-agents:<base>   # 本仓 release 的显式 pin tag
+FROM ghcr.io/ml8s/liki-agent-runtime:<base>   # 本仓 release 的显式 pin tag
 COPY dist/agents/experts/ /deployment/
-ENV LIKI_AGENTS_DEPLOYMENT_FILE=/deployment/deployment.json
+ENV LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE=/deployment/deployment.json
 ```
 
 - 本仓发布**纯运行时镜像**（`Dockerfile`，不打包任何工件）
-- 生产运行的是 `liki-multi-expert` / `liki-single-expert` 装配镜像；`liki-agents` 只作为 base 被拉取
-- `LIKI_AGENTS_DEPLOYMENT_FILE`/`DIGEST` 由装配镜像内置，生产启动即校验工件
+- `LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE`/`DIGEST` 由装配镜像内置，生产启动即校验工件
 
 ### 3.3 生产环境变量（deploy 注入）
 
-`liki-deploy/compose/docker-compose.yml` 为 liki-agents 服务注入：
+`liki-deploy/compose/docker-compose.yml` 为 liki-agent-runtime 服务注入：
 
 | env | 说明 |
 |---|---|
@@ -99,3 +98,5 @@ ENV LIKI_AGENTS_DEPLOYMENT_FILE=/deployment/deployment.json
 - `docs/DOMAIN.md`、`docs/STANDARDS.md`：领域与标准约定
 - `liki/docs/SYSTEM.md`：内容仓视角的全况
 - `liki-deploy/docs/ARCHITECTURE.md`：系统架构与发布时序
+
+- [Domain naming matrix](DOMAIN_NAMING.md): canonical repository/image/service names.

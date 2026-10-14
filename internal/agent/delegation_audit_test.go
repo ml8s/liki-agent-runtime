@@ -8,8 +8,8 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ml8s/liki-agents/internal/audit"
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/genai"
 )

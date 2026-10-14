@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/liki-agents/internal/audit"
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"gorm.io/gorm"
 )
 

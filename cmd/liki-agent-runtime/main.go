@@ -12,36 +12,36 @@ import (
 	"syscall"
 	"time"
 
-	agentruntime "github.com/ml8s/liki-agents/internal/agent"
-	"github.com/ml8s/liki-agents/internal/audit/sqlite"
-	"github.com/ml8s/liki-agents/internal/observability/otel"
-	"github.com/ml8s/liki-agents/internal/observability/prometheus"
-	"github.com/ml8s/liki-agents/internal/platform"
-	"github.com/ml8s/liki-agents/internal/platform/buildinfo"
-	"github.com/ml8s/liki-agents/internal/platform/config"
-	a2aadapter "github.com/ml8s/liki-agents/internal/protocol/a2a"
-	aguiadapter "github.com/ml8s/liki-agents/internal/protocol/agui"
-	"github.com/ml8s/liki-agents/internal/transport"
+	agentruntime "github.com/ml8s/liki-agent-runtime/internal/agent"
+	"github.com/ml8s/liki-agent-runtime/internal/audit/sqlite"
+	"github.com/ml8s/liki-agent-runtime/internal/observability/otel"
+	"github.com/ml8s/liki-agent-runtime/internal/observability/prometheus"
+	"github.com/ml8s/liki-agent-runtime/internal/platform"
+	"github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo"
+	"github.com/ml8s/liki-agent-runtime/internal/platform/config"
+	a2aadapter "github.com/ml8s/liki-agent-runtime/internal/protocol/a2a"
+	aguiadapter "github.com/ml8s/liki-agent-runtime/internal/protocol/agui"
+	"github.com/ml8s/liki-agent-runtime/internal/transport"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "validate" {
 		if err := validate(os.Args[2:]); err != nil {
-			slog.Error("liki-agents deployment validation failed", "error", err)
+			slog.Error("liki-agent-runtime deployment validation failed", "error", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		if err := healthcheck(); err != nil {
-			slog.Error("liki-agents healthcheck failed", "error", err)
+			slog.Error("liki-agent-runtime healthcheck failed", "error", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if err := run(); err != nil {
-		slog.Error("liki-agents exited", "error", err)
+		slog.Error("liki-agent-runtime exited", "error", err)
 		os.Exit(1)
 	}
 }
@@ -56,7 +56,7 @@ func run() (err error) {
 
 	tracerProvider, err := otel.NewTracerProvider(
 		context.Background(),
-		"liki-agents",
+		"liki-agent-runtime",
 		buildinfo.Version,
 		cfg.Env,
 	)
@@ -80,7 +80,7 @@ func run() (err error) {
 	}
 	metricsCollector := prometheus.New()
 	runtime, err := agentruntime.NewRuntime(agentruntime.Config{
-		AppName:           "liki-agents",
+		AppName:           "liki-agent-runtime",
 		Model:             cfg.LLMModel,
 		ModelBaseURL:      cfg.LLMBaseURL,
 		ModelAPIKey:       cfg.LLMAPIKey,
@@ -134,7 +134,7 @@ func run() (err error) {
 		return err
 	}
 
-	httpHandler := otelhttp.NewHandler(protocolServer, "liki-agents",
+	httpHandler := otelhttp.NewHandler(protocolServer, "liki-agent-runtime",
 		otelhttp.WithTracerProvider(tracerProvider.Provider()),
 		otelhttp.WithPropagators(otel.Propagator()),
 	)
@@ -158,7 +158,7 @@ func run() (err error) {
 	}()
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("liki-agents listening",
+		logger.Info("liki-agent-runtime listening",
 			"addr", cfg.Addr,
 			"public_url", cfg.PublicURL,
 			"protocols", "A2A,AG-UI,MCP",
@@ -170,7 +170,7 @@ func run() (err error) {
 
 	select {
 	case <-ctx.Done():
-		logger.Info("liki-agents draining", "shutdown_timeout", cfg.ShutdownTimeout)
+		logger.Info("liki-agent-runtime draining", "shutdown_timeout", cfg.ShutdownTimeout)
 		protocolServer.Drain()
 		drainCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer cancel()

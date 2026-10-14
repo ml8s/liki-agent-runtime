@@ -15,8 +15,8 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/ml8s/liki-agents/internal/audit"
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -27,7 +27,7 @@ func buildTestDeployment(t testing.TB) (*Deployment, error) {
 	root := t.TempDir()
 	files := map[string]string{
 		"agent-deployment.json": `{
-			"metadata": {"name": "test-agent", "version": "1.0.0"},
+			"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "test-agent", "version": "1.0.0"},
 			"spec": {
 				"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
 				"agents": [{

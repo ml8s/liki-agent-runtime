@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )

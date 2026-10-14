@@ -21,8 +21,8 @@ def generate_manifest(
     agents_digest: str,
 ) -> dict[str, str | dict[str, str]]:
     """Return the stable candidate manifest representation."""
-    if repository != "ml8s/liki-agents":
-        raise ValueError("repository must be ml8s/liki-agents")
+    if repository != "ml8s/liki-agent-runtime":
+        raise ValueError("repository must be ml8s/liki-agent-runtime")
     if not registry or registry.startswith(("http://", "https://")):
         raise ValueError("registry must be a registry host without a scheme")
     if not COMMIT_RE.fullmatch(source_commit):

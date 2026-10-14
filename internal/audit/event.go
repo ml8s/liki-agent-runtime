@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
 
 // Audit event type identifiers.

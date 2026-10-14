@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ml8s/liki-agents/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/adk/v2/model"

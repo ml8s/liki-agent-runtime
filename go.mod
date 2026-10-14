@@ -1,4 +1,4 @@
-module github.com/ml8s/liki-agents
+module github.com/ml8s/liki-agent-runtime
 
 go 1.26.9
 

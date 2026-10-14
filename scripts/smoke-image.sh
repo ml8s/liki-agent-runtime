@@ -6,9 +6,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE_TAG="${IMAGE_TAG:-local}"
-IMAGE="${IMAGE:-${LIKI_AGENTS_IMAGE:-ghcr.io/ml8s/liki-agents:$IMAGE_TAG}}"
+IMAGE="${IMAGE:-${LIKI_AGENT_RUNTIME_IMAGE:-ghcr.io/ml8s/liki-agent-runtime:$IMAGE_TAG}}"
 PORT="${AGENTS_SMOKE_PORT:-18083}"
-NAME="liki-agents-smoke-$$"
+NAME="liki-agent-runtime-smoke-$$"
 
 cleanup() {
   docker rm -f "$NAME" >/dev/null 2>&1 || true
@@ -21,12 +21,12 @@ docker run -d --name "$NAME" \
   -v "$ROOT/dev/agent-deployment:/agent-deployment:ro" \
   --tmpfs /data:uid=65532,gid=65532 \
   -e LIKI_ENV=development \
-  -e LIKI_AGENTS_TOPOLOGY=single \
-  -e LIKI_AGENTS_ADDR=:8083 \
-  -e LIKI_AGENTS_PUBLIC_URL=http://127.0.0.1:8083 \
-  -e LIKI_AGENTS_DB_PATH=/data/liki-agents-audit.db \
-  -e LIKI_AGENTS_DEPLOYMENT_FILE=/agent-deployment/deployment.json \
-  -e LIKI_AGENTS_SKILLS_ROOT=/agent-deployment/skills \
+  -e LIKI_AGENT_RUNTIME_TOPOLOGY=single \
+  -e LIKI_AGENT_RUNTIME_ADDR=:8083 \
+  -e LIKI_AGENT_RUNTIME_PUBLIC_URL=http://127.0.0.1:8083 \
+  -e LIKI_AGENT_RUNTIME_DB_PATH=/data/liki-agent-runtime-audit.db \
+  -e LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE=/agent-deployment/deployment.json \
+  -e LIKI_AGENT_RUNTIME_SKILLS_ROOT=/agent-deployment/skills \
   -e LIKI_MCP_ENGINE_URL=http://127.0.0.1:9/mcp \
   -e LIKI_MCP_COUNSEL_URL=http://127.0.0.1:9/mcp/bazi \
   -e LIKI_MCP_ENGINE_TOKEN=smoke-not-used \
@@ -50,11 +50,11 @@ for _ in $(seq 1 30); do
 done
 
 if [ "$ready" != true ]; then
-  echo "❌ liki-agents image did not become ready" >&2
+  echo "❌ liki-agent-runtime image did not become ready" >&2
   docker logs "$NAME" >&2 || true
   exit 1
 fi
 
 curl -fsS "http://127.0.0.1:$PORT/version" | grep -q 'version'
 curl -fsS "http://127.0.0.1:$PORT/.well-known/agent-card.json" | grep -q '"protocolBinding":"JSONRPC"'
-echo "✅ liki-agents image smoke passed"
+echo "✅ liki-agent-runtime image smoke passed"

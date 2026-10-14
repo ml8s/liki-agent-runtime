@@ -1,6 +1,6 @@
 ---
 name: liki
-description: Development fixture skill for the liki-agents dev stack. It proves that the skilltoolset binding preloads and serves skills in local development; it carries no methodology and must never be shipped to production images.
+description: Development fixture skill for the liki-agent-runtime dev stack. It proves that the skilltoolset binding preloads and serves skills in local development; it carries no methodology and must never be shipped to production images.
 ---
 
 # liki (dev fixture)

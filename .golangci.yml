@@ -26,7 +26,7 @@ linters:
               desc: domain must stay framework-free
             - pkg: "google.golang.org/genai"
               desc: domain must stay provider-free
-            - pkg: "github.com/ml8s/liki-agents/internal/"
+            - pkg: "github.com/ml8s/liki-agent-runtime/internal/"
               desc: domain must not import sibling packages
     revive:
       rules:

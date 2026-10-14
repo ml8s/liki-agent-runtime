@@ -1,6 +1,7 @@
 {
+  "schema_version": "liki.agent-deployment.v1",
   "metadata": {
-    "name": "liki-agents-deployment",
+    "name": "liki-agent-runtime-deployment",
     "version": "1.0.0"
   },
   "spec": {

@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { Readable } from "node:stream";
 
-const agentURL = new URL(process.env.LIKI_AGENTS_URL ?? "http://127.0.0.1:8083");
+const agentURL = new URL(process.env.LIKI_AGENT_RUNTIME_URL ?? "http://127.0.0.1:8083");
 const [listenHost, listenPortText] = (
   process.env.LIKI_CHAT_UI_ADDR ?? "127.0.0.1:8084"
 ).split(":");
@@ -96,5 +96,5 @@ createServer((req, res) => {
   sendFile(res, url.pathname);
 }).listen(listenPort, listenHost, () => {
   const displayHost = listenHost === "0.0.0.0" ? "127.0.0.1" : listenHost;
-  console.log(`liki-agents development chat UI: http://${displayHost}:${listenPort}`);
+  console.log(`liki-agent-runtime development chat UI: http://${displayHost}:${listenPort}`);
 });

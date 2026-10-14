@@ -1,6 +1,6 @@
 package agent
 
-import "github.com/ml8s/liki-agents/internal/audit"
+import "github.com/ml8s/liki-agent-runtime/internal/audit"
 
 // scopedEvent seeds an audit event with the provenance fields that every
 // lifecycle event of a run shares. Callers then set the lifecycle and

@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	jsonpointer "github.com/qri-io/jsonpointer"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"

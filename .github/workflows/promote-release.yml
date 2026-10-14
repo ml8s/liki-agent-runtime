@@ -35,7 +35,7 @@ jobs:
       VERSION: ${{ inputs.version }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       DIGESTS_JSON: ${{ inputs.digests_json }}
-      REPOSITORY: ml8s/liki-agents
+      REPOSITORY: ml8s/liki-agent-runtime
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -79,8 +79,8 @@ jobs:
               raise SystemExit(f"digests_json is not valid JSON: {exc}")
           if not isinstance(manifest, dict):
               raise SystemExit("digests_json must contain a JSON object")
-          if manifest.get("repository") != "ml8s/liki-agents":
-              raise SystemExit("digests_json repository must be ml8s/liki-agents")
+          if manifest.get("repository") != "ml8s/liki-agent-runtime":
+              raise SystemExit("digests_json repository must be ml8s/liki-agent-runtime")
           if manifest.get("source_commit") != os.environ["SOURCE_COMMIT"]:
               raise SystemExit("digests_json source_commit does not match workflow input")
           images = manifest.get("images")
@@ -130,7 +130,7 @@ jobs:
             python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           cosign sign --yes --identity-token "$oidc_token" "$image"
           cosign verify \
-            --certificate-identity-regexp "^https://github\\.com/ml8s/liki-agents/\\.github/workflows/promote-release\\.yml@refs/tags/v${VERSION}$" \
+            --certificate-identity-regexp "^https://github\\.com/ml8s/liki-agent-runtime/\\.github/workflows/promote-release\\.yml@refs/tags/v${VERSION}$" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             "$image"
 
@@ -143,11 +143,11 @@ jobs:
           set -euo pipefail
           mkdir -p release-evidence
           printf 'source_commit=%s\nimage_digest=%s\n' "$SOURCE_COMMIT" "$DIGEST" \
-            > "release-evidence/liki-agents-v$VERSION.env"
+            > "release-evidence/liki-agent-runtime-v$VERSION.env"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: liki-agents-release-evidence-v${{ inputs.version }}
+          name: liki-agent-runtime-release-evidence-v${{ inputs.version }}
           path: release-evidence/**
           retention-days: 30
           if-no-files-found: error

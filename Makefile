@@ -3,7 +3,7 @@
 #   make check  纯静态检查（lint+格式+vet+validate；不跑测试、不写盘）
 #   make test   本仓全部测试（单元/集成；不含 e2e）
 #   make smoke  本仓镜像启动 + operational/public endpoint 冒烟
-#   make build  本仓产物（liki-agents 二进制）
+#   make build  本仓产物（liki-agent-runtime 二进制）
 #   make candidate RELEASE_VERSION=... 本地构建候选镜像并生成 digests（Actions 不构建镜像）
 #   make e2e    系统 E2E 聚合（liki-deploy 编排）
 
@@ -20,7 +20,7 @@ VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GOPROXY ?= https://goproxy.cn,direct
-LDFLAGS ?= -s -w -X github.com/ml8s/liki-agents/internal/platform/buildinfo.Version=$(VERSION) -X github.com/ml8s/liki-agents/internal/platform/buildinfo.Commit=$(COMMIT) -X github.com/ml8s/liki-agents/internal/platform/buildinfo.BuildTime=$(BUILD_TIME)
+LDFLAGS ?= -s -w -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.Version=$(VERSION) -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.Commit=$(COMMIT) -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.BuildTime=$(BUILD_TIME)
 
 TEST_PACKAGES ?= ./...
 COVER_PROFILE ?= $(CURDIR)/coverage.out
@@ -35,8 +35,8 @@ help:
 	@echo "make test-coverage - run tests and enforce the coverage floor"
 	@echo "make test-db  - run SQLite persistence tests"
 	@echo "make check-candidate - run candidate manifest regression tests"
-	@echo "make smoke    - smoke the local liki-agents image"
-	@echo "make build    - build ./bin/liki-agents"
+	@echo "make smoke    - smoke the local liki-agent-runtime image"
+	@echo "make build    - build ./bin/liki-agent-runtime"
 	@echo "make image    - build a local candidate image (Actions never builds images)"
 	@echo "make dev      - run the development Agent and MCP containers in the foreground"
 	@echo "make dev-down - remove the development Agent workload"
@@ -82,8 +82,8 @@ test-db:
 	$(GO) test -race -count=1 ./internal/audit/sqlite/...
 
 
-build: ## Build the local liki-agents binary.
-	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/liki-agents ./cmd/liki-agents
+build: ## Build the local liki-agent-runtime binary.
+	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/liki-agent-runtime ./cmd/liki-agent-runtime
 
 check-candidate: ## Validate candidate release manifest generation
 	python3 scripts/test_candidate_manifest.py
@@ -96,7 +96,7 @@ IMAGE_TAG ?= local
 image: ## Build a local candidate image (Actions never builds images)
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_TIME=$(BUILD_TIME) \
 		--build-arg GOPROXY=$(GOPROXY) \
-		-t $(IMAGE_REGISTRY)/liki-agents:$(IMAGE_TAG) .
+		-t $(IMAGE_REGISTRY)/liki-agent-runtime:$(IMAGE_TAG) .
 
 smoke: image ## Smoke the local runtime image with the development deployment
 	IMAGE_TAG=$(IMAGE_TAG) scripts/smoke-image.sh
@@ -116,7 +116,7 @@ check-actions: ## Reject mutable reusable workflow/action references
 	python3 scripts/check_actions_pinned.py
 
 validate:
-	@$(GO) run ./cmd/liki-agents validate -deployment $(if $(LIKI_AGENTS_DEPLOYMENT_FILE),$(LIKI_AGENTS_DEPLOYMENT_FILE),./dev/agent-deployment/deployment.json)
+	@$(GO) run ./cmd/liki-agent-runtime validate -deployment $(if $(LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE),$(LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE),./dev/agent-deployment/deployment.json)
 
 dev-down:
 	docker compose --project-directory . $(COMPOSE_ENV_FILE) -f dev/docker-compose.yml down --remove-orphans

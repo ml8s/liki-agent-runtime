@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agents/internal/audit"
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
 
 func TestAuditEventRepositoryAppendsImmutableEvents(t *testing.T) {

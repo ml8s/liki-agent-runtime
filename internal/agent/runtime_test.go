@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/ml8s/liki-agents/internal/agent"
-	"github.com/ml8s/liki-agents/internal/audit"
-	"github.com/ml8s/liki-agents/internal/domain"
+	agent "github.com/ml8s/liki-agent-runtime/internal/agent"
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/session"
 )
 

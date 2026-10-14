@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
 
 func TestMetricsExposeStandardRuntimeDimensions(t *testing.T) {

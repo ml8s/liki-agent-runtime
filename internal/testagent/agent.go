@@ -1,5 +1,5 @@
 // Package testagent provides a generic AgentDeployment for adapter tests.
-// Domain behavior intentionally remains outside liki-agents.
+// Domain behavior intentionally remains outside liki-agent-runtime.
 package testagent
 
 import (
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ml8s/liki-agents/internal/agent"
+	"github.com/ml8s/liki-agent-runtime/internal/agent"
 )
 
 // Deployment loads a generic structured AgentDeployment for adapter tests.
@@ -18,7 +18,7 @@ func Deployment(t *testing.T) *agent.Deployment {
 	root := t.TempDir()
 	files := map[string]string{
 		"agent-deployment.json": `{
-			"metadata": {"name": "adapter-agent", "version": "1.0.0"},
+			"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "adapter-agent", "version": "1.0.0"},
 			"spec": {
 				"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
 				"agents": [{

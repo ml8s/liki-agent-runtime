@@ -54,7 +54,7 @@ ensure_candidate_registry() {
 }
 
 ensure_candidate_registry
-IMAGE_REPOSITORY="$CANDIDATE_REGISTRY/ml8s/liki-agents"
+IMAGE_REPOSITORY="$CANDIDATE_REGISTRY/ml8s/liki-agent-runtime"
 BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
 BUILD_DIR="$ROOT/build/candidate"
@@ -79,7 +79,7 @@ docker buildx build \
 AGENTS_DIGEST="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); print(data.get("containerimage.digest") or data["containerimage"]["digest"])' "$METADATA_FILE")"
 python3 scripts/build_candidate_manifest.py \
   --registry "$CANDIDATE_REGISTRY" \
-  --repository ml8s/liki-agents \
+  --repository ml8s/liki-agent-runtime \
   --source-commit "$SOURCE_COMMIT" \
   --candidate-tag "$CANDIDATE_TAG" \
   --agents-digest "$AGENTS_DIGEST" \

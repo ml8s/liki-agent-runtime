@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/ml8s/liki-agents/internal/platform"
+	"github.com/ml8s/liki-agent-runtime/internal/platform"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

@@ -3,7 +3,7 @@ package pipeline_test
 import (
 	"testing"
 
-	agentruntime "github.com/ml8s/liki-agents/internal/agent"
+	agentruntime "github.com/ml8s/liki-agent-runtime/internal/agent"
 )
 
 // DevelopmentAgentDeploymentRegistersComplementaryMCPTools keeps the local

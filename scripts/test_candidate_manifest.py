@@ -37,7 +37,7 @@ class CandidateManifestTest(unittest.TestCase):
     def test_generates_exact_contract(self) -> None:
         manifest = module.generate_manifest(
             registry="127.0.0.1:5000",
-            repository="ml8s/liki-agents",
+            repository="ml8s/liki-agent-runtime",
             source_commit="a" * 40,
             candidate_tag="candidate-aaaaaaa-20260101010101",
             agents_digest="sha256:" + "b" * 64,
@@ -45,7 +45,7 @@ class CandidateManifestTest(unittest.TestCase):
         self.assertEqual(
             {
                 "registry": "127.0.0.1:5000",
-                "repository": "ml8s/liki-agents",
+                "repository": "ml8s/liki-agent-runtime",
                 "source_commit": "a" * 40,
                 "candidate_tag": "candidate-aaaaaaa-20260101010101",
                 "images": {"agents": "sha256:" + "b" * 64},

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
 
 func TestIsValidSHA256Digest(t *testing.T) {

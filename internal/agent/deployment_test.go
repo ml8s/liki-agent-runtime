@@ -50,7 +50,7 @@ func writeDeployment(t *testing.T, root string, manifest string) *Deployment {
 
 func validManifest() string {
 	return `{
-		"metadata": {"name": "generic-agents", "version": "1.0.0"},
+		"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "generic-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
 			"agents": [{
@@ -120,7 +120,7 @@ func TestLoadAgentDeploymentRejectsInvalidManifests(t *testing.T) {
 		wantErr  string
 	}{
 		{name: "unknown field", manifest: `{"metadata":{"name":"x","version":"1"},"spec":{"agents":[{"name":"main","version":"1","description":"x","mode":"chat","instruction":{"path":"instruction.md"},"skills":{"root":"/skills"},"tools":{"allow":{"skilltoolset":["list_skills","load_skill","load_skill_resource"]}}}]},"extra":true}`, wantErr: "extra"},
-		{name: "duplicate key", manifest: strings.Replace(validManifest(), `"metadata": {"name": "generic-agents", "version": "1.0.0"}`, `"metadata": {"name": "generic-agents", "version": "1.0.0"}, "metadata": {"name": "generic-agents", "version": "1.0.0"}`, 1), wantErr: `duplicate key "metadata" at $`},
+		{name: "duplicate key", manifest: strings.Replace(validManifest(), `"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "generic-agents", "version": "1.0.0"}`, `"schema_version": "liki.agent-deployment.v1", "schema_version": "liki.agent-deployment.v1", "metadata": {"name": "generic-agents", "version": "1.0.0"}`, 1), wantErr: `duplicate key "schema_version" at $`},
 		{name: "trailing value", manifest: validManifest() + ` {}`, wantErr: "trailing"},
 		{name: "unknown sub-agent", manifest: strings.Replace(validManifest(), `"sub_agents": []`, `"sub_agents": [{"name":"missing"}]`, 1), wantErr: "unknown sub-agent"},
 
@@ -277,7 +277,7 @@ func TestAgentOutputPointerMustSelectAStringAtLoadTime(t *testing.T) {
 
 func TestAgentOutputIsOptional(t *testing.T) {
 	plainManifest := `{
-		"metadata": {"name": "generic-agents", "version": "1.0.0"},
+		"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "generic-agents", "version": "1.0.0"},
 		"spec": {
 			"agents": [{
 				"name": "main",
@@ -333,7 +333,7 @@ func TestAgentOutputRequiresPairedSchemaAndPointer(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			manifest := `{
-				"metadata": {"name": "generic-agents", "version": "1.0.0"},
+				"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "generic-agents", "version": "1.0.0"},
 				"spec": {
 					"agents": [{
 						"name": "main",
@@ -362,7 +362,7 @@ func TestAgentOutputRequiresPairedSchemaAndPointer(t *testing.T) {
 func TestLoadAgentDeploymentValidatesGraph(t *testing.T) {
 	worker := `{"name":"worker","version":"1.0.0","description":"worker agent","mode":"task","sub_agents":[],"instruction":{"path":"instruction.md"},"output":{"schema":{"path":"output.schema.json"},"textPointer":"/answer"},"skills":{"root":"/skills"},"tools":{"allow":{"test":["test_tool"],"skilltoolset":["list_skills","load_skill","load_skill_resource"]}}}`
 	base := `{
-		"metadata": {"name": "generic-agents", "version": "1.0.0"},
+		"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "generic-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
 			"agents": [
@@ -436,7 +436,7 @@ func TestConvertJSONSchemaToGenaiRejections(t *testing.T) {
 // the runtime-wide environment only supplies fallbacks.
 func TestAgentDefinitionAcceptsPerAgentModelSettings(t *testing.T) {
 	manifest := `{
-		"metadata": {"name": "generic-agents", "version": "1.0.0"},
+		"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "generic-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
 			"agents": [
@@ -459,7 +459,7 @@ func TestAgentDefinitionAcceptsPerAgentModelSettings(t *testing.T) {
 
 func TestAgentDefinitionRejectsOutOfRangeModelSettings(t *testing.T) {
 	base := `{
-		"metadata": {"name": "generic-agents", "version": "1.0.0"},
+		"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "generic-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
 			"agents": [

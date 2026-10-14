@@ -1,4 +1,4 @@
-// Command liki-agents runs the generic multi-agent runtime and its operational
+// Command liki-agent-runtime runs the generic multi-agent runtime and its operational
 // subcommands.
 package main
 
@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/liki-agents/internal/platform/config"
+	"github.com/ml8s/liki-agent-runtime/internal/platform/config"
 )
 
 // healthcheck is the container-native readiness probe used by Docker Compose.
 // It intentionally checks the process-local /readyz endpoint without importing
 // a shell into the distroless runtime image.
 func healthcheck() error {
-	address := strings.TrimSpace(os.Getenv("LIKI_AGENTS_ADDR"))
+	address := strings.TrimSpace(os.Getenv("LIKI_AGENT_RUNTIME_ADDR"))
 	if address == "" {
 		address = config.DefaultAddr
 	}

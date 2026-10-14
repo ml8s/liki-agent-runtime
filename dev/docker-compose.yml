@@ -32,29 +32,29 @@ services:
           memory: 256M
           cpus: "0.5"
 
-  liki-agents:
-    image: liki-agents:local
+  liki-agent-runtime:
+    image: liki-agent-runtime:local
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${LIKI_AGENTS_VERSION:-local}
-        COMMIT: ${LIKI_AGENTS_COMMIT:-unknown}
-        BUILD_TIME: ${LIKI_AGENTS_BUILD_TIME:-unknown}
+        VERSION: ${LIKI_AGENT_RUNTIME_VERSION:-local}
+        COMMIT: ${LIKI_AGENT_RUNTIME_COMMIT:-unknown}
+        BUILD_TIME: ${LIKI_AGENT_RUNTIME_BUILD_TIME:-unknown}
     environment:
       LIKI_ENV: development
-      LIKI_AGENTS_TOPOLOGY: ${LIKI_AGENTS_TOPOLOGY:-single}
-      LIKI_AGENTS_INTERNAL_TOKEN: ${LIKI_AGENTS_INTERNAL_TOKEN:-dev-agent-token}
-      LIKI_AGENTS_PUBLIC_URL: ${LIKI_AGENTS_PUBLIC_URL:-http://127.0.0.1:8083}
-      LIKI_AGENTS_DB_PATH: /data/liki-agents-audit.db
+      LIKI_AGENT_RUNTIME_TOPOLOGY: ${LIKI_AGENT_RUNTIME_TOPOLOGY:-single}
+      LIKI_AGENT_RUNTIME_INTERNAL_TOKEN: ${LIKI_AGENT_RUNTIME_INTERNAL_TOKEN:-dev-agent-token}
+      LIKI_AGENT_RUNTIME_PUBLIC_URL: ${LIKI_AGENT_RUNTIME_PUBLIC_URL:-http://127.0.0.1:8083}
+      LIKI_AGENT_RUNTIME_DB_PATH: /data/liki-agent-runtime-audit.db
       LIKI_MCP_ENGINE_URL: http://engine-mcp:8085/mcp
       LIKI_MCP_COUNSEL_URL: http://counsel-mcp:8086/mcp/bazi
       LIKI_MCP_ENGINE_TOKEN: ${LIKI_MCP_ENGINE_TOKEN:-}
       LIKI_MCP_COUNSEL_TOKEN: ${LIKI_MCP_COUNSEL_TOKEN:-}
       LIKI_MCP_TIMEOUT_SECONDS: ${LIKI_MCP_TIMEOUT_SECONDS:-30}
       LIKI_MAX_CONCURRENT_RUNS: ${LIKI_MAX_CONCURRENT_RUNS:-32}
-      LIKI_AGENTS_DEPLOYMENT_FILE: /agent-deployment/deployment.json
-      LIKI_AGENTS_SKILLS_ROOT: /agent-deployment/skills
+      LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE: /agent-deployment/deployment.json
+      LIKI_AGENT_RUNTIME_SKILLS_ROOT: /agent-deployment/skills
       LIKI_LLM_BASE_URL: ${LIKI_LLM_BASE_URL:?LIKI_LLM_BASE_URL is required}
       LIKI_LLM_API_KEY: ${LIKI_LLM_API_KEY}
       LIKI_LLM_MODEL: ${LIKI_LLM_MODEL:?LIKI_LLM_MODEL is required}
@@ -73,7 +73,7 @@ services:
     init: true
     stop_grace_period: 35s
     healthcheck:
-      test: ["CMD", "/liki-agents", "healthcheck"]
+      test: ["CMD", "/liki-agent-runtime", "healthcheck"]
       interval: 30s
       timeout: 3s
       start_period: 10s

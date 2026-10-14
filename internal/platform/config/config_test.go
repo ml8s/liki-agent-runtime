@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ml8s/liki-agents/internal/platform/config"
+	"github.com/ml8s/liki-agent-runtime/internal/platform/config"
 )
 
 func baseEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("LIKI_ENV", "development")
-	t.Setenv("LIKI_AGENTS_PUBLIC_URL", "https://agent.internal")
-	t.Setenv("LIKI_AGENTS_DEPLOYMENT_FILE", "/tmp/agent-deployment.json")
+	t.Setenv("LIKI_AGENT_RUNTIME_PUBLIC_URL", "https://agent.internal")
+	t.Setenv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", "/tmp/agent-deployment.json")
 	t.Setenv("LIKI_LLM_PROVIDER", "zhipu")
 	t.Setenv("LIKI_LLM_STRUCTURED_OUTPUT", "json_object")
 	t.Setenv("LIKI_LLM_BASE_URL", "https://open.bigmodel.cn/api/v1")
@@ -42,7 +42,7 @@ func TestLoadValidConfiguration(t *testing.T) {
 	if cfg.MaxConcurrentRuns != 7 {
 		t.Fatalf("max concurrent runs = %d, want 7", cfg.MaxConcurrentRuns)
 	}
-	t.Setenv("LIKI_AGENTS_SKILLS_ROOT", "/tmp/dev/skills")
+	t.Setenv("LIKI_AGENT_RUNTIME_SKILLS_ROOT", "/tmp/dev/skills")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(skills root) error = %v", err)
@@ -65,15 +65,15 @@ func TestLoadRejectsInvalidSettings(t *testing.T) {
 		value   string
 		wantErr string
 	}{
-		{name: "missing deployment", key: "LIKI_AGENTS_DEPLOYMENT_FILE", value: "", wantErr: "LIKI_AGENTS_DEPLOYMENT_FILE is required"},
+		{name: "missing deployment", key: "LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", value: "", wantErr: "LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE is required"},
 		{name: "unsupported environment", key: "LIKI_ENV", value: "staging", wantErr: "LIKI_ENV is unsupported"},
 		{name: "missing llm base url", key: "LIKI_LLM_BASE_URL", value: "", wantErr: "LIKI_LLM_BASE_URL is required"},
 		{name: "missing llm model", key: "LIKI_LLM_MODEL", value: "", wantErr: "LIKI_LLM_MODEL is required"},
-		{name: "multi topology is fail-closed", key: "LIKI_AGENTS_TOPOLOGY", value: "multi", wantErr: "LIKI_AGENTS_TOPOLOGY=multi is not supported yet"},
-		{name: "invalid topology", key: "LIKI_AGENTS_TOPOLOGY", value: "cluster", wantErr: "LIKI_AGENTS_TOPOLOGY is unsupported"},
+		{name: "multi topology is fail-closed", key: "LIKI_AGENT_RUNTIME_TOPOLOGY", value: "multi", wantErr: "LIKI_AGENT_RUNTIME_TOPOLOGY=multi is not supported yet"},
+		{name: "invalid topology", key: "LIKI_AGENT_RUNTIME_TOPOLOGY", value: "cluster", wantErr: "LIKI_AGENT_RUNTIME_TOPOLOGY is unsupported"},
 		{name: "missing provider", key: "LIKI_LLM_PROVIDER", value: "", wantErr: "LIKI_LLM_PROVIDER is required"},
 		{name: "unsupported structured output", key: "LIKI_LLM_STRUCTURED_OUTPUT", value: "yaml", wantErr: "LIKI_LLM_STRUCTURED_OUTPUT is unsupported"},
-		{name: "invalid public url", key: "LIKI_AGENTS_PUBLIC_URL", value: "agent.internal", wantErr: "LIKI_AGENTS_PUBLIC_URL must be an absolute HTTP(S) URL"},
+		{name: "invalid public url", key: "LIKI_AGENT_RUNTIME_PUBLIC_URL", value: "agent.internal", wantErr: "LIKI_AGENT_RUNTIME_PUBLIC_URL must be an absolute HTTP(S) URL"},
 		{name: "invalid llm url", key: "LIKI_LLM_BASE_URL", value: "api.example", wantErr: "LIKI_LLM_BASE_URL must be an absolute HTTP(S) URL"},
 		{name: "invalid duration", key: "LIKI_RUN_TIMEOUT_SECONDS", value: "abc", wantErr: "LIKI_RUN_TIMEOUT_SECONDS is not a valid integer"},
 		{name: "zero MCP timeout", key: "LIKI_MCP_TIMEOUT_SECONDS", value: "0", wantErr: "LIKI_MCP_TIMEOUT_SECONDS must be greater than zero"},
@@ -101,7 +101,7 @@ func TestLoadRejectsInvalidSettings(t *testing.T) {
 func TestProductionConfigurationHardening(t *testing.T) {
 	baseEnv(t)
 	t.Setenv("LIKI_ENV", "production")
-	t.Setenv("LIKI_AGENTS_INTERNAL_TOKEN", "production-service-token")
+	t.Setenv("LIKI_AGENT_RUNTIME_INTERNAL_TOKEN", "production-service-token")
 	t.Setenv("LIKI_LLM_API_KEY", "production-model-key")
 
 	_, err := config.Load()
@@ -116,10 +116,10 @@ func TestProductionConfigurationHardening(t *testing.T) {
 		wantErr string
 	}{
 		{name: "llm endpoint must be HTTPS", key: "LIKI_LLM_BASE_URL", value: "http://127.0.0.1:8080/v1", wantErr: "LIKI_LLM_BASE_URL must use HTTPS outside development"},
-		{name: "public URL credentials rejected", key: "LIKI_AGENTS_PUBLIC_URL", value: "https://user:secret@agent.internal", wantErr: "LIKI_AGENTS_PUBLIC_URL must not contain embedded credentials"},
+		{name: "public URL credentials rejected", key: "LIKI_AGENT_RUNTIME_PUBLIC_URL", value: "https://user:secret@agent.internal", wantErr: "LIKI_AGENT_RUNTIME_PUBLIC_URL must not contain embedded credentials"},
 		{name: "LLM URL credentials rejected", key: "LIKI_LLM_BASE_URL", value: "https://key:secret@model.internal/v1", wantErr: "LIKI_LLM_BASE_URL must not contain embedded credentials"},
 		{name: "concurrent runs bounded", key: "LIKI_MAX_CONCURRENT_RUNS", value: "1025", wantErr: "LIKI_MAX_CONCURRENT_RUNS must not exceed 1024"},
-		{name: "skills root outside development", key: "LIKI_AGENTS_SKILLS_ROOT", value: "/fixture/skills", wantErr: "LIKI_AGENTS_SKILLS_ROOT is allowed only in development"},
+		{name: "skills root outside development", key: "LIKI_AGENT_RUNTIME_SKILLS_ROOT", value: "/fixture/skills", wantErr: "LIKI_AGENT_RUNTIME_SKILLS_ROOT is allowed only in development"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -134,7 +134,7 @@ func TestProductionConfigurationHardening(t *testing.T) {
 
 func TestLoadDerivesPublicURLFromDefaultAddress(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("LIKI_AGENTS_PUBLIC_URL", "")
+	t.Setenv("LIKI_AGENT_RUNTIME_PUBLIC_URL", "")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)

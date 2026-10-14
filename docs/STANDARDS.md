@@ -80,7 +80,7 @@ The service is deliberately **single-process/single-replica**:
 - audit evidence is in a local SQLite file;
 - MCP toolsets and the ADK graph are process-local.
 
-`LIKI_AGENTS_TOPOLOGY` makes that mode explicit. Its default and only
+`LIKI_AGENT_RUNTIME_TOPOLOGY` makes that mode explicit. Its default and only
 supported value is `single`; `multi` is recognized but fails closed so an
 orchestrator cannot accidentally scale an unsafe process.
 

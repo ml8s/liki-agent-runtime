@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ml8s/liki-agents/internal/audit"
-	"github.com/ml8s/liki-agents/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -123,7 +123,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		config.Logger = slog.Default()
 	}
 	if config.AppName == "" {
-		config.AppName = "liki-agents"
+		config.AppName = "liki-agent-runtime"
 	}
 	if config.Model == "" {
 		return nil, domain.NewError(domain.CodeLLMModelMissing, "LLM model is required", domain.ErrInvalidInput)
@@ -180,7 +180,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if config.TracerProvider == nil {
 		config.TracerProvider = otel.GetTracerProvider()
 	}
-	tracer := config.TracerProvider.Tracer("github.com/ml8s/liki-agents/agent")
+	tracer := config.TracerProvider.Tracer("github.com/ml8s/liki-agent-runtime/agent")
 	// Protocol callers own durable conversation/product history. Each ADK
 	// session is deliberately run-scoped working state and must not become a
 	// second durable conversation store.

@@ -1,24 +1,24 @@
 # Liki Agents
 
-`liki-agents` is a generic multi-agent runtime for externally defined
+`liki-agent-runtime` is a generic multi-agent runtime for externally defined
 `AgentDeployment` artifacts. It executes an ADK Agent tree, orchestrates model
 calls and MCP tools, and exposes standard machine and browser protocols.
 
 ```text
 machine client ──A2A JSON-RPC──┐
                                ↓
-liki-web ──AG-UI SSE→ liki-agents ──MCP→ external tools
+liki-web ──AG-UI SSE→ liki-agent-runtime ──MCP→ external tools
 ```
 
 The runtime is domain-neutral: deployments supply instructions, output schemas,
-delegation topology, and tool allowlists; `liki-agents` provides
+delegation topology, and tool allowlists; `liki-agent-runtime` provides
 execution, protocol adaptation, security, evidence, and observability.
 
 ## Install
 
 Requires Go 1.26+, Node.js 24.14.1 (see `.nvmrc`), Docker Compose, and
 golangci-lint 2.x. Clone the repository and run `make build`; the binary is
-written to `bin/liki-agents`.
+written to `bin/liki-agent-runtime`.
 
 ## Quick start
 
@@ -75,7 +75,7 @@ application API or ADK Launcher control plane.
 Production protocol calls require the internal service token:
 
 ```text
-Authorization: Bearer <LIKI_AGENTS_INTERNAL_TOKEN>
+Authorization: Bearer <LIKI_AGENT_RUNTIME_INTERNAL_TOKEN>
 ```
 
 AG-UI additionally requires `liki-web` to authenticate the browser user and
@@ -88,7 +88,7 @@ sessions, stores conversations, or trusts unverified identities. Internet-facing
 rate limiting is the gateway's job; the internal per-source limiter only resists
 token brute force, while `LIKI_MAX_CONCURRENT_RUNS` bounds run concurrency.
 
-Local development may leave `LIKI_AGENTS_INTERNAL_TOKEN` empty, disabling bearer
+Local development may leave `LIKI_AGENT_RUNTIME_INTERNAL_TOKEN` empty, disabling bearer
 authentication, while AG-UI still requires `X-Liki-User-ID`. Invalid attempts
 are throttled per socket source and return HTTP 429 (`rate_limited`).
 
@@ -102,7 +102,7 @@ endpoint is HTTPS-only without embedded credentials.
 
 | Prefix / variable | Purpose |
 |---|---|
-| `LIKI_AGENTS_*` | service address, token, audit DB path, topology, deployment file |
+| `LIKI_AGENT_RUNTIME_*` | service address, token, audit DB path, topology, deployment file |
 | `LIKI_MCP_*` | endpoint/token bindings for logical MCP servers (`LIKI_MCP_<NAME>_URL` / `LIKI_MCP_<NAME>_TOKEN`) |
 | `LIKI_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
 | `LIKI_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
@@ -178,7 +178,7 @@ candidate digest for promotion.
 
 ## Project boundary
 
-`liki-agents` is not an Agent management control plane. It does not provide
+`liki-agent-runtime` is not an Agent management control plane. It does not provide
 Agent CRUD APIs, deployment registries, tenant management, quota enforcement,
 approval workflows, or a management console.
 

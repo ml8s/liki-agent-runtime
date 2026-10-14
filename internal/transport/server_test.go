@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agents/internal/domain"
-	"github.com/ml8s/liki-agents/internal/observability"
-	"github.com/ml8s/liki-agents/internal/platform"
-	"github.com/ml8s/liki-agents/internal/platform/identity"
-	"github.com/ml8s/liki-agents/internal/transport"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/observability"
+	"github.com/ml8s/liki-agent-runtime/internal/platform"
+	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
+	"github.com/ml8s/liki-agent-runtime/internal/transport"
 )
 
 type healthy struct{}

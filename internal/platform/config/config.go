@@ -61,13 +61,13 @@ const (
 func Load() (Config, error) {
 	cfg := Config{
 		Env:                 getEnv("LIKI_ENV", "development"),
-		Topology:            Topology(strings.ToLower(strings.TrimSpace(getEnv("LIKI_AGENTS_TOPOLOGY", string(TopologySingle))))),
-		Addr:                getEnv("LIKI_AGENTS_ADDR", DefaultAddr),
-		PublicURL:           getEnv("LIKI_AGENTS_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
-		InternalToken:       getEnv("LIKI_AGENTS_INTERNAL_TOKEN", ""),
-		DBPath:              getEnv("LIKI_AGENTS_DB_PATH", "./data/liki-agents-audit.db"),
-		DeploymentFile:      getEnv("LIKI_AGENTS_DEPLOYMENT_FILE", ""),
-		SkillsRoot:          strings.TrimSpace(getEnv("LIKI_AGENTS_SKILLS_ROOT", "")),
+		Topology:            Topology(strings.ToLower(strings.TrimSpace(getEnv("LIKI_AGENT_RUNTIME_TOPOLOGY", string(TopologySingle))))),
+		Addr:                getEnv("LIKI_AGENT_RUNTIME_ADDR", DefaultAddr),
+		PublicURL:           getEnv("LIKI_AGENT_RUNTIME_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
+		InternalToken:       getEnv("LIKI_AGENT_RUNTIME_INTERNAL_TOKEN", ""),
+		DBPath:              getEnv("LIKI_AGENT_RUNTIME_DB_PATH", "./data/liki-agent-runtime-audit.db"),
+		DeploymentFile:      getEnv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", ""),
+		SkillsRoot:          strings.TrimSpace(getEnv("LIKI_AGENT_RUNTIME_SKILLS_ROOT", "")),
 		LLMBaseURL:          getEnv("LIKI_LLM_BASE_URL", ""),
 		LLMAPIKey:           getEnv("LIKI_LLM_API_KEY", ""),
 		LLMModel:            getEnv("LIKI_LLM_MODEL", ""),
@@ -113,7 +113,7 @@ func validate(cfg Config) (Config, error) {
 	isDevelopment := cfg.Env == "development"
 
 	if !isDevelopment && cfg.InternalToken == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENTS_INTERNAL_TOKEN is required outside development")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_INTERNAL_TOKEN is required outside development")
 	}
 	if !isDevelopment && cfg.LLMAPIKey == "" {
 		return Config{}, fmt.Errorf("LIKI_LLM_API_KEY is required outside development")
@@ -130,21 +130,21 @@ func validate(cfg Config) (Config, error) {
 		return Config{}, fmt.Errorf("LIKI_LLM_PROVIDER is required")
 	}
 	if cfg.DeploymentFile == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENTS_DEPLOYMENT_FILE is required")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE is required")
 	}
 	if cfg.SkillsRoot != "" && !isDevelopment {
-		return Config{}, fmt.Errorf("LIKI_AGENTS_SKILLS_ROOT is allowed only in development")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_SKILLS_ROOT is allowed only in development")
 	}
 	switch cfg.Topology {
 	case TopologySingle:
 	case TopologyMulti:
 		return Config{}, fmt.Errorf(
-			"LIKI_AGENTS_TOPOLOGY=multi is not supported yet; it requires shared ADK session storage, a database-backed A2A task store, transactional audit/run ownership, deployment digest pinning, and explicit task routing",
+			"LIKI_AGENT_RUNTIME_TOPOLOGY=multi is not supported yet; it requires shared ADK session storage, a database-backed A2A task store, transactional audit/run ownership, deployment digest pinning, and explicit task routing",
 		)
 	case "":
 		cfg.Topology = TopologySingle
 	default:
-		return Config{}, fmt.Errorf("LIKI_AGENTS_TOPOLOGY is unsupported: %q", cfg.Topology)
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_TOPOLOGY is unsupported: %q", cfg.Topology)
 	}
 	switch cfg.LLMStructuredOutput {
 	case "", "none", "json_schema", "json_object":
@@ -171,17 +171,17 @@ func validate(cfg Config) (Config, error) {
 		return Config{}, fmt.Errorf("LIKI_LLM_TEMPERATURE must be between 0 and 2")
 	}
 	if _, err := url.Parse(cfg.PublicURL); err != nil {
-		return Config{}, fmt.Errorf("LIKI_AGENTS_PUBLIC_URL is invalid: %w", err)
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PUBLIC_URL is invalid: %w", err)
 	}
 	if cfg.ShutdownTimeout <= 0 {
 		return Config{}, fmt.Errorf("LIKI_SHUTDOWN_TIMEOUT_SECONDS must be greater than zero")
 	}
 	publicURL, err := url.Parse(cfg.PublicURL)
 	if err != nil || publicURL.Scheme != "http" && publicURL.Scheme != "https" || publicURL.Host == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENTS_PUBLIC_URL must be an absolute HTTP(S) URL")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PUBLIC_URL must be an absolute HTTP(S) URL")
 	}
 	if publicURL.User != nil {
-		return Config{}, fmt.Errorf("LIKI_AGENTS_PUBLIC_URL must not contain embedded credentials")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PUBLIC_URL must not contain embedded credentials")
 	}
 	llmURL, err := url.Parse(cfg.LLMBaseURL)
 	if err != nil || llmURL.Scheme != "http" && llmURL.Scheme != "https" || llmURL.Host == "" {
