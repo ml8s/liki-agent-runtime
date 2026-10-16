@@ -86,11 +86,11 @@ ENV LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE=/deployment/deployment.json
 
 **任何运行时改动都必须**：`make check` 通过（含 `validate` 校验 dev fixture 工件）。
 
-## 五、本仓发布链（本地候选 + Actions promotion）
+## 五、本仓发布链（tag 驱动）
 
-- 本地执行 `make candidate RELEASE_VERSION=<calver>` 构建、冒烟并生成
-  `build/candidate/candidate-digests.json`
-- GitHub Actions 不构建镜像；`promote-release` 校验 tag、commit 与 digest manifest，复用 candidate digest、签名并验证签名
+- 推送 `vYYYY.MM.DD.N` tag 触发 `release.yml`：全量 gate → buildx 构建并推送
+  `ghcr.io/ml8s/liki-agent-runtime:<calver>` → 冒烟 → cosign 签名并验证 →
+  发布 GitHub Release；包自动设为 public，liki/liki-deploy 用 job token 拉取
 
 ## 六、相关文档
 

@@ -159,22 +159,14 @@ Run `make check`, `make validate`, `make test`, `make gate`, and `make build`.
 `make gate` is the pre-push gate. It runs documentation linting, Go static
 checks, `golangci-lint`, isolated race tests, and deployment validation. It does
 not call a real model provider or external MCP. CI additionally runs
-`govulncheck` and `npm audit`; release images are built locally with
-`make candidate RELEASE_VERSION=<calver>` and promoted by digest.
+`govulncheck` and `npm audit`. Releases are tag-driven: pushing a
+`vYYYY.MM.DD.N` tag runs the full gate, then builds, signs, and publishes the
+release image and GitHub Release.
 
 ### Contributing
 
 Follow [`CONTRIBUTING.md`](CONTRIBUTING.md) and run `make check`/`make gate`
 before submitting a change.
-
-Release candidates are built locally with:
-
-```bash
-make candidate RELEASE_VERSION=<YYYY.MM.DD.N>
-```
-
-The command requires a clean worktree and GHCR login, then records the immutable
-candidate digest for promotion.
 
 ## Project boundary
 

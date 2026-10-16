@@ -4,7 +4,6 @@
 #   make test   本仓全部测试（单元/集成；不含 e2e）
 #   make smoke  本仓镜像启动 + operational/public endpoint 冒烟
 #   make build  本仓产物（liki-agent-runtime 二进制）
-#   make candidate RELEASE_VERSION=... 本地构建候选镜像并生成 digests（Actions 不构建镜像）
 #   make e2e    系统 E2E 聚合（liki-deploy 编排）
 
 RELEASE_VERSION ?=
@@ -27,17 +26,16 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions check-candidate test-db test-coverage-report build run dev dev-down validate gate image candidate smoke
+.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-db test-coverage-report build run dev dev-down validate gate image smoke
 help:
 	@echo "make check    - static checks: docs, formatting, lint, vet, and artifact"
 	@echo "make lint-readme - lint and test developer documentation"
 	@echo "make test     - run isolated tests (no deployed Engine dependency)"
 	@echo "make test-coverage - run tests and enforce the coverage floor"
 	@echo "make test-db  - run SQLite persistence tests"
-	@echo "make check-candidate - run candidate manifest regression tests"
 	@echo "make smoke    - smoke the local liki-agent-runtime image"
 	@echo "make build    - build ./bin/liki-agent-runtime"
-	@echo "make image    - build a local candidate image (Actions never builds images)"
+	@echo "make image    - build a local image for development (releases are tag-driven via release.yml)"
 	@echo "make dev      - run the development Agent and MCP containers in the foreground"
 	@echo "make dev-down - remove the development Agent workload"
 	@echo "make validate - validate the AgentDeployment artifact without starting the server"
@@ -76,7 +74,7 @@ test-coverage-report: ## Run tests and emit terminal + HTML coverage reports
 		echo "❌ coverage $$COV% < $(COVER_MIN)%" >&2; exit 1; \
 	fi
 
-check: lint-readme fmt-check lint-engine vet validate check-actions check-candidate
+check: lint-readme fmt-check lint-engine vet validate check-actions
 
 test-db:
 	$(GO) test -race -count=1 ./internal/audit/sqlite/...
@@ -85,27 +83,18 @@ test-db:
 build: ## Build the local liki-agent-runtime binary.
 	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/liki-agent-runtime ./cmd/liki-agent-runtime
 
-check-candidate: ## Validate candidate release manifest generation
-	python3 scripts/test_candidate_manifest.py
-
-# ── 镜像（本地候选，非发布路径）──
-# GitHub Actions 不构建镜像；正式发布只 promote 本地候选 digest。
+# ── 镜像 ──
+# make image/smoke 仅本地开发；发布镜像由 release.yml 在 vYYYY.MM.DD.N tag 上构建推送。
 IMAGE_REGISTRY ?= ghcr.io/ml8s
 IMAGE_TAG ?= local
 
-image: ## Build a local candidate image (Actions never builds images)
+image: ## Build a local image for development
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_TIME=$(BUILD_TIME) \
 		--build-arg GOPROXY=$(GOPROXY) \
 		-t $(IMAGE_REGISTRY)/liki-agent-runtime:$(IMAGE_TAG) .
 
 smoke: image ## Smoke the local runtime image with the development deployment
 	IMAGE_TAG=$(IMAGE_TAG) scripts/smoke-image.sh
-
-candidate: ## Build, smoke, and record a clean-tree candidate image in the local registry (requires RELEASE_VERSION)
-	scripts/build-candidate.sh
-
-candidate-publish: ## Publish a system-tested local candidate to GHCR
-	scripts/publish-candidate.sh
 
 run:
 	./scripts/dev.sh

@@ -1,0 +1,12 @@
+# Follow the official latest: Dependabot opens one grouped weekly PR when a
+# GitHub action ships a new version (SHA pins are bumped in the same PR).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
