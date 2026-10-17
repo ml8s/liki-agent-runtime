@@ -99,4 +99,4 @@ ENV LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE=/deployment/deployment.json
 - `liki/docs/SYSTEM.md`：内容仓视角的全况
 - `liki-deploy/docs/ARCHITECTURE.md`：系统架构与发布时序
 
-- [Domain naming matrix](DOMAIN_NAMING.md): canonical repository/image/service names.
+- `liki/docs/DOMAIN_NAMING.md`：canonical repository/image/service names

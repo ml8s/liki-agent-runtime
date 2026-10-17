@@ -26,13 +26,12 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-db test-coverage-report build run dev dev-down validate gate image smoke
+.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-coverage-report build run dev dev-down validate gate image smoke
 help:
 	@echo "make check    - static checks: docs, formatting, lint, vet, and artifact"
 	@echo "make lint-readme - lint and test developer documentation"
 	@echo "make test     - run isolated tests (no deployed Engine dependency)"
 	@echo "make test-coverage - run tests and enforce the coverage floor"
-	@echo "make test-db  - run SQLite persistence tests"
 	@echo "make smoke    - smoke the local liki-agent-runtime image"
 	@echo "make build    - build ./bin/liki-agent-runtime"
 	@echo "make image    - build a local image for development (releases are tag-driven via release.yml)"
@@ -76,8 +75,6 @@ test-coverage-report: ## Run tests and emit terminal + HTML coverage reports
 
 check: lint-readme fmt-check lint-engine vet validate check-actions
 
-test-db:
-	$(GO) test -race -count=1 ./internal/audit/sqlite/...
 
 
 build: ## Build the local liki-agent-runtime binary.
