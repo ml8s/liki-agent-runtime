@@ -149,6 +149,7 @@ failures, never editing history; records exclude conversation or domain payloads
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | runtime architecture and protocol mapping |
 | [`docs/DOMAIN.md`](docs/DOMAIN.md) | stable runtime domain invariants |
+| [`docs/SYSTEM.md`](docs/SYSTEM.md) | 系统全况与本仓对齐（产什么、谁消费、边界在哪） |
 | [`dev/agent-deployment/deployment.json`](dev/agent-deployment/deployment.json) | runtime validation fixture |
 | [`SECURITY.md`](SECURITY.md) | security policy and required controls |
 
