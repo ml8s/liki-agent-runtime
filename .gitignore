@@ -1,5 +1,5 @@
 /bin/
-/build/candidate/
+/build/release/
 /node_modules/
 /data/
 /coverage.out
