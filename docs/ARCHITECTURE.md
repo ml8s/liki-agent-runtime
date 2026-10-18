@@ -125,6 +125,13 @@ provenance.
 ADK's built-in `transfer_to_agent` call is not an MCP tool. It remains visible
 on AG-UI as a tool event and is audited through Agent delegation lifecycle
 events rather than MCP tool provenance.
+The same exemption covers ADK's framework delegation tools: the task /
+single_turn tool installed on a parent for a sub-agent (the tool is named after
+the sub-agent), and the `finish_task` tool installed on a task Agent. A
+task-mode sub-agent stops its event iterator as soon as `finish_task` succeeds,
+so the sub-agent's AfterAgent callback never runs; the runtime records that
+delegation's completion from the synthesized task-tool function response
+instead.
 
 Raw structured model output is not emitted to protocol observers. Partial
 events are suppressed. Model-text visibility is defined once

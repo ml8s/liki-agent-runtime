@@ -12,6 +12,11 @@ import (
 // and is audited through Agent lifecycle callbacks rather than tool provenance.
 const adkTransferToolName = "transfer_to_agent"
 
+// adkFinishTaskToolName is ADK's built-in task-completion tool, installed on
+// task-mode Agents. It is framework delegation plumbing, not an MCP tool, and
+// is audited through Agent delegation lifecycle callbacks.
+const adkFinishTaskToolName = "finish_task"
+
 // ADKAgentRuntime carries the shared runtime objects that are intentionally
 // outside the deployment artifact. The artifact never contains credentials,
 // model clients, callbacks, or MCP transports.

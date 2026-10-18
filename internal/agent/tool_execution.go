@@ -76,6 +76,33 @@ func newToolExecutionAuditor(
 	}
 }
 
+// isFrameworkDelegationTool reports whether an ADK tool call is framework
+// delegation plumbing rather than an MCP tool call: the built-in
+// transfer_to_agent, the task / single_turn tool ADK installs on a parent for
+// a sub-agent (the tool is named after the sub-agent), and the finish_task
+// tool ADK installs on a task Agent. These carry delegation provenance through
+// Agent lifecycle events and are exempt from MCP tool allowlist auditing.
+func (a *ToolExecutionAuditor) isFrameworkDelegationTool(agentName, toolName string) bool {
+	if toolName == adkTransferToolName {
+		return true
+	}
+	definition, ok := a.agents[agentName]
+	if !ok {
+		return false
+	}
+	if toolName == adkFinishTaskToolName {
+		return definition.Mode == AgentModeTask
+	}
+	for _, reference := range definition.SubAgents {
+		if reference.Name != toolName {
+			continue
+		}
+		target, ok := a.agents[reference.Name]
+		return ok && (target.Mode == AgentModeTask || target.Mode == AgentModeSingleTurn)
+	}
+	return false
+}
+
 // BeforeTool records the started fact. Returning nil tells ADK to continue
 // normal tool execution; returning args would replace the tool with its input.
 func (a *ToolExecutionAuditor) BeforeTool(
@@ -84,6 +111,9 @@ func (a *ToolExecutionAuditor) BeforeTool(
 	args map[string]any,
 ) (map[string]any, error) {
 	if tool != nil && tool.Name() == adkTransferToolName {
+		return nil, nil
+	}
+	if ctx != nil && tool != nil && a.isFrameworkDelegationTool(ctx.AgentName(), tool.Name()) {
 		return nil, nil
 	}
 	if ctx == nil || tool == nil {
@@ -119,6 +149,9 @@ func (a *ToolExecutionAuditor) AfterTool(
 	err error,
 ) (map[string]any, error) {
 	if tool != nil && tool.Name() == adkTransferToolName {
+		return result, nil
+	}
+	if ctx != nil && tool != nil && a.isFrameworkDelegationTool(ctx.AgentName(), tool.Name()) {
 		return result, nil
 	}
 	if ctx == nil || tool == nil {

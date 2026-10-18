@@ -9,8 +9,9 @@ Liki 是多 Agent 命理专家系统，四仓分工：
 
 ```text
 浏览器 → Caddy → liki-web (BFF)
-                   └─AG-UI→ liki-agent-runtime (装配镜像: 运行时+组合工件) ──MCP──> engine-mcp / counsel-mcp
-                              router → 全功能领域专家委派，审计留痕
+                   └─AG-UI→ liki-agent-runtime ×4 (装配镜像: 运行时+四份工件；
+                              一 app 一服务：experts-natal / divination / fengshui / naming) ──MCP──> engine-mcp / counsel-mcp
+                              natal 内 bazi/ziwei 子专家以 task 委派聚合；审计留痕
 ```
 
 | 仓 | 角色 | 产物 |
@@ -73,8 +74,10 @@ ENV LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE=/deployment/deployment.json
 
 - **A2A**：`internal/protocol/a2a`（官方 a2a-go SDK），`/a2a` + `.well-known/agent-card.json` 标准格式
 - **AG-UI**：`internal/protocol/agui`（官方 ag-ui SDK），liki-web 通过它调本仓
-- **委派审计**：`internal/agent/delegation_audit.go`，ADK BeforeAgent/AfterAgent 回调记录委派（caller/target/depth/status）
-- **拓扑**：router → 平级专家单跳（`DisallowTransferToPeers: true`）；工件校验单根树/无环/全可达
+- **委派审计**：`internal/agent/delegation_audit.go`，ADK BeforeAgent/AfterAgent 回调记录委派（caller/target/depth/status）；
+  task 子代理在 `finish_task` 成功时会被框架提前终止迭代器（AfterAgent 不触发），完成事件由运行时从合成的 task 工具 FunctionResponse 补记
+- **拓扑**：统一入口语义移除——每个部署是独立单根树（`DisallowTransferToPeers: true`）；
+  父代理可用 chat 平级 transfer 或 task/single_turn 的 agent-as-tool 委派；工件校验单根树/无环/全可达
 
 ## 四、变更如何传播（负责人须知）
 

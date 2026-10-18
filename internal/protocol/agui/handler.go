@@ -358,7 +358,7 @@ func (s *stream) subagentID(event *session.Event) string {
 	if event == nil || event.Author == "" || event.Author == s.entrypoint {
 		return ""
 	}
-	branch := eventBranch(event)
+	branch := effectiveBranch(event)
 	for index := len(s.subagents) - 1; index >= 0; index-- {
 		if isBranchPrefix(s.subagents[index].branch, branch) {
 			return s.subagents[index].id
@@ -380,7 +380,7 @@ func (s *stream) observeSubagent(event *session.Event, emit func(aguievents.Even
 	if event == nil || event.Author == "" || event.Author == s.entrypoint {
 		return s.finishDeeperThan(eventBranch(event), emit)
 	}
-	branch := eventBranch(event)
+	branch := effectiveBranch(event)
 	if err := s.finishDeeperThan(branch, emit); err != nil {
 		return err
 	}
@@ -410,6 +410,21 @@ func eventBranch(event *session.Event) string {
 		return ""
 	}
 	return strings.TrimSpace(event.Branch)
+}
+
+// effectiveBranch resolves an event's attribution branch. Task-mode
+// sub-agents inherit the parent's branch — empty at the root — so events from
+// a non-entrypoint author without a branch fall back to the author name as
+// their attribution key. The reserved "user" author carries synthesized
+// function responses and is never a sub-agent.
+func effectiveBranch(event *session.Event) string {
+	if branch := eventBranch(event); branch != "" {
+		return branch
+	}
+	if event == nil || event.Author == "" || event.Author == "user" {
+		return ""
+	}
+	return event.Author
 }
 
 func (s *stream) finishDeeperThan(branch string, emit func(aguievents.Event) error) error {

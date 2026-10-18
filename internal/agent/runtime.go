@@ -825,6 +825,15 @@ func (r *Runtime) Run(
 			return RunResult{}, runErr
 		}
 		state.consume(event)
+		// Task-mode sub-agents stop their event iterator on finish_task, so
+		// their AfterAgent callback never runs; complete the delegation from
+		// the synthesized task-tool function response instead.
+		if delegationErr := r.delegationAuditor.CompleteByToolResponse(ctx, scope, event); delegationErr != nil {
+			runSpan.RecordError(delegationErr)
+			runSpan.SetStatus(codes.Error, runtimeError(delegationErr).Error())
+			runErr = runtimeError(delegationErr)
+			return RunResult{}, runErr
+		}
 		if observe != nil {
 			if visible, visibleOK := projector.Project(event); visibleOK {
 				if err := observe(visible); err != nil {

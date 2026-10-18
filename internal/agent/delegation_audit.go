@@ -11,6 +11,7 @@ import (
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"go.opentelemetry.io/otel/trace"
 	adkagent "google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
@@ -123,13 +124,67 @@ func (a *AgentReferenceAuditor) AfterAgent(ctx adkagent.Context) (*genai.Content
 	if !ok {
 		return nil, domain.NewError(domain.CodeDelegationUnknown, "agent completion has no matching started audit", fmt.Errorf("agent %q invocation %q", ctx.AgentName(), ctx.InvocationID()))
 	}
+	return nil, a.complete(ctx, scope, key, record)
+}
 
+// CompleteByToolResponse closes the pending delegation whose target Agent
+// produced this synthesized function response. ADK stops a task-mode
+// sub-agent's event iterator as soon as its finish_task call succeeds, so the
+// sub-agent's AfterAgent callback never runs; the synthesized task-tool
+// function response (tool name == sub-agent name) is the framework's
+// completion signal for that delegation.
+func (a *AgentReferenceAuditor) CompleteByToolResponse(
+	ctx context.Context,
+	scope *llmRunScope,
+	event *session.Event,
+) error {
+	if event == nil || event.Content == nil {
+		return nil
+	}
+	for _, part := range event.Content.Parts {
+		if part == nil || part.FunctionResponse == nil {
+			continue
+		}
+		target := part.FunctionResponse.Name
+		a.mu.Lock()
+		key, record, ok := a.pendingForTarget(target)
+		a.mu.Unlock()
+		if !ok {
+			continue
+		}
+		if err := a.complete(ctx, scope, key, record); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// pendingForTarget returns the oldest pending delegation record for a target
+// Agent. Task delegations are sequential (ADK forbids parallel task calls), so
+// at most one record per target is in flight.
+func (a *AgentReferenceAuditor) pendingForTarget(target string) (string, DelegationExecutionRecord, bool) {
+	for key, record := range a.pending {
+		if record.TargetAgent == target {
+			return key, record, true
+		}
+	}
+	return "", DelegationExecutionRecord{}, false
+}
+
+// complete appends the succeeded terminal evidence for one delegation and
+// releases its pending record.
+func (a *AgentReferenceAuditor) complete(
+	ctx context.Context,
+	scope *llmRunScope,
+	key string,
+	record DelegationExecutionRecord,
+) error {
 	finishedAt := a.now()
 	record.FinishedAt = finishedAt
 	record.DurationMS = finishedAt.Sub(record.StartedAt).Milliseconds()
 	record.Status = audit.StatusSucceeded
 	if err := a.record(ctx, scope, record, audit.EventDelegationCompleted); err != nil {
-		return nil, err
+		return err
 	}
 	a.mu.Lock()
 	delete(a.pending, key)
@@ -137,7 +192,7 @@ func (a *AgentReferenceAuditor) AfterAgent(ctx adkagent.Context) (*genai.Content
 	if a.metrics != nil {
 		a.metrics.ObserveAgentDelegation(record.CallerAgent, record.TargetAgent, string(record.Status), time.Duration(record.DurationMS)*time.Millisecond)
 	}
-	return nil, nil
+	return nil
 }
 
 // FailPending reconciles delegated invocations that never reached AfterAgent
