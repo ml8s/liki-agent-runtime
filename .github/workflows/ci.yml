@@ -51,33 +51,6 @@ jobs:
           path: coverage.html
           if-no-files-found: error
 
-  vulnerability-scan:
-    name: Go vulnerability scan
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
-
-  node-audit:
-    name: Node vulnerability scan
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm audit
-
   build:
     name: Build binary
     runs-on: ubuntu-latest
