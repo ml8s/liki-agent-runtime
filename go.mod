@@ -1,6 +1,6 @@
 module github.com/ml8s/liki-agent-runtime
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/a2aproject/a2a-go/v2 v2.5.0
