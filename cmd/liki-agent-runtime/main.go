@@ -14,11 +14,13 @@ import (
 
 	agentruntime "github.com/ml8s/liki-agent-runtime/internal/agent"
 	"github.com/ml8s/liki-agent-runtime/internal/audit/sqlite"
+	"github.com/ml8s/liki-agent-runtime/internal/notify"
 	"github.com/ml8s/liki-agent-runtime/internal/observability/otel"
 	"github.com/ml8s/liki-agent-runtime/internal/observability/prometheus"
 	"github.com/ml8s/liki-agent-runtime/internal/platform"
 	"github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo"
 	"github.com/ml8s/liki-agent-runtime/internal/platform/config"
+	"github.com/ml8s/liki-agent-runtime/internal/platform/tlsconf"
 	a2aadapter "github.com/ml8s/liki-agent-runtime/internal/protocol/a2a"
 	aguiadapter "github.com/ml8s/liki-agent-runtime/internal/protocol/agui"
 	"github.com/ml8s/liki-agent-runtime/internal/transport"
@@ -113,7 +115,33 @@ func run() (err error) {
 	if err != nil {
 		return err
 	}
-	aguiHandler, err := aguiadapter.New(runtime, aguiadapter.Config{RunTimeout: cfg.RunTimeout, Metrics: metricsCollector})
+	// 运行完成回调（direct-connect 控制面）：仅当配置了 webhook secret 时启用。
+	var completionNotifier *notify.Notifier
+	if cfg.CallbackSecret != "" {
+		profile := deployment.Metadata.Name
+		completionNotifier, err = notify.New(notify.Config{
+			URL:     cfg.CallbackURL,
+			Secret:  cfg.CallbackSecret,
+			Source:  "spiffe://liki/runtime/" + profile,
+			Profile: profile,
+			Logger:  logger,
+		})
+		if err != nil {
+			return fmt.Errorf("init run callback notifier: %w", err)
+		}
+		defer func() {
+			closeCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+			defer cancel()
+			if err := completionNotifier.Close(closeCtx); err != nil {
+				logger.Warn("run callback drain incomplete", "error", err)
+			}
+		}()
+	}
+	aguiConfig := aguiadapter.Config{RunTimeout: cfg.RunTimeout, Metrics: metricsCollector}
+	if completionNotifier != nil {
+		aguiConfig.Notifier = completionNotifier
+	}
+	aguiHandler, err := aguiadapter.New(runtime, aguiConfig)
 	if err != nil {
 		return err
 	}
@@ -146,6 +174,28 @@ func run() (err error) {
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+	// 运维面独立监听：协议面的 mTLS 不波及健康检查与指标抓取。
+	opsServer := &http.Server{
+		Addr:              cfg.OpsAddr,
+		Handler:           protocolServer.OpsHandler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	var tlsServer *http.Server
+	if cfg.TLSAddr != "" {
+		tlsConfig, err := tlsconf.ServerConfig(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSClientCAFile)
+		if err != nil {
+			return fmt.Errorf("build mutual TLS config: %w", err)
+		}
+		tlsServer = &http.Server{
+			Addr:              cfg.TLSAddr,
+			Handler:           httpHandler,
+			TLSConfig:         tlsConfig,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		}
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -156,10 +206,15 @@ func run() (err error) {
 			logger.Warn("otel_tracer_provider_shutdown_failed", "error", err)
 		}
 	}()
-	errCh := make(chan error, 1)
+	servers := []*http.Server{httpServer, opsServer}
+	if tlsServer != nil {
+		servers = append(servers, tlsServer)
+	}
+	errCh := make(chan error, len(servers))
 	go func() {
 		logger.Info("liki-agent-runtime listening",
 			"addr", cfg.Addr,
+			"ops_addr", cfg.OpsAddr,
 			"public_url", cfg.PublicURL,
 			"protocols", "A2A,AG-UI,MCP",
 			"env", cfg.Env,
@@ -167,6 +222,16 @@ func run() (err error) {
 		)
 		errCh <- httpServer.ListenAndServe()
 	}()
+	go func() {
+		errCh <- opsServer.ListenAndServe()
+	}()
+	if tlsServer != nil {
+		go func() {
+			logger.Info("liki-agent-runtime mutual TLS listening", "addr", cfg.TLSAddr)
+			// 证书由 TLSConfig 提供（RequireAndVerifyClientCert）。
+			errCh <- tlsServer.ListenAndServeTLS("", "")
+		}()
+	}
 
 	select {
 	case <-ctx.Done():
@@ -174,7 +239,13 @@ func run() (err error) {
 		protocolServer.Drain()
 		drainCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer cancel()
-		return httpServer.Shutdown(drainCtx)
+		var firstErr error
+		for _, server := range servers {
+			if err := server.Shutdown(drainCtx); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+		return firstErr
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil

@@ -28,7 +28,7 @@ empty to disable bearer authentication. Then run:
 
 ```bash
 make run
-curl -sS http://127.0.0.1:8083/readyz | jq
+curl -sS http://127.0.0.1:8085/readyz | jq   # ops listener (LIKI_AGENT_RUNTIME_OPS_ADDR)
 ```
 
 `make run` starts only the runtime; MCP servers are external dependencies.
@@ -102,7 +102,7 @@ endpoint is HTTPS-only without embedded credentials.
 
 | Prefix / variable | Purpose |
 |---|---|
-| `LIKI_AGENT_RUNTIME_*` | service address, token, audit DB path, topology, deployment file |
+| `LIKI_AGENT_RUNTIME_*` | service address, token, audit DB path, topology, deployment file, ops address (`OPS_ADDR`, default `:8085`), mutual-TLS listener (`TLS_ADDR` + `TLS_CERT`/`TLS_KEY`/`TLS_CLIENT_CA`), run callback (`CALLBACK_URL`/`CALLBACK_SECRET`) |
 | `LIKI_MCP_*` | endpoint/token bindings for logical MCP servers (`LIKI_MCP_<NAME>_URL` / `LIKI_MCP_<NAME>_TOKEN`) |
 | `LIKI_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
 | `LIKI_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
@@ -121,8 +121,11 @@ alone permits local HTTP LLMs.
 ## Operations
 
 Use `make run` for the host and `make dev` for Compose; `make dev-down`
-removes the workload. Release images probe `/readyz` via the built-in
-`healthcheck` subcommand; the runtime is single-replica (see
+removes the workload. The ops surface (`/readyz`, `/version`, `/metrics`)
+listens on `LIKI_AGENT_RUNTIME_OPS_ADDR` (default `:8085`) so protocol mutual
+TLS never gates healthchecks; `/metrics` requires the service token. Release
+images probe `/readyz` via the built-in `healthcheck` subcommand; the runtime
+is single-replica (see
 [`docs/STANDARDS.md`](docs/STANDARDS.md) for scaling).
 
 ## Observability
@@ -155,12 +158,15 @@ failures, never editing history; records exclude conversation or domain payloads
 
 ## Development
 
-Run `make check`, `make validate`, `make test`, `make gate`, and `make build`.
+After installing the pinned Node/Go toolchains, run `npm ci` once; Markdown
+linting uses the locked local development dependency. Run `make check`,
+`make validate`, `make test`, `make gate`, and `make build`.
 
 `make gate` is the pre-push gate. It runs documentation linting, Go static
-checks, `golangci-lint`, isolated race tests, and deployment validation. It does
-not call a real model provider or external MCP. CI additionally runs
-`govulncheck` and `npm audit`. Releases are tag-driven: pushing a
+checks, `golangci-lint`, isolated race tests, the coverage floor, and deployment
+validation. It does not call a real model provider or external MCP. CI
+additionally runs `govulncheck` and production npm dependency auditing.
+Releases are tag-driven: pushing a
 `vYYYY.MM.DD.N` tag runs the full gate, then builds, signs, and publishes the
 release image and GitHub Release.
 

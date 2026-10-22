@@ -13,7 +13,13 @@ GO ?= go
 NPM ?= npm
 NODE_BIN := $(HOME)/.nvm/versions/node/v$(shell cat .nvmrc)/bin
 PYTHON_BIN := $(HOME)/app/python3.12.14/bin
-export PATH := $(PYTHON_BIN):$(HOME)/app/go/bin:$(HOME)/app/go-tools/bin:$(HOME)/go/bin:$(NODE_BIN):$(PATH)
+GOPATH := $(HOME)/app/go-tools
+GOBIN := $(GOPATH)/bin
+GOMODCACHE := $(GOPATH)/pkg/mod
+GOCACHE := $(GOPATH)/build-cache
+GOLANGCI_LINT_CACHE := $(GOPATH)/golangci-lint-cache
+export PATH := $(PYTHON_BIN):$(HOME)/app/go/bin:$(GOBIN):$(NODE_BIN):$(PATH)
+export GOPATH GOBIN GOMODCACHE GOCACHE GOLANGCI_LINT_CACHE
 export GOTOOLCHAIN ?= go1.26.10
 VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo local)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -32,6 +38,7 @@ help:
 	@echo "make lint-readme - lint and test developer documentation"
 	@echo "make test     - run isolated tests (no deployed Engine dependency)"
 	@echo "make test-coverage - run tests and enforce the coverage floor"
+	@echo "make gate     - run the full pre-push source gate"
 	@echo "make smoke    - smoke the local liki-agent-runtime image"
 	@echo "make build    - build ./bin/liki-agent-runtime"
 	@echo "make image    - build a local image for development (releases are tag-driven via release.yml)"
@@ -57,25 +64,17 @@ vet:
 test:
 	$(GO) test -race -count=1 -coverprofile=$(COVER_PROFILE) $(TEST_PACKAGES)
 
-test-coverage: test
-test-coverage-report: ## Run tests and emit terminal + HTML coverage reports
-	$(GO) test -race -count=1 -coverprofile=$(COVER_PROFILE) $(TEST_PACKAGES)
+test-coverage: test ## Run tests and enforce the coverage floor
 	@COV=$$($(GO) tool cover -func=$(COVER_PROFILE) | tail -1 | awk '{print $$3}' | sed 's/%//'); \
 		echo "coverage: $$COV% (floor $(COVER_MIN)%)"; \
 		if awk -v c="$$COV" -v m="$(COVER_MIN)" 'BEGIN {exit !(c < m)}'; then \
 			echo "❌ coverage $$COV% < $(COVER_MIN)%" >&2; exit 1; \
 		fi
+
+test-coverage-report: test-coverage ## Run tests, enforce coverage, and emit the HTML report
 	$(GO) tool cover -html=$(COVER_PROFILE) -o coverage.html
 
-	@COV=$$($(GO) tool cover -func=$(COVER_PROFILE) | tail -1 | awk '{print $$3}' | sed 's/%//'); \
-	echo "coverage: $$COV% (floor $(COVER_MIN)%)"; \
-	if awk -v c="$$COV" -v m="$(COVER_MIN)" 'BEGIN {exit !(c < m)}'; then \
-		echo "❌ coverage $$COV% < $(COVER_MIN)%" >&2; exit 1; \
-	fi
-
 check: lint-readme fmt-check lint-engine vet validate check-actions
-
-
 
 build: ## Build the local liki-agent-runtime binary.
 	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/liki-agent-runtime ./cmd/liki-agent-runtime

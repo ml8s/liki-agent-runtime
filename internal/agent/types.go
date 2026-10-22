@@ -44,6 +44,16 @@ type RunResult struct {
 	Definition DefinitionRef
 	Output     json.RawMessage
 	Text       string
+	Usage      RunUsage
+}
+
+// RunUsage aggregates model usage for one run (counters summed across every
+// finished model call).
+type RunUsage struct {
+	LLMCalls         int
+	PromptTokens     int
+	CompletionTokens int
+	ThoughtTokens    int
 }
 
 // StructuredOutputStateKey returns the ADK session-state key that holds an

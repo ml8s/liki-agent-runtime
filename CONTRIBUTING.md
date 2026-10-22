@@ -19,8 +19,8 @@ make build
 ```
 
 `make gate` runs documentation checks, `gofmt` verification, `golangci-lint`,
-`go vet`, artifact validation, and race-enabled Go tests. It does not call a
-model provider or require Engine MCP.
+`go vet`, artifact validation, race-enabled Go tests, and the coverage floor.
+It does not call a model provider or require Engine MCP.
 
 ## Design rules
 

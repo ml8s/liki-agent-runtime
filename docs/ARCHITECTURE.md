@@ -149,6 +149,14 @@ result.
 Protocol choices are governed by [`STANDARDS.md`](STANDARDS.md); a private wire
 protocol must not replace a reviewed standard.
 
+On the mutual-TLS channel the verified `Remote-User` header carries the
+caller identity (the client certificate replaces the service token); plain
+requests keep the bearer token and the `X-Liki-User-ID` header. Runs that
+arrive over the mutual-TLS listener post a signed run-completed callback
+(CloudEvents structured mode + Standard Webhooks) to the control plane;
+relay runs are persisted by liki-web itself and never notify, so the relay
+stays a safe rollback lever.
+
 A2A uses the official A2A Go SDK JSON-RPC binding and ADK A2A executor.
 The runtime uses the executor's standard ContextID-to-ADK-session mapping. No
 private A2A extension, RPC method, or state machine is advertised. Model-text
@@ -197,9 +205,14 @@ prompts, raw model output, or tool payloads.
 
 ## Operations
 
-Version and readiness are public standard transport endpoints. Metrics use the
+The operational surface (`/readyz`, `/version`, `/metrics`) is served on a
+dedicated ops listener (`LIKI_AGENT_RUNTIME_OPS_ADDR`, default `:8085`) so
+protocol mutual TLS never gates healthchecks or scrapers; `/metrics` keeps the
 same bearer-token boundary as protocol calls whenever an internal token is
-configured. All POST endpoints enforce a 2 MB body limit.
+configured. The protocol listener can additionally expose a mutual-TLS
+endpoint (`LIKI_AGENT_RUNTIME_TLS_ADDR` plus the certificate trio, client
+certificates verified against the CA). All POST endpoints enforce a 2 MB body
+limit.
 
 Bearer-token failures and missing verified identities are counted in a bounded
 fixed window per TCP socket source. Untrusted forwarding headers never change

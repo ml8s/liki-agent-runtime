@@ -15,11 +15,12 @@ import (
 
 // healthcheck is the container-native readiness probe used by Docker Compose.
 // It intentionally checks the process-local /readyz endpoint without importing
-// a shell into the distroless runtime image.
+// a shell into the distroless runtime image. Readiness lives on the dedicated
+// ops listener, so the probe follows LIKI_AGENT_RUNTIME_OPS_ADDR.
 func healthcheck() error {
-	address := strings.TrimSpace(os.Getenv("LIKI_AGENT_RUNTIME_ADDR"))
+	address := strings.TrimSpace(os.Getenv("LIKI_AGENT_RUNTIME_OPS_ADDR"))
 	if address == "" {
-		address = config.DefaultAddr
+		address = config.DefaultOpsAddr
 	}
 	request, err := http.NewRequestWithContext(
 		context.Background(),

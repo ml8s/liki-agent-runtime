@@ -15,13 +15,25 @@ import (
 // container healthcheck subcommand share it so the two cannot drift.
 const DefaultAddr = ":8083"
 
+// DefaultOpsAddr is the default address for the operational surface
+// (/readyz, /version, /metrics). It is separate from the protocol listener so
+// that mutual TLS on the protocol surface never gates healthchecks or scrapers.
+const DefaultOpsAddr = ":8085"
+
 // Config is the fully resolved runtime configuration.
 type Config struct {
 	Env                 string
 	Topology            Topology
 	Addr                string
+	OpsAddr             string
+	TLSAddr             string
+	TLSCertFile         string
+	TLSKeyFile          string
+	TLSClientCAFile     string
 	PublicURL           string
 	InternalToken       string
+	CallbackURL         string
+	CallbackSecret      string
 	DBPath              string
 	DeploymentFile      string
 	SkillsRoot          string
@@ -63,8 +75,15 @@ func Load() (Config, error) {
 		Env:                 getEnv("LIKI_ENV", "development"),
 		Topology:            Topology(strings.ToLower(strings.TrimSpace(getEnv("LIKI_AGENT_RUNTIME_TOPOLOGY", string(TopologySingle))))),
 		Addr:                getEnv("LIKI_AGENT_RUNTIME_ADDR", DefaultAddr),
+		OpsAddr:             getEnv("LIKI_AGENT_RUNTIME_OPS_ADDR", DefaultOpsAddr),
+		TLSAddr:             getEnv("LIKI_AGENT_RUNTIME_TLS_ADDR", ""),
+		TLSCertFile:         getEnv("LIKI_AGENT_RUNTIME_TLS_CERT", ""),
+		TLSKeyFile:          getEnv("LIKI_AGENT_RUNTIME_TLS_KEY", ""),
+		TLSClientCAFile:     getEnv("LIKI_AGENT_RUNTIME_TLS_CLIENT_CA", ""),
 		PublicURL:           getEnv("LIKI_AGENT_RUNTIME_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
 		InternalToken:       getEnv("LIKI_AGENT_RUNTIME_INTERNAL_TOKEN", ""),
+		CallbackURL:         getEnv("LIKI_AGENT_RUNTIME_CALLBACK_URL", ""),
+		CallbackSecret:      getEnv("LIKI_AGENT_RUNTIME_CALLBACK_SECRET", ""),
 		DBPath:              getEnv("LIKI_AGENT_RUNTIME_DB_PATH", "./data/liki-agent-runtime-audit.db"),
 		DeploymentFile:      getEnv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", ""),
 		SkillsRoot:          strings.TrimSpace(getEnv("LIKI_AGENT_RUNTIME_SKILLS_ROOT", "")),
@@ -114,6 +133,19 @@ func validate(cfg Config) (Config, error) {
 
 	if !isDevelopment && cfg.InternalToken == "" {
 		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_INTERNAL_TOKEN is required outside development")
+	}
+	if cfg.TLSAddr != "" {
+		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.TLSClientCAFile == "" {
+			return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_TLS_CERT, LIKI_AGENT_RUNTIME_TLS_KEY and LIKI_AGENT_RUNTIME_TLS_CLIENT_CA are required when LIKI_AGENT_RUNTIME_TLS_ADDR is set")
+		}
+	} else if cfg.TLSCertFile != "" || cfg.TLSKeyFile != "" || cfg.TLSClientCAFile != "" {
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_TLS_ADDR is required when TLS certificate files are configured")
+	}
+	if cfg.CallbackSecret != "" && cfg.CallbackURL == "" {
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_CALLBACK_URL is required when LIKI_AGENT_RUNTIME_CALLBACK_SECRET is set")
+	}
+	if cfg.OpsAddr == cfg.Addr || (cfg.TLSAddr != "" && (cfg.TLSAddr == cfg.Addr || cfg.TLSAddr == cfg.OpsAddr)) {
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_ADDR, LIKI_AGENT_RUNTIME_OPS_ADDR and LIKI_AGENT_RUNTIME_TLS_ADDR must be distinct listen addresses")
 	}
 	if !isDevelopment && cfg.LLMAPIKey == "" {
 		return Config{}, fmt.Errorf("LIKI_LLM_API_KEY is required outside development")

@@ -41,6 +41,7 @@ type Services struct {
 type Server struct {
 	services     Services
 	routes       *http.ServeMux
+	opsRoutes    *http.ServeMux
 	readiness    atomic.Bool
 	authFailures *authFailureLimiter
 }
@@ -124,16 +125,28 @@ func New(services Services) (*Server, error) {
 
 	server := &Server{services: services, authFailures: newAuthFailureLimiter()}
 	server.readiness.Store(true)
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /readyz", server.ready)
-	mux.HandleFunc("GET /version", server.version)
-	mux.Handle("GET /metrics", server.authorized(server.metricsHandler(), false))
-	mux.Handle("GET /.well-known/agent-card.json", server.services.AgentCard)
-	mux.Handle("POST /a2a", server.authorized(server.bodyLimit(server.services.A2A), false))
-	mux.Handle("POST /ag-ui", server.authorized(server.bodyLimit(server.services.AGUI), true))
 
-	server.routes = mux
+	api := http.NewServeMux()
+	api.Handle("GET /.well-known/agent-card.json", server.services.AgentCard)
+	api.Handle("POST /a2a", server.authorized(server.bodyLimit(server.services.A2A), false))
+	api.Handle("POST /ag-ui", server.authorized(server.bodyLimit(server.services.AGUI), true))
+
+	// 运维面独立监听：协议面的 mTLS 不波及健康检查与指标抓取。
+	ops := http.NewServeMux()
+	ops.HandleFunc("GET /readyz", server.ready)
+	ops.HandleFunc("GET /version", server.version)
+	ops.Handle("GET /metrics", server.authorized(server.metricsHandler(), false))
+
+	server.routes = api
+	server.opsRoutes = ops
 	return server, nil
+}
+
+// OpsHandler returns the operational surface (/readyz, /version, /metrics).
+// It is served on a dedicated listener so protocol-level mutual TLS never
+// gates healthchecks or metric scrapers.
+func (s *Server) OpsHandler() http.Handler {
+	return s.opsRoutes
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -197,7 +210,9 @@ func protocolOperation(path, method string) (protocol, operation string, ok bool
 func (s *Server) authorized(next http.Handler, requireIdentity bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		source := requestSource(r.RemoteAddr)
-		if s.services.InternalToken != "" {
+		// mTLS 通道（客户端证书已验证）以证书为通道凭证；明文监听器（过渡期
+		// 中继）仍要求服务 token。
+		if s.services.InternalToken != "" && !mutualTLSVerified(r) {
 			const prefix = "Bearer "
 			header := r.Header.Get("Authorization")
 			if !strings.HasPrefix(header, prefix) || subtle.ConstantTimeCompare([]byte(header[len(prefix):]), []byte(s.services.InternalToken)) != 1 {
@@ -309,11 +324,27 @@ func (s *Server) metricsHandler() http.Handler {
 }
 
 func verifiedIdentity(r *http.Request) identity.Identity {
-	userID := strings.TrimSpace(r.Header.Get("X-Liki-User-ID"))
+	// 通道决定受信头（契约 C4）：
+	//   mTLS（边缘 forward_auth 注入）→ Remote-User；
+	//   明文（带 token 的中继调用方）→ X-Liki-User-ID。
+	mtls := mutualTLSVerified(r)
+	header := "X-Liki-User-ID"
+	if mtls {
+		header = "Remote-User"
+	}
+	userID := strings.TrimSpace(r.Header.Get(header))
 	if !validRequestID(userID) {
 		return identity.Identity{}
 	}
-	return identity.Identity{UserID: userID}
+	return identity.Identity{UserID: userID, MutualTLS: mtls}
+}
+
+// mutualTLSVerified reports whether the request arrived over a TLS connection
+// whose client certificate the listener already verified. The mTLS listener is
+// configured with RequireAndVerifyClientCert, so a present peer certificate
+// means the channel itself is authenticated.
+func mutualTLSVerified(r *http.Request) bool {
+	return r.TLS != nil && len(r.TLS.PeerCertificates) > 0
 }
 
 func validRequestID(value string) bool {

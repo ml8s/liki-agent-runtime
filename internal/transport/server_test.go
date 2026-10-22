@@ -2,6 +2,8 @@ package transport_test
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +24,7 @@ func (healthy) CheckHealth(context.Context) platform.DependencyHealth {
 	return platform.DependencyHealth{Name: "test", OK: true}
 }
 
-func newServer(t *testing.T, token string) http.Handler {
+func newServer(t *testing.T, token string) *transport.Server {
 	t.Helper()
 	handler, err := transport.New(transport.Services{
 		AgentCard:     http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
@@ -37,7 +39,7 @@ func newServer(t *testing.T, token string) http.Handler {
 	return handler
 }
 
-func mustNewServer(t *testing.T, services transport.Services) http.Handler {
+func mustNewServer(t *testing.T, services transport.Services) *transport.Server {
 	t.Helper()
 	handler, err := transport.New(services)
 	if err != nil {
@@ -112,13 +114,20 @@ func TestAGUIRequiresVerifiedIdentity(t *testing.T) {
 	}
 }
 
-func TestOperationalEndpoints(t *testing.T) {
+func TestOperationalEndpointsAreOwnedByOpsHandler(t *testing.T) {
 	handler := newServer(t, "secret")
+	ops := handler.OpsHandler()
 	for _, path := range []string{"/readyz", "/version"} {
 		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		ops.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusOK {
-			t.Fatalf("%s status = %d", path, response.Code)
+			t.Fatalf("ops %s status = %d", path, response.Code)
+		}
+		// API 监听器不再服务运维端点（mTLS 下健康检查不受影响）。
+		apiResponse := httptest.NewRecorder()
+		handler.ServeHTTP(apiResponse, httptest.NewRequest(http.MethodGet, path, nil))
+		if apiResponse.Code != http.StatusNotFound {
+			t.Fatalf("api %s status = %d, want 404", path, apiResponse.Code)
 		}
 	}
 }
@@ -133,7 +142,7 @@ func TestMetricsRequiresServiceToken(t *testing.T) {
 	})
 
 	unauthenticated := httptest.NewRecorder()
-	handler.ServeHTTP(unauthenticated, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	handler.OpsHandler().ServeHTTP(unauthenticated, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	if unauthenticated.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated metrics status = %d", unauthenticated.Code)
 	}
@@ -141,7 +150,7 @@ func TestMetricsRequiresServiceToken(t *testing.T) {
 	authenticated := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	authenticated.Header.Set("Authorization", "Bearer secret")
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, authenticated)
+	handler.OpsHandler().ServeHTTP(response, authenticated)
 	if response.Code != http.StatusTeapot {
 		t.Fatalf("authenticated metrics status = %d", response.Code)
 	}
@@ -221,7 +230,7 @@ func TestDrainMakesReadinessUnavailableWithoutCancellingRequests(t *testing.T) {
 	server.Drain()
 
 	readiness := httptest.NewRecorder()
-	server.ServeHTTP(readiness, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	server.OpsHandler().ServeHTTP(readiness, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if readiness.Code != http.StatusServiceUnavailable {
 		t.Fatalf("drained readiness status = %d, want %d", readiness.Code, http.StatusServiceUnavailable)
 	}
@@ -313,7 +322,7 @@ func TestReadyzDoesNotLeakDependencyDetail(t *testing.T) {
 		HealthChecks: []platform.HealthChecker{unhealthy},
 	})
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	handler.OpsHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", response.Code)
 	}
@@ -338,7 +347,7 @@ func TestReadyzChecksEveryDependency(t *testing.T) {
 		},
 	})
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	handler.OpsHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", response.Code)
 	}
@@ -361,7 +370,7 @@ func TestReadyzDoesNotInheritClientCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil).WithContext(ctx))
+	handler.OpsHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil).WithContext(ctx))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("canceled readiness status = %d, want %d", response.Code, http.StatusOK)
@@ -377,7 +386,7 @@ func TestReadinessHasIndependentBudget(t *testing.T) {
 	})
 	response := httptest.NewRecorder()
 	started := time.Now()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	handler.OpsHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("readiness status = %d, want %d", response.Code, http.StatusServiceUnavailable)
@@ -440,8 +449,57 @@ func TestIdentityHeaderOnlyAcceptedOnAGUI(t *testing.T) {
 	req2 := httptest.NewRequest(http.MethodPost, "/ag-ui", nil)
 	req2.Header.Set("X-Liki-User-ID", "alice")
 	server.ServeHTTP(httptest.NewRecorder(), req2)
-	if aguiID.IsZero() || aguiID.UserID != "alice" {
-		t.Fatalf("ag-ui identity = %+v, want alice", aguiID)
+	if aguiID.IsZero() || aguiID.UserID != "alice" || aguiID.MutualTLS {
+		t.Fatalf("ag-ui identity = %+v, want alice without the mutual-TLS mark", aguiID)
+	}
+}
+
+func TestMutualTLSRequestsTrustRemoteUserAndSkipToken(t *testing.T) {
+	var aguiID identity.Identity
+	server := mustNewServer(t, transport.Services{
+		AgentCard: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A:       http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		AGUI: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if id, ok := identity.FromContext(r.Context()); ok {
+				aguiID = id
+			}
+			w.WriteHeader(http.StatusAccepted)
+		}),
+		InternalToken: "secret",
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/ag-ui", strings.NewReader(`{}`))
+	request.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{{}}}
+	request.Header.Set("Remote-User", "alice")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("mTLS status = %d, want %d (client certificate replaces the service token)", response.Code, http.StatusAccepted)
+	}
+	if aguiID.UserID != "alice" || !aguiID.MutualTLS {
+		t.Fatalf("mTLS identity = %+v, want alice from Remote-User over the mutually authenticated channel", aguiID)
+	}
+}
+
+func TestPlainRequestsIgnoreRemoteUserAndLegacyHeaderOnMutualTLS(t *testing.T) {
+	server := newServer(t, "")
+	request := httptest.NewRequest(http.MethodPost, "/ag-ui", strings.NewReader(`{}`))
+	request.Header.Set("Remote-User", "spoofed")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("plain Remote-User status = %d, want 401 (only mTLS may inject it)", response.Code)
+	}
+
+	// mTLS 通道不信任旧的中继头（X-Liki-User-ID 只属于带 token 的明文中继）。
+	legacy := httptest.NewRequest(http.MethodPost, "/ag-ui", strings.NewReader(`{}`))
+	legacy.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{{}}}
+	legacy.Header.Set("X-Liki-User-ID", "alice")
+	legacyResponse := httptest.NewRecorder()
+	server.ServeHTTP(legacyResponse, legacy)
+	if legacyResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("mTLS legacy-header status = %d, want 401", legacyResponse.Code)
 	}
 }
 

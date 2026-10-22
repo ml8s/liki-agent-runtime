@@ -41,6 +41,23 @@ type llmRunScope struct {
 	definitionDigest  string
 	nextCall          int
 	activeCalls       map[string]llmCallRuntime
+
+	llmCalls         int
+	promptTokens     int
+	completionTokens int
+	thoughtTokens    int
+}
+
+// usage returns the aggregated model usage recorded for this run so far.
+func (s *llmRunScope) usage() RunUsage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return RunUsage{
+		LLMCalls:         s.llmCalls,
+		PromptTokens:     s.promptTokens,
+		CompletionTokens: s.completionTokens,
+		ThoughtTokens:    s.thoughtTokens,
+	}
 }
 
 type llmCallRuntime struct {
@@ -225,6 +242,12 @@ func (l *llmLedger) afterModel(ctx agent.Context, response *model.LLMResponse, r
 		call.Complete(domain.LLMTokenUsage{}, finishedAt)
 	}
 	call.Normalize()
+	scope.mu.Lock()
+	scope.llmCalls++
+	scope.promptTokens += int(call.PromptTokens)
+	scope.completionTokens += int(call.CompletionTokens)
+	scope.thoughtTokens += int(call.ThoughtTokens)
+	scope.mu.Unlock()
 	l.applyAgent(call, call.AgentName)
 	if err := call.Validate(); err != nil {
 		return response, err

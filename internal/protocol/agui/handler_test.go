@@ -12,6 +12,7 @@ import (
 
 	"github.com/ml8s/liki-agent-runtime/internal/agent"
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/notify"
 	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
 	"github.com/ml8s/liki-agent-runtime/internal/protocol/agui"
 	"github.com/ml8s/liki-agent-runtime/internal/testagent"
@@ -114,7 +115,99 @@ func (r *scriptedRuntime) Run(_ context.Context, _ agent.RunRequest, observe fun
 func authenticatedRequest(t *testing.T, body string) *http.Request {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodPost, "/ag-ui", strings.NewReader(body))
+	return request.WithContext(identity.WithIdentity(request.Context(), identity.Identity{UserID: "user_1", MutualTLS: true}))
+}
+
+func relayRequest(t *testing.T, body string) *http.Request {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, "/ag-ui", strings.NewReader(body))
 	return request.WithContext(identity.WithIdentity(request.Context(), identity.Identity{UserID: "user_1"}))
+}
+
+type recordingNotifier struct {
+	records []notify.Record
+}
+
+func (r *recordingNotifier) Notify(record notify.Record) {
+	r.records = append(r.records, record)
+}
+
+func TestAGUINotifiesCompletedRun(t *testing.T) {
+	notifier := &recordingNotifier{}
+	runtime := &scriptedRuntime{result: agent.RunResult{
+		Text:  "答案",
+		Usage: agent.RunUsage{LLMCalls: 2, PromptTokens: 10, CompletionTokens: 20, ThoughtTokens: 1},
+	}}
+	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second, Notifier: notifier})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, authenticatedRequest(t, `{"threadId":"thread_1","runId":"run_1","messages":[{"id":"m1","role":"user","content":"hi"}]}`))
+
+	if len(notifier.records) != 1 {
+		t.Fatalf("records = %d, want 1", len(notifier.records))
+	}
+	record := notifier.records[0]
+	if record.RunID != "run_1" || record.ThreadID != "thread_1" || record.UserID != "user_1" ||
+		record.UserMessage != "hi" || record.Status != "completed" || record.Answer != "答案" {
+		t.Fatalf("record = %+v", record)
+	}
+	if record.Usage.LLMCalls != 2 || record.Usage.PromptTokens != 10 ||
+		record.Usage.CompletionTokens != 20 || record.Usage.ThoughtTokens != 1 {
+		t.Fatalf("record usage = %+v", record.Usage)
+	}
+	if record.StartedAt.IsZero() || record.FinishedAt.IsZero() || record.FinishedAt.Before(record.StartedAt) {
+		t.Fatalf("record timestamps = %v .. %v", record.StartedAt, record.FinishedAt)
+	}
+}
+
+func TestAGUINotifiesCanceledAndFailedRuns(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"canceled", context.Canceled, "canceled"},
+		{"failed", errors.New("boom"), "failed"},
+	}
+	for _, tc := range cases {
+		notifier := &recordingNotifier{}
+		handler, err := agui.New(&scriptedRuntime{err: tc.err}, agui.Config{RunTimeout: time.Second, Notifier: notifier})
+		if err != nil {
+			t.Fatalf("%s: New() error = %v", tc.name, err)
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, authenticatedRequest(t, `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":"hi"}]}`))
+
+		if len(notifier.records) != 1 {
+			t.Fatalf("%s: records = %d, want 1", tc.name, len(notifier.records))
+		}
+		record := notifier.records[0]
+		if record.Status != tc.want {
+			t.Fatalf("%s: status = %q, want %q", tc.name, record.Status, tc.want)
+		}
+		if tc.want == "failed" && !strings.Contains(record.Error, "boom") {
+			t.Fatalf("%s: error = %q", tc.name, record.Error)
+		}
+		if tc.want == "canceled" && record.Error != "" {
+			t.Fatalf("%s: canceled run must not carry an error string: %q", tc.name, record.Error)
+		}
+	}
+}
+
+func TestAGUINotifiesOnlyMutualTLSRuns(t *testing.T) {
+	notifier := &recordingNotifier{}
+	handler, err := agui.New(&scriptedRuntime{result: agent.RunResult{Text: "答案"}}, agui.Config{RunTimeout: time.Second, Notifier: notifier})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, relayRequest(t, `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":"hi"}]}`))
+
+	if len(notifier.records) != 0 {
+		t.Fatalf("relay-channel records = %d, want 0 (liki-web persists relay runs; callbacks are direct-connect only)", len(notifier.records))
+	}
 }
 
 func TestAGUIRejectsUnsupportedCapabilitiesInsteadOfDroppingThem(t *testing.T) {
@@ -246,6 +339,11 @@ func TestAGUIEmitsStructuredAnswerAsTextLifecycle(t *testing.T) {
 	}
 	if !strings.Contains(body, `"answer":"结构化答案"`) {
 		t.Fatalf("RUN_FINISHED result missing authoritative answer: %s", body)
+	}
+	// 协议契约：RUN_FINISHED 必须携带 outcome（与中继网关一致）；缺失会被
+	// AG-UI 客户端判成非成功结果。
+	if !strings.Contains(body, `"outcome":{"type":"success"}`) {
+		t.Fatalf("RUN_FINISHED missing success outcome: %s", body)
 	}
 }
 

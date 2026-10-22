@@ -174,3 +174,63 @@ func TestDevelopmentAllowsLocalHTTPAndUnpinnedDeployment(t *testing.T) {
 		t.Fatalf("LLM base URL = %q", cfg.LLMBaseURL)
 	}
 }
+
+func TestLoadMTLSConfiguration(t *testing.T) {
+	baseEnv(t)
+	t.Setenv("LIKI_AGENT_RUNTIME_TLS_ADDR", ":8084")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "LIKI_AGENT_RUNTIME_TLS_CERT") {
+		t.Fatalf("Load() error = %v, want a TLS certificate requirement", err)
+	}
+	t.Setenv("LIKI_AGENT_RUNTIME_TLS_CERT", "/pki/server.crt")
+	t.Setenv("LIKI_AGENT_RUNTIME_TLS_KEY", "/pki/server.key")
+	t.Setenv("LIKI_AGENT_RUNTIME_TLS_CLIENT_CA", "/pki/ca.pem")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(mTLS) error = %v", err)
+	}
+	if cfg.TLSAddr != ":8084" || cfg.TLSCertFile != "/pki/server.crt" ||
+		cfg.TLSKeyFile != "/pki/server.key" || cfg.TLSClientCAFile != "/pki/ca.pem" {
+		t.Fatalf("mTLS config = %q/%q/%q/%q", cfg.TLSAddr, cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSClientCAFile)
+	}
+
+	// 证书文件没有 TLS 地址：配置错误必须显式失败（fail-closed）。
+	t.Setenv("LIKI_AGENT_RUNTIME_TLS_ADDR", "")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "LIKI_AGENT_RUNTIME_TLS_ADDR") {
+		t.Fatalf("Load(certs without addr) error = %v, want a TLS addr requirement", err)
+	}
+}
+
+func TestOpsAddrDefaultsAndOverrides(t *testing.T) {
+	baseEnv(t)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.OpsAddr != ":8085" {
+		t.Fatalf("OpsAddr = %q, want :8085", cfg.OpsAddr)
+	}
+	t.Setenv("LIKI_AGENT_RUNTIME_OPS_ADDR", "127.0.0.1:9090")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("Load(ops addr) error = %v", err)
+	}
+	if cfg.OpsAddr != "127.0.0.1:9090" {
+		t.Fatalf("OpsAddr = %q, want override", cfg.OpsAddr)
+	}
+}
+
+func TestLoadCallbackConfiguration(t *testing.T) {
+	baseEnv(t)
+	t.Setenv("LIKI_AGENT_RUNTIME_CALLBACK_SECRET", "whsec_MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "LIKI_AGENT_RUNTIME_CALLBACK_URL") {
+		t.Fatalf("Load() error = %v, want a callback URL requirement", err)
+	}
+	t.Setenv("LIKI_AGENT_RUNTIME_CALLBACK_URL", "http://web:8081/api/internal/runs/completed")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(callback) error = %v", err)
+	}
+	if cfg.CallbackURL == "" || cfg.CallbackSecret == "" {
+		t.Fatalf("callback config = %q/%q", cfg.CallbackURL, cfg.CallbackSecret)
+	}
+}

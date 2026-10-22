@@ -28,7 +28,7 @@ func TestHealthcheckAcceptsOnlySuccessfulReadiness(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	t.Setenv("LIKI_AGENT_RUNTIME_ADDR", server.Listener.Addr().String())
+	t.Setenv("LIKI_AGENT_RUNTIME_OPS_ADDR", server.Listener.Addr().String())
 	if err := healthcheck(); err != nil {
 		t.Fatalf("healthcheck() error = %v", err)
 	}
@@ -39,7 +39,7 @@ func TestHealthcheckRejectsFailedReadiness(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
-	t.Setenv("LIKI_AGENT_RUNTIME_ADDR", server.Listener.Addr().String())
+	t.Setenv("LIKI_AGENT_RUNTIME_OPS_ADDR", server.Listener.Addr().String())
 	if err := healthcheck(); err == nil {
 		t.Fatal("healthcheck() unexpectedly succeeded")
 	}

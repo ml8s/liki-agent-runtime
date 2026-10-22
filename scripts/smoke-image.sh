@@ -8,6 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE_TAG="${IMAGE_TAG:-local}"
 IMAGE="${IMAGE:-${LIKI_AGENT_RUNTIME_IMAGE:-ghcr.io/ml8s/liki-agent-runtime:$IMAGE_TAG}}"
 PORT="${AGENTS_SMOKE_PORT:-18083}"
+OPS_PORT="${AGENTS_SMOKE_OPS_PORT:-18085}"
 NAME="liki-agent-runtime-smoke-$$"
 
 cleanup() {
@@ -18,11 +19,13 @@ trap cleanup EXIT
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --name "$NAME" \
   -p "$PORT:8083" \
+  -p "$OPS_PORT:8085" \
   -v "$ROOT/dev/agent-deployment:/agent-deployment:ro" \
   --tmpfs /data:uid=65532,gid=65532 \
   -e LIKI_ENV=development \
   -e LIKI_AGENT_RUNTIME_TOPOLOGY=single \
   -e LIKI_AGENT_RUNTIME_ADDR=:8083 \
+  -e LIKI_AGENT_RUNTIME_OPS_ADDR=:8085 \
   -e LIKI_AGENT_RUNTIME_PUBLIC_URL=http://127.0.0.1:8083 \
   -e LIKI_AGENT_RUNTIME_DB_PATH=/data/liki-agent-runtime-audit.db \
   -e LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE=/agent-deployment/deployment.json \
@@ -39,7 +42,7 @@ docker run -d --name "$NAME" \
 
 ready=false
 for _ in $(seq 1 30); do
-  if curl -fsS "http://127.0.0.1:$PORT/version" >/dev/null 2>&1; then
+  if curl -fsS "http://127.0.0.1:$OPS_PORT/version" >/dev/null 2>&1; then
     ready=true
     break
   fi
@@ -55,6 +58,6 @@ if [ "$ready" != true ]; then
   exit 1
 fi
 
-curl -fsS "http://127.0.0.1:$PORT/version" | grep -q 'version'
+curl -fsS "http://127.0.0.1:$OPS_PORT/version" | grep -q 'version'
 curl -fsS "http://127.0.0.1:$PORT/.well-known/agent-card.json" | grep -q '"protocolBinding":"JSONRPC"'
 echo "✅ liki-agent-runtime image smoke passed"

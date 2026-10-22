@@ -221,6 +221,36 @@ func TestLedgerLifecycleCompletesNormally(t *testing.T) {
 	}
 }
 
+func TestLedgerAggregatesRunUsage(t *testing.T) {
+	ledger, _ := newTestLedger(t)
+	scope := newTestScope()
+	if !ledger.begin("session_1", scope) {
+		t.Fatal("begin() returned false")
+	}
+	ctx := testCtx()
+	responses := []*model.LLMResponse{
+		{ModelVersion: "test-model", UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
+			PromptTokenCount: 10, CandidatesTokenCount: 20, ThoughtsTokenCount: 1,
+		}},
+		{ModelVersion: "test-model", UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
+			PromptTokenCount: 5, CandidatesTokenCount: 7, ThoughtsTokenCount: 2,
+		}},
+	}
+	for _, response := range responses {
+		if _, err := ledger.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
+			t.Fatalf("beforeModel() error = %v", err)
+		}
+		if _, err := ledger.afterModel(ctx, response, nil); err != nil {
+			t.Fatalf("afterModel() error = %v", err)
+		}
+	}
+	usage := scope.usage()
+	if usage.LLMCalls != 2 || usage.PromptTokens != 15 ||
+		usage.CompletionTokens != 27 || usage.ThoughtTokens != 3 {
+		t.Fatalf("aggregated usage = %+v", usage)
+	}
+}
+
 func TestBeforeModelRejectsMissingAuditScope(t *testing.T) {
 	ledger, _ := newTestLedger(t)
 	_, err := ledger.beforeModel(

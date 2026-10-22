@@ -35,4 +35,5 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm audit
+      # markdownlint is dev-only; production Go code has no npm dependency surface.
+      - run: npm audit --omit=dev

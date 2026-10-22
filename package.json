@@ -5,7 +5,9 @@
     "node": "24.14.1"
   },
   "scripts": {
-    "lint:docs": "npx --yes markdownlint-cli2@0.23.3"
+    "lint:docs": "markdownlint-cli2"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "markdownlint-cli2": "0.23.3"
+  }
 }

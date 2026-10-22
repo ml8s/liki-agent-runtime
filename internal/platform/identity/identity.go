@@ -12,6 +12,10 @@ import (
 // boundaries.
 type Identity struct {
 	UserID string
+	// MutualTLS reports that the request arrived over the mutually
+	// authenticated listener. Callbacks and other direct-connect-only
+	// behaviours key off this channel fact, never off header contents.
+	MutualTLS bool
 }
 
 // IsZero reports whether the identity carries no verified subject.

@@ -728,6 +728,8 @@ func (r *Runtime) Run(
 		startedAt:         startedAt,
 		activeCalls:       make(map[string]llmCallRuntime),
 	}
+	// 聚合用量在所有退出路径回填（含失败与取消）。
+	defer func() { result.Usage = scope.usage() }()
 	if !r.llm.begin(sessionID, scope) {
 		runErr = domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
 		return RunResult{}, runErr
