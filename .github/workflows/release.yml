@@ -1,9 +1,10 @@
 name: Release
 
-# Tag-driven release for ml8s/liki-agent-runtime (same model as liki/liki-web).
-# Pushing a vYYYY.MM.DD.N tag runs the full gate, then builds, signs, and
-# publishes the release image plus the GitHub Release. The GHCR package is
-# flipped to public so liki/liki-deploy pull it with job tokens — no PAT.
+# Tag-driven build/sign for ml8s/liki-agent-runtime. Pushing a vYYYY.MM.DD.N
+# tag runs the full gate, then builds, signs, and smoke-verifies the release
+# image. The GHCR package is flipped to public so liki/liki-deploy pull it
+# with job tokens — no PAT. Publishing the GitHub Release is explicit:
+#   gh workflow run release-publish.yml -f tag=vYYYY.MM.DD.N
 
 on:
   push:
@@ -19,7 +20,7 @@ concurrency:
 
 jobs:
   release:
-    name: Build and publish release
+    name: Build and sign release image
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -138,14 +139,3 @@ jobs:
           set -euo pipefail
           gh api -X PATCH "/user/packages/container/liki-agent-runtime" -F visibility=public \
             || echo "::warning::could not flip package visibility; set it to public in package settings"
-
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --title "liki-agent-runtime $GITHUB_REF_NAME" \
-            --generate-notes
