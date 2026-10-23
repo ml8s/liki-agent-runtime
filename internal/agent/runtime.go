@@ -650,6 +650,47 @@ func errorFields(cause error) (code, message string) {
 	return domain.CodeRuntimeFailed, runtimeErr.Error()
 }
 
+// runSessionID 返回 Run 的 run-scoped ADK 会话标识：会话即运行，
+// 终态删除，不承载跨 Run 的持久历史（持久历史归调用方所有）。
+func runSessionID(runID string) string {
+	return "run:" + runID
+}
+
+// normalizeRunRequest 去除标识符、协议与用户消息的首尾空白。Run 入口的
+// 所有下游（审计、会话、模型输入）都消费规范化后的值。
+func normalizeRunRequest(request RunRequest) RunRequest {
+	request.RunID = strings.TrimSpace(request.RunID)
+	request.ThreadID = strings.TrimSpace(request.ThreadID)
+	request.UserID = strings.TrimSpace(request.UserID)
+	request.Protocol = strings.TrimSpace(request.Protocol)
+	request.UserMessage = strings.TrimSpace(request.UserMessage)
+	return request
+}
+
+// validateRunRequest 校验一次执行的入参不变量：三类标识符必须存在且为
+// 有界可打印字符，用户消息不得为空，会话历史不得超限。
+func validateRunRequest(request RunRequest) error {
+	switch {
+	case request.RunID == "":
+		return domain.NewError(domain.CodeRunIDRequired, "run id is required", domain.ErrInvalidInput)
+	case request.ThreadID == "":
+		return domain.NewError(domain.CodeThreadIDRequired, "thread id is required", domain.ErrInvalidInput)
+	case request.UserID == "":
+		return domain.NewError(domain.CodeUserIDRequired, "user id is required", domain.ErrInvalidInput)
+	case request.UserMessage == "":
+		return domain.NewError(domain.CodeUserMessageRequired, "user message is required", domain.ErrInvalidInput)
+	case !ValidIdentifier(request.RunID):
+		return domain.NewError(domain.CodeRunIDInvalid, "run id must contain at most 128 printable bytes", domain.ErrInvalidInput)
+	case !ValidIdentifier(request.ThreadID):
+		return domain.NewError(domain.CodeThreadIDInvalid, "thread id must contain at most 128 printable bytes", domain.ErrInvalidInput)
+	case !ValidIdentifier(request.UserID):
+		return domain.NewError(domain.CodeUserIDInvalid, "user id must contain at most 128 printable bytes", domain.ErrInvalidInput)
+	case len(request.History) > MaxHistoryMessages:
+		return domain.NewError(domain.CodeHistoryInvalid, fmt.Sprintf("conversation history exceeds %d messages", MaxHistoryMessages), domain.ErrInvalidInput)
+	}
+	return nil
+}
+
 // Run executes the shared ADK runtime and exposes native ADK events to a
 // protocol adapter. It is not a public API and creates no second business path.
 func (r *Runtime) Run(
@@ -661,23 +702,9 @@ func (r *Runtime) Run(
 	request.ThreadID = strings.TrimSpace(request.ThreadID)
 	request.UserID = strings.TrimSpace(request.UserID)
 	request.Protocol = strings.TrimSpace(request.Protocol)
-	switch {
-	case request.RunID == "":
-		return RunResult{}, domain.NewError(domain.CodeRunIDRequired, "run id is required", domain.ErrInvalidInput)
-	case request.ThreadID == "":
-		return RunResult{}, domain.NewError(domain.CodeThreadIDRequired, "thread id is required", domain.ErrInvalidInput)
-	case request.UserID == "":
-		return RunResult{}, domain.NewError(domain.CodeUserIDRequired, "user id is required", domain.ErrInvalidInput)
-	case strings.TrimSpace(request.UserMessage) == "":
-		return RunResult{}, domain.NewError(domain.CodeUserMessageRequired, "user message is required", domain.ErrInvalidInput)
-	case !ValidIdentifier(request.RunID):
-		return RunResult{}, domain.NewError(domain.CodeRunIDInvalid, "run id must contain at most 128 printable bytes", domain.ErrInvalidInput)
-	case !ValidIdentifier(request.ThreadID):
-		return RunResult{}, domain.NewError(domain.CodeThreadIDInvalid, "thread id must contain at most 128 printable bytes", domain.ErrInvalidInput)
-	case !ValidIdentifier(request.UserID):
-		return RunResult{}, domain.NewError(domain.CodeUserIDInvalid, "user id must contain at most 128 printable bytes", domain.ErrInvalidInput)
-	case len(request.History) > MaxHistoryMessages:
-		return RunResult{}, domain.NewError(domain.CodeHistoryInvalid, fmt.Sprintf("conversation history exceeds %d messages", MaxHistoryMessages), domain.ErrInvalidInput)
+	request = normalizeRunRequest(request)
+	if err := validateRunRequest(request); err != nil {
+		return RunResult{}, err
 	}
 	if err := r.ensureDurableRunID(ctx, request.RunID); err != nil {
 		return RunResult{}, err
@@ -716,9 +743,7 @@ func (r *Runtime) Run(
 		capturePlain: !r.entrypoint.Output.Structured(),
 	}
 	projector := newEventProjector(r.definition)
-	// Session identity is run-scoped. Thread identity remains owned by the
-	// application database, preventing implicit duplication of durable history.
-	sessionID := "run:" + request.RunID
+	sessionID := runSessionID(request.RunID)
 	scope := &llmRunScope{
 		runID:             domain.ID(request.RunID),
 		threadID:          domain.ID(request.ThreadID),
