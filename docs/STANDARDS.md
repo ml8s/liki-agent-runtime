@@ -59,17 +59,6 @@ reviewed candidate replaces this service's local loader behavior.
 
 ## Deployment model
 
-### Phased optimization plan
-
-| Phase | Scope | Acceptance gate |
-|---|---|---|
-| 1. Safe single-process mode | Explicit topology guard, official ADK session and A2A task-store injection points, readiness drain | Default behavior is unchanged; `multi` fails closed; official-interface injection is tested; no experimental cluster mode |
-| 2. Shared state design | Select PostgreSQL/Spanner (or official Vertex AI) ADK sessions, database A2A tasks, and transactional audit/run ownership | Official conformance tests plus cross-replica uniqueness, cancellation, drain, and failure tests pass |
-| 3. Routing design | Choose A2A distributed execution, task ownership routing, or explicit AG-UI stream affinity | `GetTask`/`CancelTask` work on any A2A replica and AG-UI stream behavior is deterministic during rollout |
-| 4. Rollout authorization | Assembly image digest lock (liki-deploy), orchestration manifests, chaos tests | New/old replicas cannot execute mismatched behavior unexpectedly; kill/drain tests preserve audit invariants |
-
-Only phase 1 is implemented. Later phases require measured capacity or availability requirements and a reviewed design.
-
 ### Current supported topology
 
 The service is deliberately **single-process/single-replica**:
