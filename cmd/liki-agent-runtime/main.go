@@ -55,11 +55,6 @@ func run() (err error) {
 	}
 	logger := newLogger(cfg)
 	slog.SetDefault(logger)
-	// Renamed-variable migration window: surface every old name that still
-	// provided an effective value so operators can move before removal.
-	for _, key := range cfg.DeprecatedKeys {
-		logger.Warn("config_key_deprecated", "old_key", key)
-	}
 	if cfg.CallbackURL != "" && cfg.CallbackSecret == "" {
 		logger.Warn("run_callback_disabled",
 			"reason", "LIKI_AGENT_RUNTIME_CALLBACK_SECRET is empty; run-completion callbacks stay disabled")

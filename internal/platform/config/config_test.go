@@ -1,7 +1,6 @@
 package config_test
 
 import (
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -36,18 +35,13 @@ func TestLoadValidConfiguration(t *testing.T) {
 	if cfg.Topology != config.TopologySingle {
 		t.Fatalf("topology = %q, want single", cfg.Topology)
 	}
-	// The renamed-variable window keeps the old name readable as a
-	// deprecated fallback and records it for the startup warning.
-	t.Setenv("LIKI_MAX_CONCURRENT_RUNS", "7")
+	t.Setenv("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS", "7")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(max concurrent runs) error = %v", err)
 	}
 	if cfg.MaxConcurrentRuns != 7 {
 		t.Fatalf("max concurrent runs = %d, want 7", cfg.MaxConcurrentRuns)
-	}
-	if !slices.Equal(cfg.DeprecatedKeys, []string{"LIKI_MAX_CONCURRENT_RUNS"}) {
-		t.Fatalf("deprecated keys = %v, want [LIKI_MAX_CONCURRENT_RUNS]", cfg.DeprecatedKeys)
 	}
 	// The provider vocabulary is open: the value is an audit provenance
 	// label and a structured-output hint, not a protocol switch.
@@ -237,42 +231,29 @@ func TestLoadCallbackConfiguration(t *testing.T) {
 	}
 }
 
-func TestRenamedVariablesRemainReadableDuringMigration(t *testing.T) {
+// After the migration window closed, the pre-rename names are no longer
+// read: an old name alone must not configure the runtime.
+func TestLegacyConfigNamesAreIgnored(t *testing.T) {
 	baseEnv(t)
-	// Suppress the canonical names so the deprecated fallbacks take effect.
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_BASE_URL", "")
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_MODEL", "")
-	t.Setenv("LIKI_LLM_BASE_URL", "https://legacy.example/v1")
-	t.Setenv("LIKI_LLM_MODEL", "legacy-model")
 	t.Setenv("LIKI_RUN_TIMEOUT_SECONDS", "77")
+	t.Setenv("LIKI_MAX_CONCURRENT_RUNS", "9")
 	t.Setenv("LIKI_AGENT_RUNTIME_ADDR", ":9083")
+	t.Setenv("LIKI_LLM_MODEL", "legacy-model")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.LLMBaseURL != "https://legacy.example/v1" || cfg.LLMModel != "legacy-model" ||
-		cfg.RunTimeout != 77*time.Second || cfg.ProtocolAddr != ":9083" {
-		t.Fatalf("fallback values = %q/%q/%v/%q", cfg.LLMBaseURL, cfg.LLMModel, cfg.RunTimeout, cfg.ProtocolAddr)
+	if cfg.RunTimeout != 600*time.Second {
+		t.Fatalf("run timeout = %v, want the 600s default", cfg.RunTimeout)
 	}
-	want := []string{"LIKI_AGENT_RUNTIME_ADDR", "LIKI_LLM_BASE_URL", "LIKI_LLM_MODEL", "LIKI_RUN_TIMEOUT_SECONDS"}
-	if !slices.Equal(cfg.DeprecatedKeys, want) {
-		t.Fatalf("deprecated keys = %v, want %v", cfg.DeprecatedKeys, want)
+	if cfg.MaxConcurrentRuns != 32 {
+		t.Fatalf("max concurrent runs = %d, want the 32 default", cfg.MaxConcurrentRuns)
 	}
-}
-
-func TestNewNameWinsOverOldName(t *testing.T) {
-	baseEnv(t)
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_MODEL", "new-model")
-	t.Setenv("LIKI_LLM_MODEL", "old-model")
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+	if cfg.ProtocolAddr != ":8083" {
+		t.Fatalf("protocol addr = %q, want the :8083 default", cfg.ProtocolAddr)
 	}
-	if cfg.LLMModel != "new-model" {
-		t.Fatalf("model = %q, want new-model", cfg.LLMModel)
-	}
-	if slices.Contains(cfg.DeprecatedKeys, "LIKI_LLM_MODEL") {
-		t.Fatalf("the winning new name must not be reported deprecated: %v", cfg.DeprecatedKeys)
+	if cfg.LLMModel != "glm-5.3-flash" {
+		t.Fatalf("model = %q, want the canonical-name value", cfg.LLMModel)
 	}
 }
 
