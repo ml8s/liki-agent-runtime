@@ -556,39 +556,12 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 		return nil
 	}
 
-	// Close in-flight model calls, then stranded delegations and tools, while
-	// keeping the run scope for a retryable terminal append.
-	var terminalErr error
-	if ledgerErr := r.llm.closeActive(scope, runtimeError(runErr)); ledgerErr != nil {
-		if reconcileErr := r.llm.reconcile(scope, ledgerErr); reconcileErr == nil {
-			ledgerErr = nil
-		} else {
-			ledgerErr = reconcileErr
-		}
-		if ledgerErr != nil {
-			terminalErr = ledgerErr
-		}
-	}
-	if auditErr := r.delegationAuditor.FailPending(ctx, scope); auditErr != nil && terminalErr == nil {
-		terminalErr = auditErr
-	}
-	if auditErr := r.toolAuditor.FailPending(ctx, scope); auditErr != nil && terminalErr == nil {
-		terminalErr = auditErr
-	}
-
-	cause := runErr
-	if cause == nil {
-		cause = terminalErr
-	}
-	eventType := audit.EventRunCompleted
-	status := audit.StatusSucceeded
-	if cause != nil {
-		eventType = audit.EventRunFailed
-		status = audit.StatusFailed
-	}
-	event := r.runEvent(ctx, scope, eventType, status, cause)
-	if recordErr := r.recordAuditWithRetry(ctx, &event); recordErr != nil {
-		return recordErr
+	// 终态证据事务（与 Run 共用唯一实现，见 run_evidence.go）：关闭
+	// in-flight → 补偿 → 终态事件。追加失败时直接返回——作用域保留，
+	// 执行方清理回调负责重试；在此之前不释放任何进程状态。因果与补偿
+	// 错误已编码为终态事件的失败原因。
+	if err := r.closeRunEvidence(ctx, scope, runErr); err != nil {
+		return err
 	}
 
 	// Terminal evidence is durable: release process state exactly once. Cleanup
@@ -608,7 +581,7 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 		scope.releaseRun()
 	}
 	r.runs.finish(string(scope.runID))
-	return terminalErr
+	return nil
 }
 
 // runEvent is the single constructor for run-lifecycle audit events, shared by
@@ -780,40 +753,13 @@ func (r *Runtime) Run(
 	}
 	defer func() {
 		auditCtx := context.WithoutCancel(ctx)
-		// Close in-flight model calls, then stranded delegations and tools,
-		// while keeping the run scope so the terminal event is appended before
-		// any process state is released (mirrors EndAuditRun's ordering).
-		ledgerErr := r.llm.closeActive(scope, runtimeError(runErr))
-		if ledgerErr != nil {
-			if reconcileErr := r.llm.reconcile(scope, ledgerErr); reconcileErr == nil {
-				ledgerErr = nil
-			} else {
-				ledgerErr = reconcileErr
-			}
+		// 终态证据事务（唯一实现见 run_evidence.go）：终态事件先于任何
+		// 进程状态释放。
+		if err := r.closeRunEvidence(auditCtx, scope, runErr); err != nil && runErr == nil {
+			runErr = err
 		}
-		if ledgerErr != nil && runErr == nil {
-			runErr = ledgerErr
-		}
-		if delegationAuditErr := r.delegationAuditor.FailPending(auditCtx, scope); delegationAuditErr != nil && runErr == nil {
-			runErr = delegationAuditErr
-		}
-		if toolAuditErr := r.toolAuditor.FailPending(auditCtx, scope); toolAuditErr != nil && runErr == nil {
-			runErr = toolAuditErr
-		}
-		eventType := audit.EventRunCompleted
-		status := audit.StatusSucceeded
-		var auditFailure error
-		if runErr != nil {
-			eventType = audit.EventRunFailed
-			status = audit.StatusFailed
-			auditFailure = runErr
-		}
-		if auditErr := r.recordRunAudit(auditCtx, scope, eventType, status, auditFailure); auditErr != nil && runErr == nil {
-			runErr = auditErr
-		}
-		// Terminal evidence has been attempted; release process state now. A
-		// cleanup failure is operational noise, not a change to the already
-		// durable execution outcome.
+		// 终态事件已尝试落盘；此后释放进程状态。清理失败属运维噪音，
+		// 不改变已持久化的执行结果。
 		r.llm.forget(sessionID)
 		if deleteErr := r.sessions.Delete(auditCtx, &session.DeleteRequest{
 			AppName:   r.config.AppName,
