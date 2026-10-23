@@ -6,7 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE_TAG="${IMAGE_TAG:-local}"
-IMAGE="${IMAGE:-${LIKI_AGENT_RUNTIME_IMAGE:-ghcr.io/ml8s/liki-agent-runtime:$IMAGE_TAG}}"
+IMAGE="${IMAGE:-${LIKI_AGENT_RUNTIME_IMAGE:-liki-local/liki-agent-runtime:$IMAGE_TAG}}"
 PORT="${AGENTS_SMOKE_PORT:-18083}"
 OPS_PORT="${AGENTS_SMOKE_OPS_PORT:-18085}"
 NAME="liki-agent-runtime-smoke-$$"
