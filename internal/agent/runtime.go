@@ -57,7 +57,7 @@ type Runtime struct {
 	sessions          session.Service
 	runner            *runner.Runner
 	runnerConfig      runner.Config
-	llm               *llmLedger
+	callAuditor       *llmCallAuditor
 	delegationAuditor *AgentReferenceAuditor
 	toolAuditor       *ToolExecutionAuditor
 	tracer            trace.Tracer
@@ -225,7 +225,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		}).resolve
 	}
 	temperature := float32(config.Temperature)
-	ledger := newLLMLedger(config.AuditRecorder, config.Metrics, config.Provider, config.Deployment, config.Now)
+	callAuditor := newLLMCallAuditor(config.AuditRecorder, config.Metrics, config.Provider, config.Deployment, config.Now)
 	mcpToolsets, err := newMCPToolsets(config)
 	if err != nil {
 		return nil, err
@@ -236,7 +236,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		config.Now,
 		config.Provider,
 		config.Deployment,
-		ledger.scope,
+		callAuditor.scope,
 	)
 	delegationAuditor := newAgentReferenceAuditor(
 		config.AuditRecorder,
@@ -244,7 +244,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		config.Now,
 		config.Deployment,
 		entrypoint.Name,
-		ledger.scope,
+		callAuditor.scope,
 	)
 	builtAgents := make(map[string]agent.Agent, len(config.Deployment.Spec.Agents))
 	building := make(map[string]struct{})
@@ -307,13 +307,13 @@ func NewRuntime(config Config) (*Runtime, error) {
 			OutputKey:       outputKey,
 			IsEntrypoint:    definition.Name == entrypoint.Name,
 			BeforeModelCallbacks: []llmagent.BeforeModelCallback{
-				ledger.beforeModel,
+				callAuditor.beforeModel,
 			},
 			AfterModelCallbacks: []llmagent.AfterModelCallback{
-				ledger.afterModel,
+				callAuditor.afterModel,
 			},
 			OnModelErrorCallbacks: []llmagent.OnModelErrorCallback{
-				ledger.onModelError,
+				callAuditor.onModelError,
 			},
 			BeforeAgentCallbacks: []agent.BeforeAgentCallback{
 				delegationAuditor.BeforeAgent,
@@ -366,7 +366,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		sessions:          sessionService,
 		runner:            runnerInstance,
 		runnerConfig:      runnerConfig,
-		llm:               ledger,
+		callAuditor:       callAuditor,
 		delegationAuditor: delegationAuditor,
 		toolAuditor:       toolAuditor,
 		tracer:            tracer,
@@ -506,7 +506,7 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Aud
 		r.runs.finish(scope.RunID)
 		return err
 	}
-	ledgerScope := &llmRunScope{
+	ledgerScope := &runScope{
 		runID:             domain.ID(scope.RunID),
 		threadID:          domain.ID(scope.ThreadID),
 		userID:            scope.UserID,
@@ -522,7 +522,7 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Aud
 		releaseRun:        releaseRun,
 		activeCalls:       make(map[string]llmCallRuntime),
 	}
-	if !r.llm.begin(sessionID, ledgerScope) {
+	if !r.callAuditor.begin(sessionID, ledgerScope) {
 		releaseRun()
 		r.runs.finish(scope.RunID)
 		return domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
@@ -530,7 +530,7 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Aud
 	event := r.runEvent(ctx, ledgerScope, audit.EventRunStarted, audit.StatusRunning, nil)
 	if err := r.recordAuditWithRetry(ctx, &event); err != nil {
 		r.runs.finish(scope.RunID)
-		_, _ = r.llm.end(sessionID, err)
+		_, _ = r.callAuditor.end(sessionID, err)
 		_ = r.delegationAuditor.FailPending(ctx, ledgerScope)
 		_ = r.toolAuditor.FailPending(ctx, ledgerScope)
 		releaseRun()
@@ -551,7 +551,7 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 	if sessionID == "" {
 		return nil
 	}
-	scope, existed := r.llm.scope(sessionID)
+	scope, existed := r.callAuditor.scope(sessionID)
 	if !existed {
 		return nil
 	}
@@ -576,7 +576,7 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 			"error", runtimeError(deleteErr).Error(),
 		)
 	}
-	r.llm.forget(sessionID)
+	r.callAuditor.forget(sessionID)
 	if scope.releaseRun != nil {
 		scope.releaseRun()
 	}
@@ -589,7 +589,7 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 // EndAuditRun path.
 func (r *Runtime) runEvent(
 	ctx context.Context,
-	scope *llmRunScope,
+	scope *runScope,
 	eventType audit.EventType,
 	status audit.Status,
 	cause error,
@@ -717,7 +717,7 @@ func (r *Runtime) Run(
 	}
 	projector := newEventProjector(r.definition)
 	sessionID := runSessionID(request.RunID)
-	scope := &llmRunScope{
+	scope := &runScope{
 		runID:             domain.ID(request.RunID),
 		threadID:          domain.ID(request.ThreadID),
 		userID:            request.UserID,
@@ -734,14 +734,14 @@ func (r *Runtime) Run(
 	}
 	// 聚合用量在所有退出路径回填（含失败与取消）。
 	defer func() { result.Usage = scope.usage() }()
-	if !r.llm.begin(sessionID, scope) {
+	if !r.callAuditor.begin(sessionID, scope) {
 		runErr = domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
 		return RunResult{}, runErr
 	}
 	if auditErr := r.recordRunAudit(ctx, scope, audit.EventRunStarted, audit.StatusRunning, nil); auditErr != nil {
 		runErr = auditErr
-		auditScope, _ := r.llm.scope(sessionID)
-		_, _ = r.llm.end(sessionID, runErr)
+		auditScope, _ := r.callAuditor.scope(sessionID)
+		_, _ = r.callAuditor.end(sessionID, runErr)
 		_ = r.delegationAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
 		_ = r.toolAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
 		_ = r.sessions.Delete(context.WithoutCancel(ctx), &session.DeleteRequest{
@@ -760,7 +760,7 @@ func (r *Runtime) Run(
 		}
 		// 终态事件已尝试落盘；此后释放进程状态。清理失败属运维噪音，
 		// 不改变已持久化的执行结果。
-		r.llm.forget(sessionID)
+		r.callAuditor.forget(sessionID)
 		if deleteErr := r.sessions.Delete(auditCtx, &session.DeleteRequest{
 			AppName:   r.config.AppName,
 			UserID:    request.UserID,
@@ -871,7 +871,7 @@ func (r *Runtime) ensureDurableRunID(ctx context.Context, runID string) error {
 
 func (r *Runtime) recordRunAudit(
 	ctx context.Context,
-	scope *llmRunScope,
+	scope *runScope,
 	eventType audit.EventType,
 	status audit.Status,
 	cause error,

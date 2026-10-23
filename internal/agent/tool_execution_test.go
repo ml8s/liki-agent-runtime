@@ -38,7 +38,7 @@ func newToolAuditor(t *testing.T) (*ToolExecutionAuditor, *recordingAudit, *stub
 	deployment := NewTestDeployment(t)
 	events := &recordingAudit{}
 	metrics := &stubMetrics{}
-	ledger := newLLMLedger(events, metrics, "test-provider", deployment, func() time.Time {
+	ledger := newLLMCallAuditor(events, metrics, "test-provider", deployment, func() time.Time {
 		return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	})
 	auditor := newToolExecutionAuditor(
@@ -218,7 +218,7 @@ func (r *failOnceAudit) Record(ctx context.Context, event *audit.Event) error {
 func TestToolAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 	events := &failOnceAudit{eventType: audit.EventToolCallCompleted}
 	deployment := NewTestDeployment(t)
-	ledger := newLLMLedger(events, nil, "test-provider", deployment, fixedLedgerNow)
+	ledger := newLLMCallAuditor(events, nil, "test-provider", deployment, fixedLedgerNow)
 	auditor := newToolExecutionAuditor(
 		events,
 		nil,
@@ -262,7 +262,7 @@ func TestToolAuditorFailPendingRetainsRecordForRetry(t *testing.T) {
 	recorder := &failOnceStubAudit{eventType: audit.EventToolCallFailed}
 	deployment := NewTestDeployment(t)
 	metrics := &stubMetrics{}
-	ledger := newLLMLedger(recorder, metrics, "test-provider", deployment, fixedLedgerNow)
+	ledger := newLLMCallAuditor(recorder, metrics, "test-provider", deployment, fixedLedgerNow)
 	auditor := newToolExecutionAuditor(recorder, nil, fixedLedgerNow, "test-provider", deployment, ledger.scope)
 	ledger.begin("session_retry", newTestScope())
 	ctx := &fakeAgentContext{

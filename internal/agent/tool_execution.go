@@ -46,7 +46,7 @@ type ToolExecutionAuditor struct {
 	provider string
 
 	agents map[string]*AgentDefinition
-	scope  func(sessionID string) (*llmRunScope, bool)
+	scope  func(sessionID string) (*runScope, bool)
 
 	mu      sync.Mutex
 	pending map[string]ToolExecutionRecord
@@ -58,7 +58,7 @@ func newToolExecutionAuditor(
 	now func() time.Time,
 	provider string,
 	deployment *Deployment,
-	scope func(sessionID string) (*llmRunScope, bool),
+	scope func(sessionID string) (*runScope, bool),
 ) *ToolExecutionAuditor {
 	agents := make(map[string]*AgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
@@ -211,7 +211,7 @@ func (a *ToolExecutionAuditor) AfterTool(
 // transient failure stays retryable by the run's cleanup callback.
 func (a *ToolExecutionAuditor) FailPending(
 	ctx context.Context,
-	scope *llmRunScope,
+	scope *runScope,
 ) error {
 	a.mu.Lock()
 	pending := make(map[string]ToolExecutionRecord)
@@ -293,7 +293,7 @@ func (a *ToolExecutionAuditor) startedRecord(
 // missing scope fails closed instead of dropping evidence.
 func (a *ToolExecutionAuditor) record(
 	ctx context.Context,
-	scope *llmRunScope,
+	scope *runScope,
 	record ToolExecutionRecord,
 	eventType audit.EventType,
 ) error {

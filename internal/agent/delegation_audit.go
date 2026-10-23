@@ -44,7 +44,7 @@ type AgentReferenceAuditor struct {
 	now        func() time.Time
 	entrypoint string
 	agents     map[string]*AgentDefinition
-	scope      func(sessionID string) (*llmRunScope, bool)
+	scope      func(sessionID string) (*runScope, bool)
 
 	mu      sync.Mutex
 	pending map[string]DelegationExecutionRecord
@@ -56,7 +56,7 @@ func newAgentReferenceAuditor(
 	now func() time.Time,
 	deployment *Deployment,
 	entrypoint string,
-	scope func(sessionID string) (*llmRunScope, bool),
+	scope func(sessionID string) (*runScope, bool),
 ) *AgentReferenceAuditor {
 	agents := make(map[string]*AgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
@@ -135,7 +135,7 @@ func (a *AgentReferenceAuditor) AfterAgent(ctx adkagent.Context) (*genai.Content
 // completion signal for that delegation.
 func (a *AgentReferenceAuditor) CompleteByToolResponse(
 	ctx context.Context,
-	scope *llmRunScope,
+	scope *runScope,
 	event *session.Event,
 ) error {
 	if event == nil || event.Content == nil {
@@ -175,7 +175,7 @@ func (a *AgentReferenceAuditor) pendingForTarget(target string) (string, Delegat
 // releases its pending record.
 func (a *AgentReferenceAuditor) complete(
 	ctx context.Context,
-	scope *llmRunScope,
+	scope *runScope,
 	key string,
 	record DelegationExecutionRecord,
 ) error {
@@ -199,7 +199,7 @@ func (a *AgentReferenceAuditor) complete(
 // because the run failed or was cancelled. A record is dequeued only after its
 // terminal evidence is durably appended, so a transient failure stays
 // retryable by the run's cleanup callback.
-func (a *AgentReferenceAuditor) FailPending(ctx context.Context, scope *llmRunScope) error {
+func (a *AgentReferenceAuditor) FailPending(ctx context.Context, scope *runScope) error {
 	a.mu.Lock()
 	pending := make(map[string]DelegationExecutionRecord)
 	for key, record := range a.pending {
@@ -263,7 +263,7 @@ func (a *AgentReferenceAuditor) startedRecord(ctx adkagent.Context) (DelegationE
 	}, nil
 }
 
-func (a *AgentReferenceAuditor) record(ctx context.Context, scope *llmRunScope, record DelegationExecutionRecord, eventType audit.EventType) error {
+func (a *AgentReferenceAuditor) record(ctx context.Context, scope *runScope, record DelegationExecutionRecord, eventType audit.EventType) error {
 	target, ok := a.agents[record.TargetAgent]
 	if !ok {
 		return domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("delegated agent %q is not deployed", record.TargetAgent), nil)

@@ -35,7 +35,7 @@ func newDelegationAuditor(t *testing.T, branch string) (*AgentReferenceAuditor, 
 
 	events := &recordingAudit{}
 	metrics := &stubMetrics{}
-	ledger := newLLMLedger(events, metrics, "test-provider", deployment, func() time.Time {
+	ledger := newLLMCallAuditor(events, metrics, "test-provider", deployment, func() time.Time {
 		return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	})
 	auditor := newAgentReferenceAuditor(
@@ -111,7 +111,7 @@ func TestAgentReferenceAuditorSkipsEntrypoint(t *testing.T) {
 
 func TestAgentReferenceAuditorFailsPending(t *testing.T) {
 	auditor, events, metrics, ctx := newDelegationAuditor(t, "coordinator.worker")
-	ledger := newLLMLedger(events, metrics, "test-provider", NewTestDeployment(t), func() time.Time {
+	ledger := newLLMCallAuditor(events, metrics, "test-provider", NewTestDeployment(t), func() time.Time {
 		return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	})
 	ledger.begin("session_1", newTestScope())
@@ -156,7 +156,7 @@ func TestAgentReferenceAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testi
 		t.Fatalf("validate deployment: %v", err)
 	}
 	scope := newTestScope()
-	ledger := newLLMLedger(events, nil, "test-provider", deployment, fixedLedgerNow)
+	ledger := newLLMCallAuditor(events, nil, "test-provider", deployment, fixedLedgerNow)
 	ledger.begin("session_1", scope)
 	auditor := newAgentReferenceAuditor(events, nil, fixedLedgerNow, deployment, "coordinator", ledger.scope)
 	ctx := &fakeAgentContext{

@@ -109,21 +109,21 @@ func (r *stubAuditRecorder) lastEvent() audit.Event {
 	return r.events[len(r.events)-1]
 }
 
-func newTestLedger(t *testing.T) (*llmLedger, *stubAuditRecorder) {
+func newTestLedger(t *testing.T) (*llmCallAuditor, *stubAuditRecorder) {
 	t.Helper()
 	recorder := &stubAuditRecorder{}
-	ledger := newLLMLedger(recorder, nil, "test", NewTestDeployment(t), func() time.Time {
+	callAuditor := newLLMCallAuditor(recorder, nil, "test", NewTestDeployment(t), func() time.Time {
 		return time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
 	})
-	return ledger, recorder
+	return callAuditor, recorder
 }
 
 func fixedLedgerNow() time.Time {
 	return time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
 }
 
-func newTestScope() *llmRunScope {
-	return &llmRunScope{
+func newTestScope() *runScope {
+	return &runScope{
 		runID:             "run_1",
 		threadID:          "thread_1",
 		userID:            "user_1",
@@ -159,11 +159,11 @@ func TestLedgerReconciledTerminalKeepsTrace(t *testing.T) {
 		traceID = "0102030405060708090a0b0c0d0e0f10"
 		spanID  = "0102030405060708"
 	)
-	ledger, recorder := newTestLedger(t)
+	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
 	scope.traceID = traceID
 	scope.spanID = spanID
-	if !ledger.begin("session_trace", scope) {
+	if !callAuditor.begin("session_trace", scope) {
 		t.Fatal("begin() returned false")
 	}
 	ctx := &fakeAgentContext{
@@ -172,12 +172,12 @@ func TestLedgerReconciledTerminalKeepsTrace(t *testing.T) {
 		agentName:    "coordinator",
 		traceContext: traceCtxWith(traceID, spanID),
 	}
-	if _, err := ledger.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
+	if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
 		t.Fatalf("beforeModel() error = %v", err)
 	}
 	// Reconciliation runs without a live span (context.Background inside
 	// failActive); the scope-carried trace must survive.
-	if _, err := ledger.end("session_trace", nil); err != nil {
+	if _, err := callAuditor.end("session_trace", nil); err != nil {
 		t.Fatalf("end() error = %v", err)
 	}
 	failed := recorder.eventsOfType(audit.EventLLMCallFailed)
@@ -190,20 +190,20 @@ func TestLedgerReconciledTerminalKeepsTrace(t *testing.T) {
 }
 
 func TestLedgerLifecycleCompletesNormally(t *testing.T) {
-	ledger, recorder := newTestLedger(t)
+	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	if !ledger.begin("session_1", scope) {
+	if !callAuditor.begin("session_1", scope) {
 		t.Fatal("begin() returned false")
 	}
 	ctx := testCtx()
-	if _, err := ledger.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
+	if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
 		t.Fatalf("beforeModel() error = %v", err)
 	}
 	if got := len(recorder.eventsOfType(audit.EventLLMCallStarted)); got != 1 {
 		t.Fatalf("started events = %d, want 1", got)
 	}
 	response := &model.LLMResponse{ModelVersion: "test-model"}
-	if _, err := ledger.afterModel(ctx, response, nil); err != nil {
+	if _, err := callAuditor.afterModel(ctx, response, nil); err != nil {
 		t.Fatalf("afterModel() error = %v", err)
 	}
 	if got := len(recorder.eventsOfType(audit.EventLLMCallCompleted)); got != 1 {
@@ -213,7 +213,7 @@ func TestLedgerLifecycleCompletesNormally(t *testing.T) {
 	if last.Status != audit.StatusSucceeded {
 		t.Fatalf("status = %s, want succeeded", last.Status)
 	}
-	if _, err := ledger.end("session_1", nil); err != nil {
+	if _, err := callAuditor.end("session_1", nil); err != nil {
 		t.Fatalf("end clean session: %v", err)
 	}
 	if got := len(recorder.eventsOfType(audit.EventLLMCallFailed)); got != 0 {
@@ -222,9 +222,9 @@ func TestLedgerLifecycleCompletesNormally(t *testing.T) {
 }
 
 func TestLedgerAggregatesRunUsage(t *testing.T) {
-	ledger, _ := newTestLedger(t)
+	callAuditor, _ := newTestLedger(t)
 	scope := newTestScope()
-	if !ledger.begin("session_1", scope) {
+	if !callAuditor.begin("session_1", scope) {
 		t.Fatal("begin() returned false")
 	}
 	ctx := testCtx()
@@ -237,10 +237,10 @@ func TestLedgerAggregatesRunUsage(t *testing.T) {
 		}},
 	}
 	for _, response := range responses {
-		if _, err := ledger.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
+		if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
 			t.Fatalf("beforeModel() error = %v", err)
 		}
-		if _, err := ledger.afterModel(ctx, response, nil); err != nil {
+		if _, err := callAuditor.afterModel(ctx, response, nil); err != nil {
 			t.Fatalf("afterModel() error = %v", err)
 		}
 	}
@@ -252,8 +252,8 @@ func TestLedgerAggregatesRunUsage(t *testing.T) {
 }
 
 func TestBeforeModelRejectsMissingAuditScope(t *testing.T) {
-	ledger, _ := newTestLedger(t)
-	_, err := ledger.beforeModel(
+	callAuditor, _ := newTestLedger(t)
+	_, err := callAuditor.beforeModel(
 		&fakeAgentContext{sessionID: "missing", invocationID: "inv_missing", agentName: "coordinator"},
 		&model.LLMRequest{Model: "test-model"},
 	)
@@ -265,17 +265,17 @@ func TestBeforeModelRejectsMissingAuditScope(t *testing.T) {
 
 func TestLedgerRetainsActiveCallWhenTerminalAuditWriteFails(t *testing.T) {
 	recorder := &failOnceStubAudit{eventType: audit.EventLLMCallCompleted}
-	ledger := newLLMLedger(recorder, nil, "test", NewTestDeployment(t), fixedLedgerNow)
+	callAuditor := newLLMCallAuditor(recorder, nil, "test", NewTestDeployment(t), fixedLedgerNow)
 	scope := newTestScope()
-	if !ledger.begin("session_1", scope) {
+	if !callAuditor.begin("session_1", scope) {
 		t.Fatal("begin() returned false")
 	}
 	ctx := testCtx()
-	if _, err := ledger.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
+	if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
 		t.Fatalf("beforeModel() error = %v", err)
 	}
 	auditErr := errors.New("terminal audit unavailable")
-	if _, err := ledger.afterModel(ctx, &model.LLMResponse{}, nil); err == nil {
+	if _, err := callAuditor.afterModel(ctx, &model.LLMResponse{}, nil); err == nil {
 		t.Fatal("afterModel() unexpectedly survived terminal audit failure")
 	}
 	scope.mu.Lock()
@@ -284,7 +284,7 @@ func TestLedgerRetainsActiveCallWhenTerminalAuditWriteFails(t *testing.T) {
 	if active != 1 {
 		t.Fatalf("active calls after terminal audit failure = %d, want 1", active)
 	}
-	if err := ledger.reconcile(scope, auditErr); err != nil {
+	if err := callAuditor.reconcile(scope, auditErr); err != nil {
 		t.Fatalf("reconcile() error = %v", err)
 	}
 	scope.mu.Lock()
@@ -299,15 +299,15 @@ func TestLedgerRetainsActiveCallWhenTerminalAuditWriteFails(t *testing.T) {
 }
 
 func TestLedgerLifecycleFailurePath(t *testing.T) {
-	ledger, recorder := newTestLedger(t)
+	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	ledger.begin("session_1", scope)
+	callAuditor.begin("session_1", scope)
 	ctx := testCtx()
-	if _, err := ledger.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
+	if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
 		t.Fatalf("beforeModel() error = %v", err)
 	}
 	runErr := domain.NewError(domain.CodeRuntimeTimeout, "LLM timed out", nil)
-	_, modelErr := ledger.onModelError(ctx, &model.LLMRequest{Model: "test-model"}, runErr)
+	_, modelErr := callAuditor.onModelError(ctx, &model.LLMRequest{Model: "test-model"}, runErr)
 	if modelErr == nil {
 		t.Fatal("onModelError() should propagate the request error")
 	}
@@ -318,7 +318,7 @@ func TestLedgerLifecycleFailurePath(t *testing.T) {
 	if last.ErrorCode != domain.CodeRuntimeTimeout {
 		t.Fatalf("error_code = %s, want %s", last.ErrorCode, domain.CodeRuntimeTimeout)
 	}
-	if _, err := ledger.end("session_1", nil); err != nil {
+	if _, err := callAuditor.end("session_1", nil); err != nil {
 		t.Fatalf("end failed session: %v", err)
 	}
 	if got := len(recorder.eventsOfType(audit.EventLLMCallFailed)); got != 1 {
@@ -327,14 +327,14 @@ func TestLedgerLifecycleFailurePath(t *testing.T) {
 }
 
 func TestLedgerInterruptedRunFailsActiveCalls(t *testing.T) {
-	ledger, recorder := newTestLedger(t)
+	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	ledger.begin("session_1", scope)
+	callAuditor.begin("session_1", scope)
 	ctx := testCtx()
-	if _, err := ledger.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
+	if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
 		t.Fatalf("beforeModel() error = %v", err)
 	}
-	if _, err := ledger.end("session_1", nil); err != nil {
+	if _, err := callAuditor.end("session_1", nil); err != nil {
 		t.Fatalf("end interrupted session: %v", err)
 	}
 	if got := len(recorder.eventsOfType(audit.EventLLMCallFailed)); got != 1 {
@@ -350,14 +350,14 @@ func TestLedgerInterruptedRunFailsActiveCalls(t *testing.T) {
 }
 
 func TestLedgerOnModelErrorWithoutStartedRecordsStartedAndFailed(t *testing.T) {
-	ledger, recorder := newTestLedger(t)
+	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	if !ledger.begin("session_1", scope) {
+	if !callAuditor.begin("session_1", scope) {
 		t.Fatal("begin() returned false")
 	}
 	ctx := testCtx()
 	runErr := domain.NewError(domain.CodeRuntimeTimeout, "LLM timed out", nil)
-	if _, err := ledger.onModelError(ctx, &model.LLMRequest{Model: "test-model"}, runErr); err == nil {
+	if _, err := callAuditor.onModelError(ctx, &model.LLMRequest{Model: "test-model"}, runErr); err == nil {
 		t.Fatal("onModelError() should propagate the request error")
 	}
 	started := recorder.eventsOfType(audit.EventLLMCallStarted)
@@ -376,25 +376,25 @@ func TestLedgerOnModelErrorWithoutStartedRecordsStartedAndFailed(t *testing.T) {
 }
 
 func TestLedgerDuplicateBeginRejected(t *testing.T) {
-	ledger, _ := newTestLedger(t)
-	if !ledger.begin("session_1", newTestScope()) {
+	callAuditor, _ := newTestLedger(t)
+	if !callAuditor.begin("session_1", newTestScope()) {
 		t.Fatal("first begin should succeed")
 	}
-	if ledger.begin("session_1", newTestScope()) {
+	if callAuditor.begin("session_1", newTestScope()) {
 		t.Fatal("second begin should fail")
 	}
-	if _, err := ledger.end("session_1", nil); err != nil {
+	if _, err := callAuditor.end("session_1", nil); err != nil {
 		t.Fatalf("end duplicate-begin session: %v", err)
 	}
-	if !ledger.begin("session_1", newTestScope()) {
+	if !callAuditor.begin("session_1", newTestScope()) {
 		t.Fatal("begin after end should succeed")
 	}
 }
 
 func TestLedgerConcurrentCallbacksDoNotRace(t *testing.T) {
-	ledger, recorder := newTestLedger(t)
+	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	ledger.begin("session_1", scope)
+	callAuditor.begin("session_1", scope)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
@@ -406,12 +406,12 @@ func TestLedgerConcurrentCallbacksDoNotRace(t *testing.T) {
 				invocationID: fmt.Sprintf("inv_%d", i),
 				agentName:    "coordinator",
 			}
-			_, _ = ledger.beforeModel(invocationCtx, &model.LLMRequest{Model: "test-model"})
-			_, _ = ledger.afterModel(invocationCtx, &model.LLMResponse{ModelVersion: "test-model"}, nil)
+			_, _ = callAuditor.beforeModel(invocationCtx, &model.LLMRequest{Model: "test-model"})
+			_, _ = callAuditor.afterModel(invocationCtx, &model.LLMResponse{ModelVersion: "test-model"}, nil)
 		}()
 	}
 	wg.Wait()
-	if _, err := ledger.end("session_1", nil); err != nil {
+	if _, err := callAuditor.end("session_1", nil); err != nil {
 		t.Fatalf("end concurrent session: %v", err)
 	}
 	if got := len(recorder.eventsOfType(audit.EventLLMCallStarted)); got != 50 {
@@ -433,15 +433,15 @@ func TestLedgerUsesInvokingAgentPromptProvenance(t *testing.T) {
 	deployment.Spec.Agents = append(deployment.Spec.Agents, worker)
 
 	events := &stubAuditRecorder{}
-	ledger := newLLMLedger(events, nil, "test-provider", deployment, fixedLedgerNow)
+	callAuditor := newLLMCallAuditor(events, nil, "test-provider", deployment, fixedLedgerNow)
 	scope := newTestScope()
-	ledger.begin("session_worker", scope)
+	callAuditor.begin("session_worker", scope)
 	ctx := &fakeAgentContext{
 		sessionID:    "session_worker",
 		invocationID: "inv_worker",
 		agentName:    "worker",
 	}
-	if _, err := ledger.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
+	if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
 		t.Fatalf("beforeModel() error = %v", err)
 	}
 	started := events.eventsOfType(audit.EventLLMCallStarted)
