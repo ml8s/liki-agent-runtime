@@ -22,7 +22,7 @@ written to `bin/liki-agent-runtime`.
 
 ## Quick start
 
-Copy `.env.example` to `.env`; set `LIKI_LLM_API_KEY` and every endpoint
+Copy `.env.example` to `.env`; set `LIKI_AGENT_RUNTIME_LLM_API_KEY` and every endpoint
 variable named by `mcpServers`. Local development may leave the internal token
 empty to disable bearer authentication. Then run:
 
@@ -86,7 +86,7 @@ internal token cannot spoof a user identity into audit/provenance.
 The runtime is never directly public and never authenticates end users, issues
 sessions, stores conversations, or trusts unverified identities. Internet-facing
 rate limiting is the gateway's job; the internal per-source limiter only resists
-token brute force, while `LIKI_MAX_CONCURRENT_RUNS` bounds run concurrency.
+token brute force, while `LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS` bounds run concurrency.
 
 Local development may leave `LIKI_AGENT_RUNTIME_INTERNAL_TOKEN` empty, disabling bearer
 authentication, while AG-UI still requires `X-Liki-User-ID`. Invalid attempts
@@ -104,8 +104,8 @@ endpoint is HTTPS-only without embedded credentials.
 |---|---|
 | `LIKI_AGENT_RUNTIME_*` | service address, token, audit DB path, topology, deployment file, ops address (`OPS_ADDR`, default `:8085`), mutual-TLS listener (`TLS_ADDR` + `TLS_CERT`/`TLS_KEY`/`TLS_CLIENT_CA`), run callback (`CALLBACK_URL`/`CALLBACK_SECRET`) |
 | `LIKI_MCP_*` | endpoint/token bindings for logical MCP servers (`LIKI_MCP_<NAME>_URL` / `LIKI_MCP_<NAME>_TOKEN`) |
-| `LIKI_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
-| `LIKI_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
+| `LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
+| `LIKI_AGENT_RUNTIME_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
 | `LIKI_LOG_*` | structured logging |
 | `OTEL_*` | standard OpenTelemetry tracing settings |
 
@@ -113,7 +113,7 @@ MCP endpoint values are complete URLs; the gateway may own service prefixes
 (`/engine/mcp`, `/counsel/mcp/bazi`) while services expose `/mcp` and
 `/mcp/{domain}`. The runtime rewrites no MCP paths and adds no private headers.
 
-Empty `LIKI_LLM_STRUCTURED_OUTPUT` derives the mode from the deployment and
+Empty `LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT` derives the mode from the deployment and
 provider; explicit modes fail closed without an output schema. Per-Agent model
 settings live in the artifact. Concurrency is bounded to 1–1024; development
 alone permits local HTTP LLMs.

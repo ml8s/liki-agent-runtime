@@ -111,7 +111,7 @@ working session so the runtime does not retain prompts, model events, or tool
 responses in memory.
 Both protocol adapters enforce the configured total run deadline, and the
 runtime bounds concurrent model/MCP executions with
-`LIKI_MAX_CONCURRENT_RUNS`.
+`LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS`.
 
 The entrypoint `AgentDefinition` supplies instruction, an optional output
 schema, and the tool allowlist. Plain text is the default. When structured

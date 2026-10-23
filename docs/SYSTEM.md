@@ -47,28 +47,39 @@ schema artifact：
 
 ### 3.2 装配镜像（liki 侧构建，本仓是 base）
 
-liki 仓 `assembly/Dockerfile` 构建单套装配镜像，四份 profile 工件一起烘焙：
+liki 仓 `assembly/Dockerfile` 从显式 pin 的 runtime base 构建单套装配镜像，
+四份 profile 工件与技能包一并烘焙（无默认 ENV，选择权在部署）：
 
 ```dockerfile
-ARG BASE_IMAGE=liki-local/liki-agent-runtime:<runtime-sha>
+ARG BASE_IMAGE
+ARG DEPLOYMENT_DIR=/deployment
 FROM ${BASE_IMAGE}
-COPY dist/agents/ /deployment/
+COPY dist/agents/ ${DEPLOYMENT_DIR}/
+COPY dist/skills/ /skills/
+COPY dist/expert-packs/ /expert-packs/
 ```
 
-- 本仓只提供**纯运行时镜像**（`Dockerfile`，不打包任何工件）
-- `LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE`/`DIGEST` 由装配镜像内置，生产启动即校验工件
+- 本仓只提供**纯运行时镜像**（`Dockerfile`，不打包任何工件，仅烘焙安全默认
+  与容器审计库路径）
+- 工件 digest 由运行时加载工件时计算并进入审计；装配镜像不内置任何 ENV pin
+- 每个专家服务由部署注入 `LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE` 选择自己的工件
 
 ### 3.3 生产环境变量（deploy 注入）
 
-`liki-deploy/compose/docker-compose.yml` 为 liki-agent-runtime 服务注入：
+`liki-deploy/compose/docker-compose.yml` 通过共享锚注入公共环境，四个专家
+服务各自覆盖实例身份项：
 
-| env | 说明 |
-|---|---|
-| `LIKI_MCP_ENGINE_URL` / `LIKI_MCP_ENGINE_TOKEN` | 工件 mcpServers `engine` 的 endpointEnv/tokenEnv |
-| `LIKI_MCP_COUNSEL_URL` / `LIKI_MCP_COUNSEL_TOKEN` | 工件 mcpServers `counsel` 的 endpointEnv/tokenEnv |
-| `LIKI_LLM_*`、`LIKI_RUN_*`、`LIKI_LOG_*` | 模型（`BASE_URL`/`MODEL`/`PROVIDER` 必填；`MAX_OUTPUT_TOKENS` 可选）/超时/日志 |
+| 组 | env | 说明 |
+|---|---|---|
+| 公共 | `LIKI_AGENT_RUNTIME_INTERNAL_TOKEN`、`_TOPOLOGY`、`_PROTOCOL_ADDR`、`_TLS_ADDR`、`_TLS_CLIENT_CA`、`_CALLBACK_URL`、`_CALLBACK_SECRET` | 令牌、拓扑守卫、监听与回调接线 |
+| 公共 | `LIKI_MCP_ENGINE_URL`·`_TOKEN`、`LIKI_MCP_COUNSEL_URL`·`_TOKEN` | 工件 mcpServers 声明的 endpointEnv/tokenEnv |
+| 公共 | `LIKI_AGENT_RUNTIME_LLM_*`、`_RUN_TIMEOUT_SECONDS`、`_MAX_CONCURRENT_RUNS`、`_SHUTDOWN_TIMEOUT_SECONDS`、`_MCP_TIMEOUT_SECONDS`、`_MCP_HEALTH_TIMEOUT_SECONDS` | LLM 客户端与执行预算（宿主侧变量名由 deploy 仓定义，compose 映射到容器键） |
+| 公共 | `LIKI_LOG_FORMAT` / `LIKI_LOG_LEVEL` | 栈级日志约定 |
+| 逐服务 | `LIKI_AGENT_RUNTIME_PUBLIC_URL`、`_DEPLOYMENT_FILE`、`_AUDIT_DB_PATH`、`_TLS_CERT`、`_TLS_KEY` | 实例 DNS 名、工件选择、审计库路径、服务证书 |
 
-**命名必须与工件声明一致**（`runtime.go` 用 `os.LookupEnv(endpointEnv)` 读取），deploy 有环境一致性检查。审计使用工件版本与 digest，不单独配置工具版本。
+**命名必须与工件声明一致**（`runtime.go` 用 `os.LookupEnv(endpointEnv)` 读取），
+deploy 有环境一致性检查（`check_compose.py`）。审计使用工件版本与 digest，
+不单独配置工具版本。
 
 ### 3.4 协议与编排
 

@@ -163,6 +163,11 @@ func NewRuntime(config Config) (*Runtime, error) {
 		// Zero-value fallback must match platform/config's Load default.
 		config.MCPTimeout = 30 * time.Second
 	}
+	if config.MCPHealthTimeout <= 0 {
+		// Zero-value fallback: dependency discovery follows the tool-call
+		// budget unless the deployment separates the two.
+		config.MCPHealthTimeout = config.MCPTimeout
+	}
 	if config.MaxConcurrentRuns <= 0 {
 		// Zero-value fallback must match platform/config's Load default.
 		config.MaxConcurrentRuns = 32
@@ -279,7 +284,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 				tool.AllowedToolsPredicate(allowed),
 			))
 		}
-		if binding := skillBinding(config, definition); binding != nil {
+		if binding := skillBinding(definition); binding != nil {
 			skillToolset, err := newSkillToolset(binding)
 			if err != nil {
 				return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("build skill toolset for agent %q: %v", definition.Name, err), nil)

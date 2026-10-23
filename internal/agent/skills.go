@@ -35,18 +35,14 @@ func validateSkillToolsetAllow(tools []string) error {
 	return nil
 }
 
-// skillBinding resolves the effective skills binding for an agent. The
-// runtime SkillsRoot override (development only) replaces the deployment
-// root so host and container layouts can bind one fixture at different
-// absolute paths; production keeps the deployment value.
-func skillBinding(config Config, definition *AgentDefinition) *SkillsBinding {
+// skillBinding resolves the effective skills binding for an agent as a copy
+// of the deployment value: the artifact owns the root, and callers can adjust
+// the copy without mutating the shared definition.
+func skillBinding(definition *AgentDefinition) *SkillsBinding {
 	if definition.Skills == nil {
 		return nil
 	}
 	binding := *definition.Skills
-	if config.SkillsRoot != "" {
-		binding.Root = config.SkillsRoot
-	}
 	return &binding
 }
 

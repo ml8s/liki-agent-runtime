@@ -65,7 +65,13 @@ func checkMCPDependencyHealth(
 			return err
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, config.MCPTimeout)
+	// Hand-built test configs may leave the split health budget unset; the
+	// runtime constructor defaults it to the tool-call budget.
+	healthTimeout := config.MCPHealthTimeout
+	if healthTimeout <= 0 {
+		healthTimeout = config.MCPTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, healthTimeout)
 	defer cancel()
 
 	client := mcp.NewClient(

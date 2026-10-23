@@ -29,13 +29,11 @@ type Config struct {
 	MaxOutputTokens int
 	Deployment      *Deployment
 
-	// SkillsRoot overrides every agent's skills.root from the deployment so
-	// that development host and container layouts can point at the same
-	// fixture through different absolute paths. Platform config rejects it
-	// outside development; production always uses the deployment value.
-	SkillsRoot string
+	MCPTimeout time.Duration
 
-	MCPTimeout        time.Duration
+	// MCPHealthTimeout bounds MCP discovery and readiness checks. Zero
+	// follows the tool-call budget (MCPTimeout) at runtime construction.
+	MCPHealthTimeout  time.Duration
 	MaxConcurrentRuns int
 	Now               func() time.Time
 	Logger            *slog.Logger

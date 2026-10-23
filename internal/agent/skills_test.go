@@ -187,31 +187,30 @@ func TestNewSkillToolset(t *testing.T) {
 	})
 }
 
-func TestSkillBindingOverride(t *testing.T) {
+func TestSkillBindingCopiesDefinition(t *testing.T) {
 	definition := minimalSkillAgent()
 	definition.Skills = &SkillsBinding{Root: "/skills", Preload: "complete"}
 
-	binding := skillBinding(Config{}, definition)
+	binding := skillBinding(definition)
 	if binding == nil || binding.Root != "/skills" || binding.Preload != "complete" {
-		t.Fatalf("binding without override = %+v, want root /skills preload complete", binding)
+		t.Fatalf("binding = %+v, want root /skills preload complete", binding)
 	}
-	binding = skillBinding(Config{SkillsRoot: "/fixture/skills"}, definition)
-	if binding == nil || binding.Root != "/fixture/skills" || binding.Preload != "complete" {
-		t.Fatalf("binding with override = %+v, want root /fixture/skills preload complete", binding)
-	}
+	// The copy is caller-owned: adjusting it must not mutate the shared
+	// deployment definition.
+	binding.Root = "/changed"
 	if definition.Skills.Root != "/skills" {
 		t.Fatalf("deployment definition mutated: root = %q", definition.Skills.Root)
 	}
-	if got := skillBinding(Config{SkillsRoot: "/fixture/skills"}, minimalSkillAgent()); got != nil {
+	if got := skillBinding(minimalSkillAgent()); got != nil {
 		t.Fatalf("binding without skills = %+v, want nil", got)
 	}
 }
 
-// TestDevDeploymentSkillsBootsWithOverride boots the canonical dev fixture
-// the same way scripts/dev.sh and the dev compose stack do: the deployment
-// pins the container path /skills and the development-only override rebinds
-// it to the fixture that actually ships in the repository.
-func TestDevDeploymentSkillsBootsWithOverride(t *testing.T) {
+// TestDevDeploymentSkillsPinsContainerPath loads the canonical dev fixture
+// the same way the dev compose stack does: the deployment pins the container
+// path /skills and the dev compose stack mounts the repository fixture at
+// exactly that path. Host-side runs without the mount fail fast by design.
+func TestDevDeploymentSkillsPinsContainerPath(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller failed")
@@ -232,16 +231,11 @@ func TestDevDeploymentSkillsBootsWithOverride(t *testing.T) {
 		t.Fatalf("dev skills fixture: %v", err)
 	}
 	if _, statErr := os.Stat("/skills"); statErr != nil {
-		toolset, err := newSkillToolset(skillBinding(Config{}, definition))
+		// No mount in this process: the pinned path must fail fast instead of
+		// silently resolving elsewhere.
+		toolset, err := newSkillToolset(skillBinding(definition))
 		if err == nil {
-			t.Fatalf("toolset without override = %v, want fail-fast on missing /skills", toolset)
+			t.Fatalf("toolset without the /skills mount = %v, want fail-fast on missing /skills", toolset)
 		}
-	}
-	toolset, err := newSkillToolset(skillBinding(Config{SkillsRoot: filepath.Join(devRoot, "skills")}, definition))
-	if err != nil {
-		t.Fatalf("newSkillToolset with override: %v", err)
-	}
-	if toolset == nil {
-		t.Fatal("newSkillToolset with override = nil")
 	}
 }

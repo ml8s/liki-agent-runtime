@@ -24,7 +24,7 @@ const DefaultOpsAddr = ":8085"
 type Config struct {
 	Env                 string
 	Topology            Topology
-	Addr                string
+	ProtocolAddr        string
 	OpsAddr             string
 	TLSAddr             string
 	TLSCertFile         string
@@ -34,10 +34,10 @@ type Config struct {
 	InternalToken       string
 	CallbackURL         string
 	CallbackSecret      string
-	DBPath              string
+	AuditDBPath         string
 	DeploymentFile      string
-	SkillsRoot          string
 	MCPTimeout          time.Duration
+	MCPHealthTimeout    time.Duration
 	MaxConcurrentRuns   int
 	RunTimeout          time.Duration
 	ShutdownTimeout     time.Duration
@@ -51,6 +51,11 @@ type Config struct {
 	LLMTemperature      float64
 	LogFormat           string
 	LogLevel            string
+
+	// DeprecatedKeys records old names of renamed variables that provided
+	// the effective value during the migration window. main reports them
+	// at startup so operators can move to the canonical names.
+	DeprecatedKeys []string
 }
 
 // Topology declares the process state required by the deployment.
@@ -72,52 +77,59 @@ const (
 // Load reads configuration from the environment and validates it.
 func Load() (Config, error) {
 	cfg := Config{
-		Env:                 getEnv("LIKI_ENV", "development"),
-		Topology:            Topology(strings.ToLower(strings.TrimSpace(getEnv("LIKI_AGENT_RUNTIME_TOPOLOGY", string(TopologySingle))))),
-		Addr:                getEnv("LIKI_AGENT_RUNTIME_ADDR", DefaultAddr),
-		OpsAddr:             getEnv("LIKI_AGENT_RUNTIME_OPS_ADDR", DefaultOpsAddr),
-		TLSAddr:             getEnv("LIKI_AGENT_RUNTIME_TLS_ADDR", ""),
-		TLSCertFile:         getEnv("LIKI_AGENT_RUNTIME_TLS_CERT", ""),
-		TLSKeyFile:          getEnv("LIKI_AGENT_RUNTIME_TLS_KEY", ""),
-		TLSClientCAFile:     getEnv("LIKI_AGENT_RUNTIME_TLS_CLIENT_CA", ""),
-		PublicURL:           getEnv("LIKI_AGENT_RUNTIME_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
-		InternalToken:       getEnv("LIKI_AGENT_RUNTIME_INTERNAL_TOKEN", ""),
-		CallbackURL:         getEnv("LIKI_AGENT_RUNTIME_CALLBACK_URL", ""),
-		CallbackSecret:      getEnv("LIKI_AGENT_RUNTIME_CALLBACK_SECRET", ""),
-		DBPath:              getEnv("LIKI_AGENT_RUNTIME_DB_PATH", "./data/liki-agent-runtime-audit.db"),
-		DeploymentFile:      getEnv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", ""),
-		SkillsRoot:          strings.TrimSpace(getEnv("LIKI_AGENT_RUNTIME_SKILLS_ROOT", "")),
-		LLMBaseURL:          getEnv("LIKI_LLM_BASE_URL", ""),
-		LLMAPIKey:           getEnv("LIKI_LLM_API_KEY", ""),
-		LLMModel:            getEnv("LIKI_LLM_MODEL", ""),
-		LLMProvider:         getEnv("LIKI_LLM_PROVIDER", ""),
-		LLMStructuredOutput: getEnv("LIKI_LLM_STRUCTURED_OUTPUT", ""),
-		LogFormat:           getEnv("LIKI_LOG_FORMAT", "json"),
-		LogLevel:            getEnv("LIKI_LOG_LEVEL", "info"),
+		Env:             getEnv("LIKI_ENV", "development"),
+		Topology:        Topology(strings.ToLower(strings.TrimSpace(getEnv("LIKI_AGENT_RUNTIME_TOPOLOGY", string(TopologySingle))))),
+		ProtocolAddr:    getEnv("LIKI_AGENT_RUNTIME_PROTOCOL_ADDR", DefaultAddr),
+		OpsAddr:         getEnv("LIKI_AGENT_RUNTIME_OPS_ADDR", DefaultOpsAddr),
+		TLSAddr:         getEnv("LIKI_AGENT_RUNTIME_TLS_ADDR", ""),
+		TLSCertFile:     getEnv("LIKI_AGENT_RUNTIME_TLS_CERT", ""),
+		TLSKeyFile:      getEnv("LIKI_AGENT_RUNTIME_TLS_KEY", ""),
+		TLSClientCAFile: getEnv("LIKI_AGENT_RUNTIME_TLS_CLIENT_CA", ""),
+		PublicURL:       getEnv("LIKI_AGENT_RUNTIME_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
+		InternalToken:   getEnv("LIKI_AGENT_RUNTIME_INTERNAL_TOKEN", ""),
+		CallbackURL:     getEnv("LIKI_AGENT_RUNTIME_CALLBACK_URL", ""),
+		CallbackSecret:  getEnv("LIKI_AGENT_RUNTIME_CALLBACK_SECRET", ""),
+		AuditDBPath:     getEnv("LIKI_AGENT_RUNTIME_AUDIT_DB_PATH", "./data/liki-agent-runtime-audit.db"),
+		DeploymentFile:  getEnv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", ""),
+		LogFormat:       getEnv("LIKI_LOG_FORMAT", "json"),
+		LogLevel:        getEnv("LIKI_LOG_LEVEL", "info"),
 	}
+	// Renamed-variable migration window: the new names win, the old names
+	// remain readable fallbacks and are reported at startup so operators can
+	// move to the canonical names before the window closes.
+	cfg.ProtocolAddr = cfg.envString("LIKI_AGENT_RUNTIME_PROTOCOL_ADDR", "LIKI_AGENT_RUNTIME_ADDR", DefaultAddr)
+	cfg.AuditDBPath = cfg.envString("LIKI_AGENT_RUNTIME_AUDIT_DB_PATH", "LIKI_AGENT_RUNTIME_DB_PATH", "./data/liki-agent-runtime-audit.db")
+	cfg.LLMBaseURL = cfg.envString("LIKI_AGENT_RUNTIME_LLM_BASE_URL", "LIKI_LLM_BASE_URL", "")
+	cfg.LLMAPIKey = cfg.envString("LIKI_AGENT_RUNTIME_LLM_API_KEY", "LIKI_LLM_API_KEY", "")
+	cfg.LLMModel = cfg.envString("LIKI_AGENT_RUNTIME_LLM_MODEL", "LIKI_LLM_MODEL", "")
+	cfg.LLMProvider = cfg.envString("LIKI_AGENT_RUNTIME_LLM_PROVIDER", "LIKI_LLM_PROVIDER", "")
+	cfg.LLMStructuredOutput = cfg.envString("LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", "LIKI_LLM_STRUCTURED_OUTPUT", "")
 	if cfg.LLMStructuredOutput == "none" {
 		cfg.LLMStructuredOutput = ""
 	}
 	var err error
-	if cfg.MCPTimeout, err = getDuration("LIKI_MCP_TIMEOUT_SECONDS", 30*time.Second); err != nil {
+	if cfg.MCPTimeout, err = cfg.envDuration("LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS", "LIKI_MCP_TIMEOUT_SECONDS", 30*time.Second); err != nil {
 		return Config{}, err
 	}
-	if cfg.MaxConcurrentRuns, err = getInt("LIKI_MAX_CONCURRENT_RUNS", 32); err != nil {
+	if cfg.MCPHealthTimeout, err = getOptionalDuration("LIKI_AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS"); err != nil {
 		return Config{}, err
 	}
-	if cfg.RunTimeout, err = getDuration("LIKI_RUN_TIMEOUT_SECONDS", 600*time.Second); err != nil {
+	if cfg.MaxConcurrentRuns, err = cfg.envInt("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS", "LIKI_MAX_CONCURRENT_RUNS", 32); err != nil {
 		return Config{}, err
 	}
-	if cfg.ShutdownTimeout, err = getDuration("LIKI_SHUTDOWN_TIMEOUT_SECONDS", 30*time.Second); err != nil {
+	if cfg.RunTimeout, err = cfg.envDuration("LIKI_AGENT_RUNTIME_RUN_TIMEOUT_SECONDS", "LIKI_RUN_TIMEOUT_SECONDS", 600*time.Second); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMTimeout, err = getDuration("LIKI_LLM_TIMEOUT_SECONDS", 120*time.Second); err != nil {
+	if cfg.ShutdownTimeout, err = cfg.envDuration("LIKI_AGENT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS", "LIKI_SHUTDOWN_TIMEOUT_SECONDS", 30*time.Second); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMMaxOutputTokens, err = getOptionalPositiveInt("LIKI_LLM_MAX_OUTPUT_TOKENS"); err != nil {
+	if cfg.LLMTimeout, err = cfg.envDuration("LIKI_AGENT_RUNTIME_LLM_TIMEOUT_SECONDS", "LIKI_LLM_TIMEOUT_SECONDS", 120*time.Second); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMTemperature, err = getFloat("LIKI_LLM_TEMPERATURE", 0.2); err != nil {
+	if cfg.LLMMaxOutputTokens, err = cfg.envOptionalPositiveInt("LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", "LIKI_LLM_MAX_OUTPUT_TOKENS"); err != nil {
+		return Config{}, err
+	}
+	if cfg.LLMTemperature, err = cfg.envFloat("LIKI_AGENT_RUNTIME_LLM_TEMPERATURE", "LIKI_LLM_TEMPERATURE", 0.2); err != nil {
 		return Config{}, err
 	}
 	return validate(cfg)
@@ -144,28 +156,25 @@ func validate(cfg Config) (Config, error) {
 	if cfg.CallbackSecret != "" && cfg.CallbackURL == "" {
 		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_CALLBACK_URL is required when LIKI_AGENT_RUNTIME_CALLBACK_SECRET is set")
 	}
-	if cfg.OpsAddr == cfg.Addr || (cfg.TLSAddr != "" && (cfg.TLSAddr == cfg.Addr || cfg.TLSAddr == cfg.OpsAddr)) {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_ADDR, LIKI_AGENT_RUNTIME_OPS_ADDR and LIKI_AGENT_RUNTIME_TLS_ADDR must be distinct listen addresses")
+	if cfg.OpsAddr == cfg.ProtocolAddr || (cfg.TLSAddr != "" && (cfg.TLSAddr == cfg.ProtocolAddr || cfg.TLSAddr == cfg.OpsAddr)) {
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PROTOCOL_ADDR, LIKI_AGENT_RUNTIME_OPS_ADDR and LIKI_AGENT_RUNTIME_TLS_ADDR must be distinct listen addresses")
 	}
 	if !isDevelopment && cfg.LLMAPIKey == "" {
-		return Config{}, fmt.Errorf("LIKI_LLM_API_KEY is required outside development")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_API_KEY is required outside development")
 	}
 	if cfg.LLMBaseURL == "" {
-		return Config{}, fmt.Errorf("LIKI_LLM_BASE_URL is required")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_BASE_URL is required")
 	}
 	if cfg.LLMModel == "" {
-		return Config{}, fmt.Errorf("LIKI_LLM_MODEL is required")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_MODEL is required")
 	}
 	if cfg.LLMProvider == "" {
 		// The provider vocabulary is open: the value is the audit provenance
 		// label and the structured-output mode hint, not a protocol switch.
-		return Config{}, fmt.Errorf("LIKI_LLM_PROVIDER is required")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_PROVIDER is required")
 	}
 	if cfg.DeploymentFile == "" {
 		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE is required")
-	}
-	if cfg.SkillsRoot != "" && !isDevelopment {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_SKILLS_ROOT is allowed only in development")
 	}
 	switch cfg.Topology {
 	case TopologySingle:
@@ -181,32 +190,42 @@ func validate(cfg Config) (Config, error) {
 	switch cfg.LLMStructuredOutput {
 	case "", "none", "json_schema", "json_object":
 	default:
-		return Config{}, fmt.Errorf("LIKI_LLM_STRUCTURED_OUTPUT is unsupported: %q", cfg.LLMStructuredOutput)
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT is unsupported: %q", cfg.LLMStructuredOutput)
+	}
+	switch strings.ToLower(cfg.LogLevel) {
+	case "debug", "info", "warn", "error":
+	default:
+		return Config{}, fmt.Errorf("LIKI_LOG_LEVEL is unsupported: %q (expected debug, info, warn, or error)", cfg.LogLevel)
+	}
+	switch strings.ToLower(cfg.LogFormat) {
+	case "json", "text":
+	default:
+		return Config{}, fmt.Errorf("LIKI_LOG_FORMAT is unsupported: %q (expected json or text)", cfg.LogFormat)
 	}
 	if cfg.RunTimeout <= 0 {
-		return Config{}, fmt.Errorf("LIKI_RUN_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_RUN_TIMEOUT_SECONDS must be greater than zero")
 	}
 	if cfg.MCPTimeout <= 0 {
-		return Config{}, fmt.Errorf("LIKI_MCP_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS must be greater than zero")
 	}
 	if cfg.MaxConcurrentRuns <= 0 {
-		return Config{}, fmt.Errorf("LIKI_MAX_CONCURRENT_RUNS must be greater than zero")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS must be greater than zero")
 	}
 	if cfg.MaxConcurrentRuns > 1024 {
-		return Config{}, fmt.Errorf("LIKI_MAX_CONCURRENT_RUNS must not exceed 1024")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS must not exceed 1024")
 	}
 	if cfg.LLMTimeout <= 0 {
-		return Config{}, fmt.Errorf("LIKI_LLM_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_TIMEOUT_SECONDS must be greater than zero")
 	}
 	if cfg.LLMTemperature < 0 || cfg.LLMTemperature > 2 ||
 		math.IsNaN(cfg.LLMTemperature) || math.IsInf(cfg.LLMTemperature, 0) {
-		return Config{}, fmt.Errorf("LIKI_LLM_TEMPERATURE must be between 0 and 2")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_TEMPERATURE must be between 0 and 2")
 	}
 	if _, err := url.Parse(cfg.PublicURL); err != nil {
 		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PUBLIC_URL is invalid: %w", err)
 	}
 	if cfg.ShutdownTimeout <= 0 {
-		return Config{}, fmt.Errorf("LIKI_SHUTDOWN_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS must be greater than zero")
 	}
 	publicURL, err := url.Parse(cfg.PublicURL)
 	if err != nil || publicURL.Scheme != "http" && publicURL.Scheme != "https" || publicURL.Host == "" {
@@ -215,15 +234,23 @@ func validate(cfg Config) (Config, error) {
 	if publicURL.User != nil {
 		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PUBLIC_URL must not contain embedded credentials")
 	}
+	if !isDevelopment {
+		if host := publicURL.Hostname(); host == "localhost" || host == "127.0.0.1" || host == "::1" {
+			return Config{}, fmt.Errorf(
+				"LIKI_AGENT_RUNTIME_PUBLIC_URL must be a deployment-reachable address outside development, got loopback %q",
+				host,
+			)
+		}
+	}
 	llmURL, err := url.Parse(cfg.LLMBaseURL)
 	if err != nil || llmURL.Scheme != "http" && llmURL.Scheme != "https" || llmURL.Host == "" {
-		return Config{}, fmt.Errorf("LIKI_LLM_BASE_URL must be an absolute HTTP(S) URL")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_BASE_URL must be an absolute HTTP(S) URL")
 	}
 	if llmURL.User != nil {
-		return Config{}, fmt.Errorf("LIKI_LLM_BASE_URL must not contain embedded credentials")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_BASE_URL must not contain embedded credentials")
 	}
 	if !isDevelopment && llmURL.Scheme != "https" {
-		return Config{}, fmt.Errorf("LIKI_LLM_BASE_URL must use HTTPS outside development")
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_BASE_URL must use HTTPS outside development")
 	}
 	return cfg, nil
 }
@@ -235,10 +262,111 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-func getDuration(key string, fallback time.Duration) (time.Duration, error) {
+// renamedEnv is the effective reading of a variable that was renamed for the
+// three-repo configuration contract: the new name wins, the old name remains
+// a deprecated fallback for one migration window.
+type renamedEnv struct {
+	value      string
+	key        string
+	deprecated bool
+	present    bool
+}
+
+func resolveRenamed(newKey, oldKey string) renamedEnv {
+	if value, ok := os.LookupEnv(newKey); ok && value != "" {
+		return renamedEnv{value: value, key: newKey, present: true}
+	}
+	if value, ok := os.LookupEnv(oldKey); ok && value != "" {
+		return renamedEnv{value: value, key: oldKey, deprecated: true, present: true}
+	}
+	return renamedEnv{}
+}
+
+// envString reads a renamed string variable, recording the old name when it
+// provided the effective value.
+func (c *Config) envString(newKey, oldKey, fallback string) string {
+	env := resolveRenamed(newKey, oldKey)
+	if !env.present {
+		return fallback
+	}
+	c.noteRenamed(env, oldKey)
+	return env.value
+}
+
+func (c *Config) noteRenamed(env renamedEnv, oldKey string) {
+	if env.deprecated {
+		c.DeprecatedKeys = append(c.DeprecatedKeys, oldKey)
+	}
+}
+
+func (c *Config) envDuration(newKey, oldKey string, fallback time.Duration) (time.Duration, error) {
+	env := resolveRenamed(newKey, oldKey)
+	if !env.present {
+		return fallback, nil
+	}
+	seconds, err := strconv.Atoi(env.value)
+	if err != nil {
+		return 0, fmt.Errorf("%s is not a valid integer: %q", env.key, env.value)
+	}
+	if seconds <= 0 {
+		return 0, fmt.Errorf("%s must be greater than zero, got %d", env.key, seconds)
+	}
+	c.noteRenamed(env, oldKey)
+	return time.Duration(seconds) * time.Second, nil
+}
+
+func (c *Config) envInt(newKey, oldKey string, fallback int) (int, error) {
+	env := resolveRenamed(newKey, oldKey)
+	if !env.present {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(env.value)
+	if err != nil {
+		return 0, fmt.Errorf("%s is not a valid integer: %q", env.key, env.value)
+	}
+	c.noteRenamed(env, oldKey)
+	return parsed, nil
+}
+
+func (c *Config) envFloat(newKey, oldKey string, fallback float64) (float64, error) {
+	env := resolveRenamed(newKey, oldKey)
+	if !env.present {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseFloat(env.value, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s is not a valid number: %q", env.key, env.value)
+	}
+	c.noteRenamed(env, oldKey)
+	return parsed, nil
+}
+
+func (c *Config) envOptionalPositiveInt(newKey, oldKey string) (int, error) {
+	env := resolveRenamed(newKey, oldKey)
+	if !env.present {
+		return 0, nil
+	}
+	parsed, err := strconv.Atoi(env.value)
+	if err != nil {
+		return 0, fmt.Errorf("%s is not a valid integer: %q", env.key, env.value)
+	}
+	if parsed <= 0 {
+		return 0, fmt.Errorf("%s must be greater than zero, got %d", env.key, parsed)
+	}
+	if parsed > math.MaxInt32 {
+		return 0, fmt.Errorf("%s exceeds the supported maximum, got %d", env.key, parsed)
+	}
+	c.noteRenamed(env, oldKey)
+	return parsed, nil
+}
+
+// getOptionalDuration reads an optional duration in whole seconds. An unset
+// variable returns 0, which callers read as "follow the related default";
+// an explicit non-positive or malformed value fails closed.
+func getOptionalDuration(key string) (time.Duration, error) {
 	raw := os.Getenv(key)
 	if raw == "" {
-		return fallback, nil
+		return 0, nil
 	}
 	seconds, err := strconv.Atoi(raw)
 	if err != nil {
@@ -248,49 +376,4 @@ func getDuration(key string, fallback time.Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("%s must be greater than zero, got %d", key, seconds)
 	}
 	return time.Duration(seconds) * time.Second, nil
-}
-
-func getFloat(key string, fallback float64) (float64, error) {
-	raw := os.Getenv(key)
-	if raw == "" {
-		return fallback, nil
-	}
-	value, err := strconv.ParseFloat(raw, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%s is not a valid number: %q", key, raw)
-	}
-	return value, nil
-}
-
-func getInt(key string, fallback int) (int, error) {
-	raw := os.Getenv(key)
-	if raw == "" {
-		return fallback, nil
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, fmt.Errorf("%s is not a valid integer: %q", key, raw)
-	}
-	return value, nil
-}
-
-// getOptionalPositiveInt reads an optional positive integer. An unset
-// variable returns 0, which downstream code reads as "no bound"; an explicit
-// non-positive or malformed value fails closed.
-func getOptionalPositiveInt(key string) (int, error) {
-	raw := os.Getenv(key)
-	if raw == "" {
-		return 0, nil
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, fmt.Errorf("%s is not a valid integer: %q", key, raw)
-	}
-	if value <= 0 {
-		return 0, fmt.Errorf("%s must be greater than zero, got %d", key, value)
-	}
-	if value > math.MaxInt32 {
-		return 0, fmt.Errorf("%s exceeds the supported maximum, got %d", key, value)
-	}
-	return value, nil
 }

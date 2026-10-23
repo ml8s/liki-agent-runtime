@@ -14,6 +14,5 @@ export LIKI_ENV="${LIKI_ENV:-development}"
 export LIKI_LOG_LEVEL="${LIKI_LOG_LEVEL:-debug}"
 # Development-only skills root override: the deployment pins an absolute
 # container path, so the host run rebinds it to the same fixture.
-export LIKI_AGENT_RUNTIME_SKILLS_ROOT="${LIKI_AGENT_RUNTIME_SKILLS_ROOT:-$PWD/dev/agent-deployment/skills}"
 
 exec go run ./cmd/liki-agent-runtime

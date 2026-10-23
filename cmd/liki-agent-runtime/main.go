@@ -55,6 +55,15 @@ func run() (err error) {
 	}
 	logger := newLogger(cfg)
 	slog.SetDefault(logger)
+	// Renamed-variable migration window: surface every old name that still
+	// provided an effective value so operators can move before removal.
+	for _, key := range cfg.DeprecatedKeys {
+		logger.Warn("config_key_deprecated", "old_key", key)
+	}
+	if cfg.CallbackURL != "" && cfg.CallbackSecret == "" {
+		logger.Warn("run_callback_disabled",
+			"reason", "LIKI_AGENT_RUNTIME_CALLBACK_SECRET is empty; run-completion callbacks stay disabled")
+	}
 
 	tracerProvider, err := otel.NewTracerProvider(
 		context.Background(),
@@ -67,7 +76,7 @@ func run() (err error) {
 	}
 	otel.InstallGlobalPropagator()
 
-	store, err := sqlite.Open(cfg.DBPath)
+	store, err := sqlite.Open(cfg.AuditDBPath)
 	if err != nil {
 		return err
 	}
@@ -95,8 +104,8 @@ func run() (err error) {
 		StructuredOutput:  cfg.LLMStructuredOutput,
 		MaxOutputTokens:   cfg.LLMMaxOutputTokens,
 		Deployment:        deployment,
-		SkillsRoot:        cfg.SkillsRoot,
 		MCPTimeout:        cfg.MCPTimeout,
+		MCPHealthTimeout:  cfg.MCPHealthTimeout,
 		MaxConcurrentRuns: cfg.MaxConcurrentRuns,
 	})
 	if err != nil {
@@ -168,7 +177,7 @@ func run() (err error) {
 	)
 
 	httpServer := &http.Server{
-		Addr:              cfg.Addr,
+		Addr:              cfg.ProtocolAddr,
 		Handler:           httpHandler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -213,7 +222,7 @@ func run() (err error) {
 	errCh := make(chan error, len(servers))
 	go func() {
 		logger.Info("liki-agent-runtime listening",
-			"addr", cfg.Addr,
+			"addr", cfg.ProtocolAddr,
 			"ops_addr", cfg.OpsAddr,
 			"public_url", cfg.PublicURL,
 			"protocols", "A2A,AG-UI,MCP",
