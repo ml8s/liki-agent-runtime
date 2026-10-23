@@ -166,9 +166,9 @@ linting uses the locked local development dependency. Run `make check`,
 checks, `golangci-lint`, isolated race tests, the coverage floor, and deployment
 validation. It does not call a real model provider or external MCP. CI
 additionally runs `govulncheck` and production npm dependency auditing.
-Releases are tag-driven: pushing a
-`vYYYY.MM.DD.N` tag runs the full gate, then builds, signs, and publishes the
-release image and GitHub Release.
+Images are built locally (`make image`) with the tag derived from git; CI does
+not build or publish images. `liki` consumes the local image as its experts
+base, and `liki-deploy` assembles and deploys the set.
 
 ### Contributing
 

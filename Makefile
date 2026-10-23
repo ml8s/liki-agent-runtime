@@ -41,7 +41,7 @@ help:
 	@echo "make gate     - run the full pre-push source gate"
 	@echo "make smoke    - smoke the local liki-agent-runtime image"
 	@echo "make build    - build ./bin/liki-agent-runtime"
-	@echo "make image    - build a local image for development (releases are tag-driven via release.yml)"
+	@echo "make image    - build a local image (tag from git)"
 	@echo "make dev      - run the development Agent and MCP containers in the foreground"
 	@echo "make dev-down - remove the development Agent workload"
 	@echo "make validate - validate the AgentDeployment artifact without starting the server"
@@ -80,8 +80,8 @@ build: ## Build the local liki-agent-runtime binary.
 	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/liki-agent-runtime ./cmd/liki-agent-runtime
 
 # ── 镜像 ──
-# make image/smoke 仅本地开发；发布镜像由 release.yml 在 vYYYY.MM.DD.N tag 上构建推送。
-IMAGE_REGISTRY ?= ghcr.io/ml8s
+# make image/smoke 只构建本地镜像；部署由 liki-deploy 按 sha 组装。
+IMAGE_REGISTRY ?= liki-local
 IMAGE_TAG ?= local
 
 image: ## Build a local image for development

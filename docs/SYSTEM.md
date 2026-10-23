@@ -43,19 +43,19 @@ schema artifact：
 - liki 生成工件后，用本仓 pinned runtime 执行 `validate`
 - 工件 digest、runtime base digest、装配镜像 digest 提供可复现 provenance
 
-**发布顺序硬约束**：liki-agent-runtime 镜像先发布，liki 后发布装配镜像（FROM pinned runtime，并用该 runtime 验证工件）。
+**构建顺序**：先构建 liki-agent-runtime 本地镜像，liki 再以它为 `BASE_IMAGE` 构建装配镜像。
 
 ### 3.2 装配镜像（liki 侧构建，本仓是 base）
 
-liki 仓 `assembly/Dockerfile`（按 `PROFILE` 构建两套装配镜像）：
+liki 仓 `assembly/Dockerfile` 构建单套装配镜像，四份 profile 工件一起烘焙：
 
 ```dockerfile
-FROM ghcr.io/ml8s/liki-agent-runtime:<base>   # 本仓 release 的显式 pin tag
-COPY dist/agents/experts/ /deployment/
-ENV LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE=/deployment/deployment.json
+ARG BASE_IMAGE=liki-local/liki-agent-runtime:<runtime-sha>
+FROM ${BASE_IMAGE}
+COPY dist/agents/ /deployment/
 ```
 
-- 本仓发布**纯运行时镜像**（`Dockerfile`，不打包任何工件）
+- 本仓只提供**纯运行时镜像**（`Dockerfile`，不打包任何工件）
 - `LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE`/`DIGEST` 由装配镜像内置，生产启动即校验工件
 
 ### 3.3 生产环境变量（deploy 注入）
@@ -89,11 +89,10 @@ ENV LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE=/deployment/deployment.json
 
 **任何运行时改动都必须**：`make check` 通过（含 `validate` 校验 dev fixture 工件）。
 
-## 五、本仓发布链（tag 驱动）
+## 五、镜像来源
 
-- 推送 `vYYYY.MM.DD.N` tag 触发 `release.yml`：全量 gate → buildx 构建并推送
-  `ghcr.io/ml8s/liki-agent-runtime:<calver>` → 冒烟 → cosign 签名并验证 →
-  发布 GitHub Release；包自动设为 public，liki/liki-deploy 用 job token 拉取
+- 本仓只在本地构建镜像（`make image`），tag 由 git 推导；CI 不构建或发布镜像。
+- liki 用本地 runtime 镜像作为 experts 的 `BASE_IMAGE`；liki-deploy 组装并部署同一批镜像。
 
 ## 六、相关文档
 
