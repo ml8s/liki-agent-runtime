@@ -1,4 +1,4 @@
-# Standards and Library Audit
+# Standards
 
 This document is the review gate for protocol and infrastructure choices. The
 rule is:
@@ -39,23 +39,6 @@ They must not be exposed through A2A, AG-UI, or MCP fields:
   adapters map them through their official SDK error types.
 - Tool allowlists are authorization policy consumed after standard MCP
   discovery. MCP remains unchanged on the wire.
-
-Deployment-description candidates were also reviewed. A2A Agent Card describes
-discovery, not a private executable graph; Google Cloud Agent Registry schemas
-are cloud discovery records; and the JSON Agents Portable Agent Manifest is an
-explicit draft without standards-body adoption or community consensus. No
-reviewed candidate replaces this service's local loader behavior.
-
-## Rejected custom designs
-
-| Rejected design | Root problem | Standards-based resolution |
-|---|---|---|
-| Mapping every A2A TaskID to a separate ADK session while preserving ContextID only as correlation | Contradicted the SDK/ADK ContextID mapping and silently changed multi-task context behavior | Use ADK's default ContextID session mapping. |
-| A private AgentDeployment `tools.visibility` field that emitted empty tool arguments/results | No A2A/AG-UI/MCP semantics for selective payload redaction; AG-UI args/result values are required to be non-empty | Do not emit the feature. If opaque tools are required later, omit the complete standard tool-call event sequence rather than redefine its fields. |
-| Unconditional multi-replica startup reconciliation | No external audit-recovery standard; concurrent owners could race or rewrite evidence | Keep `multi` fail-closed. Single-process startup uses one transaction, stable lifecycle IDs, and append-only synthetic failures before traffic is accepted. |
-| Publishing the private deployment manifest as an A2A extension | A2A extensions require an identified, published specification and client opt-in behavior | Advertise no private extension. Standard Agent Card fields and internal audit already carry required identity and provenance. |
-| Carrying the structured user-facing text in a private A2A `Part.Metadata` key (`liki.answer`) | No published specification for a private metadata key; the full validated output is already the answer | A structured Agent emits a standard `application/json` `DataPart`; the user-facing text is the JSON field selected by its `textPointer`. No private metadata on the wire. |
-| Local RFC 6901 escape parser | Duplicated an existing RFC implementation already used by the runtime | Parse pointers with `github.com/qri-io/jsonpointer`. |
 
 ## Deployment model
 
@@ -108,7 +91,7 @@ they are recorded verbatim into audit evidence but never gate runtime behavior.
 
 A value that duplicates another layer fails closed rather than being ignored.
 
-### Harmless readiness already implemented
+### Readiness
 
 The runtime keeps official extension points without enabling an experimental
 or multi-replica mode:
@@ -121,55 +104,3 @@ or multi-replica mode:
   uses the standard `http.Server.Shutdown` deadline to wait for in-flight
   requests. Drain does not cancel active protocol streams.
 - The A2A SDK's experimental cluster mode is not enabled.
-
-### When more than one replica is justified
-
-Multiple replicas are appropriate only after at least one of these measurable
-requirements exists:
-
-- concurrent requests exceed one process's CPU, memory, connection, or run-slot
-  capacity;
-- rolling or blue/green deployment requires a new instance before the old one
-  drains;
-- node failure must be tolerated while a replica remains available;
-- agent execution must scale independently from `liki-web`, Engine, Counsel, or
-  the model provider.
-
-If traffic fits one process and clients can safely retry a failed run, multiple
-replicas add shared state, routing, and recovery complexity without value.
-
-### Required standard implementation path
-
-Do not add ad-hoc multi-instance machinery. A future multi-replica design must
-use the official extension points together:
-
-1. Replace the in-memory ADK session service with ADK
-   `session/database` backed by PostgreSQL or Spanner (or the official Vertex AI
-   session service). SQLite remains suitable only for one process.
-2. Provide the official A2A `taskstore.Store` implementation backed by the same
-   transactional database. Use the SDK's task-store/cluster-mode APIs rather
-   than a private task protocol; require a non-experimental SDK release before
-   enabling cluster mode.
-3. Move audit append, run-ID uniqueness, and terminal-event ownership into the
-   same transactional database.
-4. Lock the assembly image digest per release so replicas cannot execute
-   different behavior versions.
-5. Keep requests routable to the owner of a task/session, or use the official
-   A2A distributed execution path.
-6. If a singleton maintenance job becomes necessary, claim work with a database
-   transaction or a supported orchestration lease. Kubernetes
-   `client-go/leaderelection` is a standard API, but its documentation warns it
-   does not guarantee strict fencing; it is not sufficient by itself for
-   exactly-once audit writes.
-
-## Change checklist
-
-A change that touches an external boundary must answer:
-
-- Which specification section defines this behavior?
-- Which official/reference SDK type is used?
-- Which standard fields are omitted or rejected, and where is that mapping
-  tested?
-- Is any private field visible on a standard wire? If yes, stop.
-- Does deployment still assume one process? If not, where are sessions, tasks,
-  audit, and routing shared?

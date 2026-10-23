@@ -70,7 +70,7 @@ COPY dist/agents/ /deployment/
 
 **命名必须与工件声明一致**（`runtime.go` 用 `os.LookupEnv(endpointEnv)` 读取），deploy 有环境一致性检查。审计使用工件版本与 digest，不单独配置工具版本。
 
-### 3.4 协议与编排（已实现）
+### 3.4 协议与编排
 
 - **A2A**：`internal/protocol/a2a`（官方 a2a-go SDK），`/a2a` + `.well-known/agent-card.json` 标准格式
 - **AG-UI**：`internal/protocol/agui`（官方 ag-ui SDK），liki-web 通过它调本仓

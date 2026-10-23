@@ -1,4 +1,4 @@
-# Liki Agents
+# Liki Agent Runtime
 
 `liki-agent-runtime` is a generic multi-agent runtime for externally defined
 `AgentDeployment` artifacts. It executes an ADK Agent tree, orchestrates model
