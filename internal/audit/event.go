@@ -96,21 +96,21 @@ func (e *Event) Validate() error {
 	e.Normalize()
 	switch {
 	case e.ID == "":
-		return NewError(CodeIDRequired, "audit event id is required")
+		return NewError(CodeIDRequired, "audit event id is required", domain.ErrInvalidInput)
 	case e.Type == "":
-		return NewError(CodeTypeRequired, "audit event type is required")
+		return NewError(CodeTypeRequired, "audit event type is required", domain.ErrInvalidInput)
 	case !knownEventType(e.Type):
-		return NewError(CodeTypeInvalid, "unknown audit event type", fmt.Errorf("%q", e.Type))
+		return NewError(CodeTypeInvalid, fmt.Sprintf("unknown audit event type %q", e.Type), domain.ErrInvalidInput)
 	case e.OccurredAt.IsZero():
-		return NewError(CodeOccurredAtRequired, "audit event occurred_at is required")
+		return NewError(CodeOccurredAtRequired, "audit event occurred_at is required", domain.ErrInvalidInput)
 	case e.RunID == "":
-		return NewError(CodeRunIDRequired, "audit event run id is required")
+		return NewError(CodeRunIDRequired, "audit event run id is required", domain.ErrInvalidInput)
 	case e.RootRunID == "":
-		return NewError(CodeRootRunIDRequired, "audit event root run id is required")
+		return NewError(CodeRootRunIDRequired, "audit event root run id is required", domain.ErrInvalidInput)
 	}
 
 	if e.DelegationDepth < 0 {
-		return NewError(CodeInvalidDelegationDepth, "audit event delegation depth must not be negative")
+		return NewError(CodeInvalidDelegationDepth, "audit event delegation depth must not be negative", domain.ErrInvalidInput)
 	}
 
 	var validStatus bool
@@ -119,11 +119,11 @@ func (e *Event) Validate() error {
 		validStatus = true
 	}
 	if !validStatus {
-		return NewError(CodeStatusInvalid, "invalid audit event status")
+		return NewError(CodeStatusInvalid, "invalid audit event status", domain.ErrInvalidInput)
 	}
 
 	if e.DurationMS < 0 {
-		return NewError(CodeInvalidDuration, "audit event duration must not be negative")
+		return NewError(CodeInvalidDuration, "audit event duration must not be negative", domain.ErrInvalidInput)
 	}
 	if err := validateTraceIDs(e.TraceID, e.SpanID); err != nil {
 		return err
@@ -143,30 +143,26 @@ func (e *Event) Validate() error {
 			return NewError(CodeStatusInvalid, "failed audit event must be failed")
 		}
 		if e.ErrorCode == "" {
-			return NewError(CodeErrorCodeRequired, "failed audit event requires an error code")
+			return NewError(CodeErrorCodeRequired, "failed audit event requires an error code", domain.ErrInvalidInput)
 		}
 	}
 
 	switch e.Type {
 	case EventLLMCallStarted, EventLLMCallCompleted, EventLLMCallFailed:
 		if e.AgentName == "" || e.Model == "" {
-			return NewError(CodeLLMProvenanceRequired, "LLM audit event requires agent and model provenance")
+			return NewError(CodeLLMProvenanceRequired, "LLM audit event requires agent and model provenance", domain.ErrInvalidInput)
 		}
 	case EventDelegationStarted, EventDelegationCompleted, EventDelegationFailed:
 		if e.CallerAgent == "" || e.TargetAgent == "" {
-			return NewError(CodeDelegationProvenanceRequired, "delegation audit event requires caller and target agents")
+			return NewError(CodeDelegationProvenanceRequired, "delegation audit event requires caller and target agents", domain.ErrInvalidInput)
 		}
 	case EventToolCallStarted, EventToolCallCompleted, EventToolCallFailed:
 		if e.ToolCallID == "" {
-			return NewError(CodeToolCallIDRequired, "tool audit event call id is required")
+			return NewError(CodeToolEventCallIDRequired, "tool audit event call id is required", domain.ErrInvalidInput)
 		}
 		if e.ToolName == "" {
-			return NewError(CodeToolNameRequired, "tool audit event tool name is required")
+			return NewError(CodeToolEventNameRequired, "tool audit event tool name is required", domain.ErrInvalidInput)
 		}
-	}
-
-	if e.Type == EventToolCallFailed && e.ErrorCode == "" {
-		return NewError(CodeToolExecutionFailed, "tool failure audit event requires an error code")
 	}
 	return nil
 }
@@ -188,10 +184,10 @@ func validateTraceIDs(traceID string, spanID string) error {
 		return nil
 	}
 	if len(traceID) != 32 || strings.ToLower(traceID) != traceID || !isHex(traceID) {
-		return NewError(CodeTraceIDInvalid, "audit event trace id must be 32 lowercase hex characters")
+		return NewError(CodeTraceIDInvalid, "audit event trace id must be 32 lowercase hex characters", domain.ErrInvalidInput)
 	}
 	if len(spanID) != 16 || strings.ToLower(spanID) != spanID || !isHex(spanID) {
-		return NewError(CodeSpanIDInvalid, "audit event span id must be 16 lowercase hex characters")
+		return NewError(CodeSpanIDInvalid, "audit event span id must be 16 lowercase hex characters", domain.ErrInvalidInput)
 	}
 	return nil
 }
@@ -233,9 +229,8 @@ const (
 	CodeInvalidDuration              = "audit_event_duration_invalid"
 	CodeTraceIDInvalid               = "audit_event_trace_id_invalid"
 	CodeSpanIDInvalid                = "audit_event_span_id_invalid"
-	CodeToolCallIDRequired           = "audit_event_tool_call_id_required"
-	CodeToolNameRequired             = "audit_event_tool_name_required"
-	CodeToolExecutionFailed          = "audit_event_tool_execution_failed"
+	CodeToolEventCallIDRequired      = "audit_event_tool_call_id_required"
+	CodeToolEventNameRequired        = "audit_event_tool_name_required"
 	CodeRecorderRequired             = "audit_recorder_required"
 	CodeAuditAppendFailed            = "audit_append_failed"
 	CodeAuditEventConflict           = "audit_event_conflict"

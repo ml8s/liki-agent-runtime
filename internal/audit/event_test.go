@@ -41,10 +41,9 @@ func TestEventValidate(t *testing.T) {
 				e.Type = EventToolCallCompleted
 				e.ToolCallID = ""
 				e.ToolName = "engine_tool_a"
-				e.ErrorCode = CodeToolExecutionFailed
 				e.Status = StatusSucceeded
 			},
-			wantCode: CodeToolCallIDRequired,
+			wantCode: CodeToolEventCallIDRequired,
 		},
 		{
 			name: "tool event missing tool name",
@@ -54,7 +53,7 @@ func TestEventValidate(t *testing.T) {
 				e.ToolName = ""
 				e.Status = StatusSucceeded
 			},
-			wantCode: CodeToolNameRequired,
+			wantCode: CodeToolEventNameRequired,
 		},
 		{
 			name: "failed tool event missing error code",

@@ -26,7 +26,7 @@ func NewAuditEventRepository(db *gorm.DB) *AuditEventRepository {
 // event as idempotent.
 func (r *AuditEventRepository) Record(ctx context.Context, event *audit.Event) error {
 	if event == nil {
-		return audit.NewError(audit.CodeAuditAppendFailed, "audit event is required", nil)
+		return audit.NewError(audit.CodeAuditAppendFailed, "audit event is required", domain.ErrInvalidInput)
 	}
 	if err := event.Validate(); err != nil {
 		return err

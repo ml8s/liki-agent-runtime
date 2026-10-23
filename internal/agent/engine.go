@@ -1,5 +1,3 @@
-// Package agent contains MCP dependency health. The official MCP SDK owns
-// protocol behavior; the runtime owns deployment-aware readiness.
 package agent
 
 import (
@@ -25,6 +23,8 @@ func mcpProtocolVersion() string {
 
 // MCPHealthChecks returns one readiness checker per declared logical MCP
 // server. Composite readiness cannot hide an individual dependency failure.
+// The official MCP SDK owns protocol behavior; the runtime owns
+// deployment-aware readiness.
 func (r *Runtime) MCPHealthChecks() []platform.HealthChecker {
 	definitions := r.deploymentMCPServers()
 	checkers := make([]platform.HealthChecker, 0, len(definitions))
@@ -167,19 +167,44 @@ func healthDetail(err error) string {
 }
 
 func newMCPTransport(config Config, server resolvedMCPServer) *mcp.StreamableClientTransport {
-	base := otelhttp.NewTransport(http.DefaultTransport)
-	var transport http.RoundTripper = base
+	base := config.outboundTransport
+	if base == nil {
+		base = newOutboundTransport(config.MaxConcurrentRuns)
+	}
+	traced := otelhttp.NewTransport(base)
+	var transport http.RoundTripper = traced
 	if server.Token != "" {
 		transport = &auth.Transport{
 			Provider: auth.StaticToken(server.Token),
-			Base:     base,
+			Base:     traced,
 		}
 	}
 	httpClient := &http.Client{Timeout: config.MCPTimeout, Transport: transport}
 	return &mcp.StreamableClientTransport{
-		Endpoint:             server.Endpoint,
-		HTTPClient:           httpClient,
+		Endpoint:   server.Endpoint,
+		HTTPClient: httpClient,
+		// A negative value disables SDK reconnect retries. Calls fail fast;
+		// the run deadline and ADK's retry policy own recovery.
 		MaxRetries:           -1,
 		DisableStandaloneSSE: true,
 	}
+}
+
+// newOutboundTransport returns the shared HTTP transport for outbound LLM and
+// MCP traffic. It clones the standard transport so proxy, HTTP/2, and timeout
+// defaults are preserved, then sizes the per-host idle pool from the run
+// concurrency bound: http.DefaultTransport keeps only two idle connections
+// per host, which would repeat TCP and TLS handshakes under concurrent runs.
+// Doubling the bound leaves headroom for parallel sub-agent model calls
+// inside one run.
+func newOutboundTransport(maxConcurrentRuns int) *http.Transport {
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		base = &http.Transport{}
+	}
+	tuned := base.Clone()
+	perHost := max(8, min(256, 2*maxConcurrentRuns))
+	tuned.MaxIdleConns = max(tuned.MaxIdleConns, perHost)
+	tuned.MaxIdleConnsPerHost = perHost
+	return tuned
 }

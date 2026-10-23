@@ -7,10 +7,18 @@ import (
 	"fmt"
 )
 
+// CanonicalJSON encodes a value as canonical JSON bytes. Go's encoding/json
+// orders map keys deterministically, so identical values encode identically.
+// It is the single canonicalization policy shared by audit digests and
+// structured-run output.
+func CanonicalJSON(value any) (json.RawMessage, error) {
+	return json.Marshal(value)
+}
+
 // CanonicalDigest produces a stable size-aware provenance pointer for JSON-like
 // values. It never returns the original payload.
 func CanonicalDigest(value any) (string, int64, error) {
-	raw, err := json.Marshal(value)
+	raw, err := CanonicalJSON(value)
 	if err != nil {
 		return "", 0, fmt.Errorf("canonical encode audit value: %w", err)
 	}

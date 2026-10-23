@@ -31,6 +31,15 @@ type Config struct {
 	Notifier   CompletionNotifier
 }
 
+// AG-UI request-validation error codes. They are raised before a run starts,
+// so they never enter audit evidence; as adapter-owned contract violations
+// they live here instead of the domain code registry. Values are stable.
+const (
+	CodeInvalidAGUIRequest     = "invalid_agui_request"
+	CodeInvalidAGUIMessage     = "invalid_agui_message"
+	CodeUnsupportedAGUIFeature = "unsupported_agui_feature"
+)
+
 // CompletionNotifier receives one record per terminal product run. It is
 // implemented by *notify.Notifier; nil disables notifications.
 type CompletionNotifier interface {
@@ -84,7 +93,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var input aguitypes.RunAgentInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeProtocolError(w, http.StatusBadRequest, domain.CodeInvalidAGUIRequest, "invalid AG-UI request body")
+		writeProtocolError(w, http.StatusBadRequest, CodeInvalidAGUIRequest, "invalid AG-UI request body")
 		return
 	}
 
@@ -99,20 +108,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	callerIdentity, _ := identity.FromContext(r.Context())
 	caller := callerIdentity.UserID
 	if !agent.ValidIdentifier(threadID) || !agent.ValidIdentifier(runID) {
-		writeProtocolError(w, http.StatusUnprocessableEntity, domain.CodeInvalidAGUIMessage, "thread and run identifiers must contain at most 128 printable bytes")
+		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIMessage, "thread and run identifiers must contain at most 128 printable bytes")
 		return
 	}
 	if err := validateTextChatProfile(input); err != nil {
-		writeProtocolError(w, http.StatusUnprocessableEntity, domain.CodeUnsupportedAGUIFeature, err.Error())
+		writeProtocolError(w, http.StatusUnprocessableEntity, CodeUnsupportedAGUIFeature, err.Error())
 		return
 	}
 	content, history, err := lastUserConversation(input.Messages)
 	if err != nil {
-		writeProtocolError(w, http.StatusUnprocessableEntity, domain.CodeInvalidAGUIMessage, err.Error())
+		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIMessage, err.Error())
 		return
 	}
 	if len(input.Messages) > agent.MaxHistoryMessages+1 {
-		writeProtocolError(w, http.StatusUnprocessableEntity, domain.CodeInvalidAGUIMessage, fmt.Sprintf("AG-UI request exceeds %d history messages", agent.MaxHistoryMessages))
+		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIMessage, fmt.Sprintf("AG-UI request exceeds %d history messages", agent.MaxHistoryMessages))
 		return
 	}
 

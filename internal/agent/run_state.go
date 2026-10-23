@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	jsonpointer "github.com/qri-io/jsonpointer"
 	"google.golang.org/adk/v2/session"
@@ -155,7 +156,7 @@ func jsonStringAtPointer(document any, pointer string) (string, error) {
 }
 
 func canonicalJSON(value any) json.RawMessage {
-	raw, err := json.Marshal(value)
+	raw, err := audit.CanonicalJSON(value)
 	if err != nil {
 		return []byte("null")
 	}

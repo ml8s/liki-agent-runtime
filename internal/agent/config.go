@@ -2,6 +2,7 @@ package agent
 
 import (
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
@@ -52,4 +53,9 @@ type Config struct {
 	// mcpTransportOverrides is an internal test seam for protocol health
 	// tests. Production always uses the official Streamable HTTP transport.
 	mcpTransportOverrides map[string]mcp.Transport
+
+	// outboundTransport is the shared, pool-tuned HTTP transport for LLM and
+	// MCP traffic. NewRuntime derives it from MaxConcurrentRuns; a nil value
+	// falls back to a per-call default so hand-built test configs keep working.
+	outboundTransport *http.Transport
 }

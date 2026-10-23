@@ -167,6 +167,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		// Zero-value fallback must match platform/config's Load default.
 		config.MaxConcurrentRuns = 32
 	}
+	config.outboundTransport = newOutboundTransport(config.MaxConcurrentRuns)
 	if config.Now == nil {
 		config.Now = func() time.Time { return time.Now().UTC() }
 	}
@@ -202,7 +203,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 				BaseURL: config.ModelBaseURL,
 				HTTPClient: &http.Client{
 					Timeout:   config.ModelTimeout,
-					Transport: otelhttp.NewTransport(http.DefaultTransport),
+					Transport: otelhttp.NewTransport(config.outboundTransport),
 				},
 			})
 			if err != nil {
@@ -907,12 +908,28 @@ func (r *Runtime) recordRunAudit(
 }
 
 func (r *Runtime) recordAuditWithRetry(ctx context.Context, event *audit.Event) error {
-	if err := r.config.AuditRecorder.Record(ctx, event); err != nil {
-		// SQLite busy and transient exporter failures are the common case. A
-		// second append attempt cannot overwrite the append-only event ID.
-		return r.config.AuditRecorder.Record(ctx, event)
+	err := r.config.AuditRecorder.Record(ctx, event)
+	if err == nil || !retryableAuditAppend(err) {
+		return err
 	}
-	return nil
+	// SQLite busy and transient exporter failures are the common case. A
+	// second append attempt cannot overwrite the append-only event ID.
+	return r.config.AuditRecorder.Record(ctx, event)
+}
+
+// retryableAuditAppend reports whether a failed append is worth an immediate
+// second attempt. Event-contract violations wrap domain.ErrInvalidInput and
+// conflicts are deterministic: retrying either cannot change the outcome.
+// Infrastructure failures (busy, timeout, exporter) remain retryable.
+func retryableAuditAppend(err error) bool {
+	if errors.Is(err, domain.ErrInvalidInput) {
+		return false
+	}
+	var domainErr *domain.Error
+	if errors.As(err, &domainErr) && domainErr.Code == audit.CodeAuditEventConflict {
+		return false
+	}
+	return true
 }
 
 // loadStructuredAnalysis consumes the parsed model output from ADK session

@@ -25,7 +25,6 @@ const (
 	CodeRuntimeInitFailed                 = "runtime_init_failed"
 	CodeMCPToolsUnavailable               = "mcp_tools_unavailable"
 	CodeToolCallIDRequired                = "tool_call_id_required"
-	CodeToolNameRequired                  = "tool_name_required"
 	CodeToolCallInvalid                   = "tool_call_invalid"
 	CodeToolCallUnknown                   = "tool_call_unknown"
 	CodeToolProvenanceInvalid             = "tool_provenance_invalid"
@@ -58,16 +57,11 @@ const (
 	CodeAuditSessionRequired = "audit_session_required"
 	CodeAuditSessionActive   = "audit_session_active"
 
-	// Storage codes (internal/audit/sqlite)
-
 	// Transport / protocol error codes
-	CodeUnauthorized           = "unauthorized"
-	CodeIdentityRequired       = "identity_required"
-	CodeRateLimited            = "rate_limited"
-	CodeMethodNotAllowed       = "method_not_allowed"
-	CodeInvalidAGUIRequest     = "invalid_agui_request"
-	CodeUnsupportedAGUIFeature = "unsupported_agui_feature"
-	CodeInvalidAGUIMessage     = "invalid_agui_message"
+	CodeUnauthorized     = "unauthorized"
+	CodeIdentityRequired = "identity_required"
+	CodeRateLimited      = "rate_limited"
+	CodeMethodNotAllowed = "method_not_allowed"
 )
 
 // Structured output model adapter codes (internal/agent/structured_output.go)
