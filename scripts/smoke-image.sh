@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-IMAGE_TAG="${IMAGE_TAG:-local}"
+IMAGE_TAG="${IMAGE_TAG:-$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo local)}"
 IMAGE="${IMAGE:-${LIKI_AGENT_RUNTIME_IMAGE:-liki-local/liki-agent-runtime:$IMAGE_TAG}}"
 PORT="${AGENTS_SMOKE_PORT:-18083}"
 OPS_PORT="${AGENTS_SMOKE_OPS_PORT:-18085}"

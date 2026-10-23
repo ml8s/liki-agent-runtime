@@ -82,7 +82,7 @@ build: ## Build the local liki-agent-runtime binary.
 # ── 镜像 ──
 # make image/smoke 只构建本地镜像；部署由 liki-deploy 按 sha 组装。
 IMAGE_REGISTRY ?= liki-local
-IMAGE_TAG ?= local
+IMAGE_TAG ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)
 
 image: ## Build a local image for development
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_TIME=$(BUILD_TIME) \
