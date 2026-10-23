@@ -53,9 +53,9 @@ invariants; external boundaries follow [`docs/STANDARDS.md`](docs/STANDARDS.md).
 Its digest covers the manifest, referenced instruction and schema files, and the
 ADK graph semantics.
 Audit provenance uses the immutable deployment version and digest already
-carried by the artifact. Deployment integrity is owned by the immutable
-assembly image digest pinned by the liki/liki-deploy release chain; no
-duplicate artifact pin is configured by the environment.
+carried by the artifact. Deployment integrity is owned by liki-deploy, which
+assembles and deploys the images by commit sha; no duplicate artifact pin is
+configured by the environment.
 
 ## Protocols
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate workflow references and signing-token policy."""
+"""Validate that GitHub Actions references are SHA-pinned."""
 
 from __future__ import annotations
 

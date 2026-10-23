@@ -104,3 +104,15 @@ or multi-replica mode:
   uses the standard `http.Server.Shutdown` deadline to wait for in-flight
   requests. Drain does not cancel active protocol streams.
 - The A2A SDK's experimental cluster mode is not enabled.
+
+## Change checklist
+
+A change that touches an external boundary must answer:
+
+- Which specification section defines this behavior?
+- Which official/reference SDK type is used?
+- Which standard fields are omitted or rejected, and where is that mapping
+  tested?
+- Is any private field visible on a standard wire? If yes, stop.
+- Does deployment still assume one process? If not, where are sessions, tasks,
+  audit, and routing shared?
