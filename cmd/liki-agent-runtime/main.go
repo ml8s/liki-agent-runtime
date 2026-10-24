@@ -48,6 +48,39 @@ func main() {
 	}
 }
 
+// newRunCallbackNotifier 装配运行完成回调通知器：secret 为空即禁用
+// （URL 已配置时输出 run_callback_disabled 告警——静默禁用在此显式化），
+// 返回 nil 通知器与 nil 关闭函数；装配失败返回错误。
+func newRunCallbackNotifier(cfg config.Config, logger *slog.Logger, profile string) (*notify.Notifier, func(), error) {
+	if cfg.CallbackSecret == "" {
+		if cfg.CallbackURL != "" {
+			logger.Warn("run_callback_disabled",
+				"reason", "LIKI_AGENT_RUNTIME_CALLBACK_URL is set but LIKI_AGENT_RUNTIME_CALLBACK_SECRET is empty; run-completion callbacks stay disabled")
+		}
+		return nil, nil, nil
+	}
+	notifier, err := notify.New(notify.Config{
+		URL:     cfg.CallbackURL,
+		Secret:  cfg.CallbackSecret,
+		Source:  "spiffe://liki/runtime/" + profile,
+		Profile: profile,
+		Logger:  logger,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("init run callback notifier: %w", err)
+	}
+	drain := func(shutdownTimeout time.Duration) func() {
+		return func() {
+			closeCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+			defer cancel()
+			if err := notifier.Close(closeCtx); err != nil {
+				logger.Warn("run callback drain incomplete", "error", err)
+			}
+		}
+	}
+	return notifier, drain(cfg.ShutdownTimeout), nil
+}
+
 func run() (err error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -55,10 +88,6 @@ func run() (err error) {
 	}
 	logger := newLogger(cfg)
 	slog.SetDefault(logger)
-	if cfg.CallbackURL != "" && cfg.CallbackSecret == "" {
-		logger.Warn("run_callback_disabled",
-			"reason", "LIKI_AGENT_RUNTIME_CALLBACK_SECRET is empty; run-completion callbacks stay disabled")
-	}
 
 	tracerProvider, err := otel.NewTracerProvider(
 		context.Background(),
@@ -120,26 +149,12 @@ func run() (err error) {
 		return err
 	}
 	// 运行完成回调（direct-connect 控制面）：仅当配置了 webhook secret 时启用。
-	var completionNotifier *notify.Notifier
-	if cfg.CallbackSecret != "" {
-		profile := deployment.Metadata.Name
-		completionNotifier, err = notify.New(notify.Config{
-			URL:     cfg.CallbackURL,
-			Secret:  cfg.CallbackSecret,
-			Source:  "spiffe://liki/runtime/" + profile,
-			Profile: profile,
-			Logger:  logger,
-		})
-		if err != nil {
-			return fmt.Errorf("init run callback notifier: %w", err)
-		}
-		defer func() {
-			closeCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-			defer cancel()
-			if err := completionNotifier.Close(closeCtx); err != nil {
-				logger.Warn("run callback drain incomplete", "error", err)
-			}
-		}()
+	completionNotifier, closeCompletionNotifier, err := newRunCallbackNotifier(cfg, logger, deployment.Metadata.Name)
+	if err != nil {
+		return err
+	}
+	if completionNotifier != nil {
+		defer closeCompletionNotifier()
 	}
 	aguiConfig := aguiadapter.Config{RunTimeout: cfg.RunTimeout, Metrics: metricsCollector}
 	if completionNotifier != nil {
