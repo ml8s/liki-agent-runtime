@@ -15,6 +15,9 @@ skill/project.
 | Tool execution | One allowlisted MCP tool invocation |
 | LLM call | One auditable model invocation inside a run |
 | Audit event | Immutable evidence of a lifecycle fact |
+| Delegation | A root agent delegating a subtask to a sub-expert via a task tool; lifecycle audited separately |
+| ADK working session | The run-scoped ADK session (`run:<RunID>`); deleted at terminal state, never carries cross-run history |
+| Skills binding | The artifact-declared skills root plus the built-in skill tools (list/load/resource) |
 
 ## AgentDeployment invariants
 
@@ -27,6 +30,14 @@ skill/project.
 6. Instruction and schema digests identify exact behavior; a plain-text Agent
    has an empty schema digest.
 7. Deployment, instruction, and schema digests enter audit evidence.
+
+## Aggregate roots
+
+| Aggregate root | Invariants | Single implementation |
+|---|---|---|
+| Run (`RunID`) | Idempotent and exclusive while active; terminal evidence appended exactly once and in order (close in-flight → compensate → terminal event → release state) | `closeRunEvidence` (`run_evidence.go`) |
+| AgentDefinition (`Name`) | Acyclic delegation graph; explicit deny-by-default tool allowlists; one effective model value per Agent | `agentGraphBuilder` (`agent_graph.go`) |
+| AuditEvent (event ID) | Append-only; lifecycle events close with stable IDs | `audit` package + startup recovery |
 
 ## Execution invariants
 
