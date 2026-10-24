@@ -158,6 +158,9 @@ func validate(cfg Config) (Config, error) {
 	if cfg.CallbackSecret != "" && cfg.CallbackURL == "" {
 		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_CALLBACK_URL is required when LIKI_AGENT_RUNTIME_CALLBACK_SECRET is set")
 	}
+	if cfg.CallbackURL != "" && cfg.CallbackSecret == "" {
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_CALLBACK_SECRET is required when LIKI_AGENT_RUNTIME_CALLBACK_URL is set")
+	}
 	if cfg.OpsAddr == cfg.ProtocolAddr || (cfg.TLSAddr != "" && (cfg.TLSAddr == cfg.ProtocolAddr || cfg.TLSAddr == cfg.OpsAddr)) {
 		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PROTOCOL_ADDR, LIKI_AGENT_RUNTIME_OPS_ADDR and LIKI_AGENT_RUNTIME_TLS_ADDR must be distinct listen addresses")
 	}
@@ -188,6 +191,16 @@ func validate(cfg Config) (Config, error) {
 		cfg.Topology = TopologySingle
 	default:
 		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_TOPOLOGY is unsupported: %q", cfg.Topology)
+	}
+	switch strings.ToLower(cfg.LogLevel) {
+	case "debug", "info", "warn", "error":
+	default:
+		return Config{}, fmt.Errorf("LIKI_LOG_LEVEL is unsupported: %q (expected debug, info, warn, or error)", cfg.LogLevel)
+	}
+	switch strings.ToLower(cfg.LogFormat) {
+	case "json", "text":
+	default:
+		return Config{}, fmt.Errorf("LIKI_LOG_FORMAT is unsupported: %q (expected json or text)", cfg.LogFormat)
 	}
 	switch cfg.LLMStructuredOutput {
 	case "", "none", "json_schema", "json_object":
@@ -258,7 +271,7 @@ func validate(cfg Config) (Config, error) {
 }
 
 func getEnv(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value
 	}
 	return fallback
