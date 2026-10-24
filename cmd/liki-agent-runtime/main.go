@@ -186,34 +186,14 @@ func run() (err error) {
 		otelhttp.WithPropagators(otel.Propagator()),
 	)
 
-	httpServer := &http.Server{
-		Addr:              cfg.ProtocolAddr,
-		Handler:           httpHandler,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		IdleTimeout:       120 * time.Second,
+	servers, err := newHTTPServers(cfg, protocolServer, httpHandler)
+	if err != nil {
+		return err
 	}
-	// 运维面独立监听：协议面的 mTLS 不波及健康检查与指标抓取。
-	opsServer := &http.Server{
-		Addr:              cfg.OpsAddr,
-		Handler:           protocolServer.OpsHandler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
+	httpServer, opsServer := servers[0], servers[1]
 	var tlsServer *http.Server
-	if cfg.TLSAddr != "" {
-		tlsConfig, err := tlsconf.ServerConfig(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSClientCAFile)
-		if err != nil {
-			return fmt.Errorf("build mutual TLS config: %w", err)
-		}
-		tlsServer = &http.Server{
-			Addr:              cfg.TLSAddr,
-			Handler:           httpHandler,
-			TLSConfig:         tlsConfig,
-			ReadHeaderTimeout: 10 * time.Second,
-			ReadTimeout:       30 * time.Second,
-			IdleTimeout:       120 * time.Second,
-		}
+	if len(servers) > 2 {
+		tlsServer = servers[2]
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -225,10 +205,6 @@ func run() (err error) {
 			logger.Warn("otel_tracer_provider_shutdown_failed", "error", err)
 		}
 	}()
-	servers := []*http.Server{httpServer, opsServer}
-	if tlsServer != nil {
-		servers = append(servers, tlsServer)
-	}
 	errCh := make(chan error, len(servers))
 	go func() {
 		logger.Info("liki-agent-runtime listening",
@@ -255,22 +231,63 @@ func run() (err error) {
 	select {
 	case <-ctx.Done():
 		logger.Info("liki-agent-runtime draining", "shutdown_timeout", cfg.ShutdownTimeout)
-		protocolServer.Drain()
-		drainCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-		defer cancel()
-		var firstErr error
-		for _, server := range servers {
-			if err := server.Shutdown(drainCtx); err != nil && firstErr == nil {
-				firstErr = err
-			}
-		}
-		return firstErr
+		return shutdownServers(servers, protocolServer, cfg.ShutdownTimeout)
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
 		return err
 	}
+}
+
+// newHTTPServers 组装协议、运维与可选 mTLS 三个监听；TLS 四项配置已由
+// platform 校验保证成对。
+func newHTTPServers(cfg config.Config, protocolServer *transport.Server, protocolHandler http.Handler) ([]*http.Server, error) {
+	httpServer := &http.Server{
+		Addr:              cfg.ProtocolAddr,
+		Handler:           protocolHandler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	// 运维面独立监听：协议面的 mTLS 不波及健康检查与指标抓取。
+	opsServer := &http.Server{
+		Addr:              cfg.OpsAddr,
+		Handler:           protocolServer.OpsHandler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	servers := []*http.Server{httpServer, opsServer}
+	if cfg.TLSAddr != "" {
+		tlsConfig, err := tlsconf.ServerConfig(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSClientCAFile)
+		if err != nil {
+			return nil, fmt.Errorf("build mutual TLS config: %w", err)
+		}
+		servers = append(servers, &http.Server{
+			Addr:              cfg.TLSAddr,
+			Handler:           protocolServer,
+			TLSConfig:         tlsConfig,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		})
+	}
+	return servers, nil
+}
+
+// shutdownServers 排水（readiness 置为 draining）并按超时逐一 Shutdown，
+// 返回首个退出错误。
+func shutdownServers(servers []*http.Server, protocolServer *transport.Server, shutdownTimeout time.Duration) error {
+	protocolServer.Drain()
+	drainCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	var firstErr error
+	for _, server := range servers {
+		if err := server.Shutdown(drainCtx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func mcpServerNames(deployment *agentruntime.Deployment) []string {
