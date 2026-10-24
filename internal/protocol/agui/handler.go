@@ -20,6 +20,7 @@ import (
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"github.com/ml8s/liki-agent-runtime/internal/notify"
 	"github.com/ml8s/liki-agent-runtime/internal/observability"
+	platformconfig "github.com/ml8s/liki-agent-runtime/internal/platform/config"
 	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
 	"google.golang.org/adk/v2/session"
 )
@@ -68,7 +69,7 @@ func New(runtime runtime, config Config) (*Handler, error) {
 		return nil, fmt.Errorf("adk runtime is required")
 	}
 	if config.RunTimeout <= 0 {
-		config.RunTimeout = 10 * time.Minute
+		config.RunTimeout = platformconfig.DefaultRunTimeout
 	}
 	entrypoint := runtime.Entrypoint()
 	if entrypoint == nil || entrypoint.Name == "" {

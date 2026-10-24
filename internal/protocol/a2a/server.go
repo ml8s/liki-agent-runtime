@@ -17,6 +17,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
 	"github.com/ml8s/liki-agent-runtime/internal/agent"
+	platformconfig "github.com/ml8s/liki-agent-runtime/internal/platform/config"
 	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
 	"google.golang.org/adk/v2/server/adka2a/v2"
 	"google.golang.org/adk/v2/session"
@@ -63,7 +64,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 		return nil, fmt.Errorf("public url is required")
 	}
 	if config.RunTimeout <= 0 {
-		config.RunTimeout = 10 * time.Minute
+		config.RunTimeout = platformconfig.DefaultRunTimeout
 	}
 	if config.Logger == nil {
 		config.Logger = slog.Default()

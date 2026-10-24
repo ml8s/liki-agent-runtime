@@ -17,6 +17,7 @@ import (
 
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	platformconfig "github.com/ml8s/liki-agent-runtime/internal/platform/config"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -130,8 +131,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		return Config{}, domain.NewError(domain.CodeLLMModelMissing, "LLM model is required", domain.ErrInvalidInput)
 	}
 	if config.ModelTimeout <= 0 {
-		// Zero-value fallback must match platform/config's Load default.
-		config.ModelTimeout = 120 * time.Second
+		config.ModelTimeout = platformconfig.DefaultLLMTimeout
 	}
 	if config.AuditRecorder == nil {
 		return Config{}, domain.NewError(domain.CodeAuditRecorderMissing, "audit recorder is required", domain.ErrInvalidInput)
@@ -157,8 +157,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		config.StructuredOutput = DefaultStructuredOutputMode(config.Provider)
 	}
 	if config.MCPTimeout <= 0 {
-		// Zero-value fallback must match platform/config's Load default.
-		config.MCPTimeout = 30 * time.Second
+		config.MCPTimeout = platformconfig.DefaultMCPTimeout
 	}
 	if config.MCPHealthTimeout <= 0 {
 		// Zero-value fallback: dependency discovery follows the tool-call
@@ -166,8 +165,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		config.MCPHealthTimeout = config.MCPTimeout
 	}
 	if config.MaxConcurrentRuns <= 0 {
-		// Zero-value fallback must match platform/config's Load default.
-		config.MaxConcurrentRuns = 32
+		config.MaxConcurrentRuns = platformconfig.DefaultMaxConcurrentRuns
 	}
 	config.outboundTransport = newOutboundTransport(config.MaxConcurrentRuns)
 	if config.Now == nil {

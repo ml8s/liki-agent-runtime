@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+// Canonical runtime defaults. Load's fallbacks and the runtime/adapter
+// second-chance defaults all reference these constants so a default can
+// never drift between layers.
+const (
+	DefaultMCPTimeout        = 30 * time.Second
+	DefaultMaxConcurrentRuns = 32
+	DefaultRunTimeout        = 600 * time.Second
+	DefaultShutdownTimeout   = 30 * time.Second
+	DefaultLLMTimeout        = 120 * time.Second
+	DefaultLLMTemperature    = 0.2
+)
+
 // DefaultAddr is the default HTTP listen address. The server and the
 // container healthcheck subcommand share it so the two cannot drift.
 const DefaultAddr = ":8083"
@@ -98,28 +110,28 @@ func Load() (Config, error) {
 		cfg.LLMStructuredOutput = ""
 	}
 	var err error
-	if cfg.MCPTimeout, err = getDuration("LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS", 30*time.Second); err != nil {
+	if cfg.MCPTimeout, err = getDuration("LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS", DefaultMCPTimeout); err != nil {
 		return Config{}, err
 	}
 	if cfg.MCPHealthTimeout, err = getOptionalDuration("LIKI_AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS"); err != nil {
 		return Config{}, err
 	}
-	if cfg.MaxConcurrentRuns, err = getInt("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS", 32); err != nil {
+	if cfg.MaxConcurrentRuns, err = getInt("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS", DefaultMaxConcurrentRuns); err != nil {
 		return Config{}, err
 	}
-	if cfg.RunTimeout, err = getDuration("LIKI_AGENT_RUNTIME_RUN_TIMEOUT_SECONDS", 600*time.Second); err != nil {
+	if cfg.RunTimeout, err = getDuration("LIKI_AGENT_RUNTIME_RUN_TIMEOUT_SECONDS", DefaultRunTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.ShutdownTimeout, err = getDuration("LIKI_AGENT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS", 30*time.Second); err != nil {
+	if cfg.ShutdownTimeout, err = getDuration("LIKI_AGENT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS", DefaultShutdownTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMTimeout, err = getDuration("LIKI_AGENT_RUNTIME_LLM_TIMEOUT_SECONDS", 120*time.Second); err != nil {
+	if cfg.LLMTimeout, err = getDuration("LIKI_AGENT_RUNTIME_LLM_TIMEOUT_SECONDS", DefaultLLMTimeout); err != nil {
 		return Config{}, err
 	}
 	if cfg.LLMMaxOutputTokens, err = getOptionalPositiveInt("LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS"); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMTemperature, err = getFloat("LIKI_AGENT_RUNTIME_LLM_TEMPERATURE", 0.2); err != nil {
+	if cfg.LLMTemperature, err = getFloat("LIKI_AGENT_RUNTIME_LLM_TEMPERATURE", DefaultLLMTemperature); err != nil {
 		return Config{}, err
 	}
 	return validate(cfg)
