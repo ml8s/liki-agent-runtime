@@ -24,7 +24,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/adk/v2/agent"
-	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/openaimodel"
 	"google.golang.org/adk/v2/plugin"
@@ -118,7 +117,9 @@ func (l *runLifecycle) finish(runID string) {
 
 // NewRuntime builds the runtime from a validated deployment and its
 // dependencies. It fails closed on any invalid or missing dependency.
-func NewRuntime(config Config) (*Runtime, error) {
+// normalizeRuntimeConfig 补全依赖零值默认并校验必填与一致性约束，返回
+// 可直接用于构建的副本。零值兜底必须与 platform/config 的 Load 默认一致。
+func normalizeRuntimeConfig(config Config) (Config, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
@@ -126,26 +127,22 @@ func NewRuntime(config Config) (*Runtime, error) {
 		config.AppName = "liki-agent-runtime"
 	}
 	if config.Model == "" {
-		return nil, domain.NewError(domain.CodeLLMModelMissing, "LLM model is required", domain.ErrInvalidInput)
+		return Config{}, domain.NewError(domain.CodeLLMModelMissing, "LLM model is required", domain.ErrInvalidInput)
 	}
 	if config.ModelTimeout <= 0 {
 		// Zero-value fallback must match platform/config's Load default.
 		config.ModelTimeout = 120 * time.Second
 	}
 	if config.AuditRecorder == nil {
-		return nil, domain.NewError(domain.CodeAuditRecorderMissing, "audit recorder is required", domain.ErrInvalidInput)
+		return Config{}, domain.NewError(domain.CodeAuditRecorderMissing, "audit recorder is required", domain.ErrInvalidInput)
 	}
 	if config.Deployment == nil {
-		return nil, domain.NewError(domain.CodeAgentDefinitionMissing, "AgentDefinition is required", domain.ErrInvalidInput)
-	}
-	entrypoint, err := config.Deployment.EntrypointDefinition()
-	if err != nil {
-		return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, "select entrypoint AgentDefinition", err)
+		return Config{}, domain.NewError(domain.CodeAgentDefinitionMissing, "AgentDefinition is required", domain.ErrInvalidInput)
 	}
 	switch config.StructuredOutput {
 	case StructuredOutputNone, StructuredOutputJSONSchema, StructuredOutputJSONObject:
 	default:
-		return nil, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output capability is invalid", domain.ErrInvalidInput)
+		return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output capability is invalid", domain.ErrInvalidInput)
 	}
 	structuredAgents := 0
 	for _, candidate := range config.Deployment.Spec.Agents {
@@ -155,7 +152,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	}
 	switch {
 	case structuredAgents == 0 && config.StructuredOutput != StructuredOutputNone:
-		return nil, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output mode is set but no Agent declares an output schema", domain.ErrInvalidInput)
+		return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output mode is set but no Agent declares an output schema", domain.ErrInvalidInput)
 	case structuredAgents > 0 && config.StructuredOutput == StructuredOutputNone:
 		config.StructuredOutput = DefaultStructuredOutputMode(config.Provider)
 	}
@@ -176,15 +173,65 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if config.Now == nil {
 		config.Now = func() time.Time { return time.Now().UTC() }
 	}
+	if config.TracerProvider == nil {
+		config.TracerProvider = otel.GetTracerProvider()
+	}
+	return config, nil
+}
+
+// recoverInterruptedAudits 启动恢复：进程中断遗留的未闭合审计生命周期以
+// 合成 runtime_interrupted 终态闭合（append-only），先于接收流量。
+func recoverInterruptedAudits(config Config) error {
 	if recoverer, ok := config.AuditRecorder.(audit.InterruptionRecoverer); ok {
 		recoveryCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := recoverer.RecoverInterrupted(recoveryCtx, config.Now()); err != nil {
-			return nil, domain.NewError(domain.CodeRuntimeInitFailed, "recover interrupted audit events", err)
+			return domain.NewError(domain.CodeRuntimeInitFailed, "recover interrupted audit events", err)
 		}
 	}
-	if config.TracerProvider == nil {
-		config.TracerProvider = otel.GetTracerProvider()
+	return nil
+}
+
+// newModelFactory 返回按模型名惰性构建并记忆化的 LLM 工厂。json_object
+// 兼容模式由 provider 感知适配器处理。
+func newModelFactory(config Config) func(string) (model.LLM, error) {
+	if config.modelOverride != nil {
+		return func(string) (model.LLM, error) { return config.modelOverride, nil }
+	}
+	useJSONObject := config.StructuredOutput == StructuredOutputJSONObject
+	build := func(modelName string) (model.LLM, error) {
+		built, err := openaimodel.NewModel(context.Background(), modelName, &openaimodel.ClientConfig{
+			APIKey:  config.ModelAPIKey,
+			BaseURL: config.ModelBaseURL,
+			HTTPClient: &http.Client{
+				Timeout:   config.ModelTimeout,
+				Transport: otelhttp.NewTransport(config.outboundTransport),
+			},
+		})
+		if err != nil {
+			return nil, domain.NewError(domain.CodeLLMUnavailable, "create LLM model", err)
+		}
+		if !useJSONObject {
+			return built, nil
+		}
+		compatModel, err := newJSONObjectModel(built)
+		if err != nil {
+			return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create provider structured output model", err)
+		}
+		return compatModel, nil
+	}
+	return newModelResolver(build).resolve
+}
+
+// NewRuntime builds the runtime from a validated deployment and its
+// dependencies. It fails closed on any invalid or missing dependency.
+func NewRuntime(config Config) (*Runtime, error) {
+	config, err := normalizeRuntimeConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	if err := recoverInterruptedAudits(config); err != nil {
+		return nil, err
 	}
 	tracer := config.TracerProvider.Tracer("github.com/ml8s/liki-agent-runtime/agent")
 	// Protocol callers own durable conversation/product history. Each ADK
@@ -194,35 +241,9 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if config.SessionService != nil {
 		sessionService = config.SessionService
 	}
-
-	var resolveModel func(string) (model.LLM, error)
-	if config.modelOverride != nil {
-		resolveModel = func(string) (model.LLM, error) { return config.modelOverride, nil }
-	} else {
-		// Use ADK's official OpenAI-compatible model. The provider-aware
-		// structured-output adapter handles providers without JSON schema mode.
-		useJSONObject := config.StructuredOutput == StructuredOutputJSONObject
-		resolveModel = newModelResolver(func(modelName string) (model.LLM, error) {
-			built, err := openaimodel.NewModel(context.Background(), modelName, &openaimodel.ClientConfig{
-				APIKey:  config.ModelAPIKey,
-				BaseURL: config.ModelBaseURL,
-				HTTPClient: &http.Client{
-					Timeout:   config.ModelTimeout,
-					Transport: otelhttp.NewTransport(config.outboundTransport),
-				},
-			})
-			if err != nil {
-				return nil, domain.NewError(domain.CodeLLMUnavailable, "create LLM model", err)
-			}
-			if !useJSONObject {
-				return built, nil
-			}
-			compatModel, err := newJSONObjectModel(built)
-			if err != nil {
-				return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create provider structured output model", err)
-			}
-			return compatModel, nil
-		}).resolve
+	entrypoint, err := config.Deployment.EntrypointDefinition()
+	if err != nil {
+		return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, "select entrypoint AgentDefinition", err)
 	}
 	temperature := float32(config.Temperature)
 	callAuditor := newLLMCallAuditor(config.AuditRecorder, config.Metrics, config.Provider, config.Deployment, config.Now)
@@ -246,93 +267,19 @@ func NewRuntime(config Config) (*Runtime, error) {
 		entrypoint.Name,
 		callAuditor.scope,
 	)
-	builtAgents := make(map[string]agent.Agent, len(config.Deployment.Spec.Agents))
-	building := make(map[string]struct{})
-	var buildAgent func(*AgentDefinition) (agent.Agent, error)
-	buildAgent = func(definition *AgentDefinition) (agent.Agent, error) {
-		if built, ok := builtAgents[definition.Name]; ok {
-			return built, nil
-		}
-		if _, active := building[definition.Name]; active {
-			return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("agent delegation cycle through %q", definition.Name), nil)
-		}
-		building[definition.Name] = struct{}{}
-		outputKey := ""
-		if definition.Output.Structured() {
-			outputKey = StructuredOutputStateKey(definition.Name)
-		}
-		subAgents := make([]agent.Agent, 0, len(definition.SubAgents))
-		for _, reference := range definition.SubAgents {
-			target, ok := config.Deployment.Agent(reference.Name)
-			if !ok {
-				return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("sub-agent %q is not defined", reference.Name), nil)
-			}
-			subAgent, err := buildAgent(target)
-			if err != nil {
-				return nil, err
-			}
-			subAgents = append(subAgents, subAgent)
-		}
-		toolsets := make([]tool.Toolset, 0, len(config.Deployment.Spec.MCPServers))
-		for index, server := range config.Deployment.Spec.MCPServers {
-			allowed := definition.Tools.Allow[server.Name]
-			if len(allowed) == 0 {
-				continue
-			}
-			toolsets = append(toolsets, tool.FilterToolset(
-				mcpToolsets[index],
-				tool.AllowedToolsPredicate(allowed),
-			))
-		}
-		if binding := skillBinding(definition); binding != nil {
-			skillToolset, err := newSkillToolset(binding)
-			if err != nil {
-				return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("build skill toolset for agent %q: %v", definition.Name, err), nil)
-			}
-			toolsets = append(toolsets, skillToolset)
-		}
-		delete(building, definition.Name)
-		// Per-Agent model settings fall back to the runtime-wide defaults.
-		aiModel, err := resolveModel(definition.EffectiveModel(config.Model))
-		if err != nil {
-			return nil, err
-		}
-		built, err := llmagent.New(definition.ADKConfig(ADKAgentRuntime{
-			RawOutputSchema: definition.RawOutputSchema,
-			Model:           aiModel,
-			Toolsets:        toolsets,
-			SubAgents:       subAgents,
-			Temperature:     definition.EffectiveTemperature(temperature),
-			MaxOutputTokens: definition.EffectiveMaxOutputTokens(config.MaxOutputTokens),
-			OutputKey:       outputKey,
-			IsEntrypoint:    definition.Name == entrypoint.Name,
-			BeforeModelCallbacks: []llmagent.BeforeModelCallback{
-				callAuditor.beforeModel,
-			},
-			AfterModelCallbacks: []llmagent.AfterModelCallback{
-				callAuditor.afterModel,
-			},
-			OnModelErrorCallbacks: []llmagent.OnModelErrorCallback{
-				callAuditor.onModelError,
-			},
-			BeforeAgentCallbacks: []agent.BeforeAgentCallback{
-				delegationAuditor.BeforeAgent,
-			},
-			AfterAgentCallbacks: []agent.AfterAgentCallback{
-				delegationAuditor.AfterAgent,
-			},
-			BeforeToolCallbacks: []llmagent.BeforeToolCallback{
-				toolAuditor.BeforeTool,
-			},
-			AfterToolCallbacks: []llmagent.AfterToolCallback{
-				toolAuditor.AfterTool,
-			},
-		}))
-		if err != nil {
-			return nil, domain.NewError(domain.CodeRuntimeInitFailed, fmt.Sprintf("create ADK agent %q", definition.Name), err)
-		}
-		builtAgents[definition.Name] = built
-		return built, nil
+	graph := newAgentGraphBuilder(config.Deployment, entrypoint.Name, agentGraphDeps{
+		mcpToolsets:       mcpToolsets,
+		modelName:         config.Model,
+		resolveModel:      newModelFactory(config),
+		temperature:       temperature,
+		maxOutputTokens:   config.MaxOutputTokens,
+		callAuditor:       callAuditor,
+		delegationAuditor: delegationAuditor,
+		toolAuditor:       toolAuditor,
+	})
+	root, err := graph.build(entrypoint)
+	if err != nil {
+		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create ADK agent", err)
 	}
 	retryPlugin, err := retryandreflect.New(
 		retryandreflect.WithMaxRetries(2),
@@ -341,18 +288,13 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create tool retry plugin", err)
 	}
-	plugins := []*plugin.Plugin{retryPlugin}
-	root, err := buildAgent(entrypoint)
-	if err != nil {
-		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create ADK agent", err)
-	}
 	runnerConfig := runner.Config{
 		AppName:           config.AppName,
 		Agent:             root,
 		SessionService:    sessionService,
 		AutoCreateSession: true,
 		PluginConfig: runner.PluginConfig{
-			Plugins:      plugins,
+			Plugins:      []*plugin.Plugin{retryPlugin},
 			CloseTimeout: 5 * time.Second,
 		},
 	}
