@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/agent"
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 	"github.com/ml8s/liki-agent-runtime/internal/protocol/agui"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
@@ -66,7 +66,7 @@ func TestAGUIAttributesWorkerTextAndToolsToSubagent(t *testing.T) {
 	}
 	scripted := &scriptedRuntime{
 		events: events,
-		result: agent.RunResult{Text: "root answer"},
+		result: execution.RunResult{Text: "root answer"},
 	}
 	handler, err := agui.New(scripted, agui.Config{RunTimeout: time.Second})
 	if err != nil {
@@ -112,7 +112,7 @@ func TestAGUIAttributesWorkerTextAndToolsToSubagent(t *testing.T) {
 func TestAGUIDoesNotTreatEntrypointAsSubagent(t *testing.T) {
 	scripted := &scriptedRuntime{
 		events: []*session.Event{{Author: "main", Branch: "main"}},
-		result: agent.RunResult{Text: "root answer"},
+		result: execution.RunResult{Text: "root answer"},
 	}
 	handler, err := agui.New(scripted, agui.Config{RunTimeout: time.Second})
 	if err != nil {
@@ -139,7 +139,7 @@ func TestAGUIEmitsOfficialSubagentLifecycle(t *testing.T) {
 	}
 	scripted := &scriptedRuntime{
 		events: events,
-		result: agent.RunResult{Text: "complete"},
+		result: execution.RunResult{Text: "complete"},
 	}
 	handler, err := agui.New(scripted, agui.Config{
 		RunTimeout: time.Second,

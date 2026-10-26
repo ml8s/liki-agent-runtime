@@ -1,4 +1,4 @@
-package agent
+package execution
 
 import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
@@ -15,8 +15,8 @@ import (
 // projector can safely return the framework-native event unchanged.
 func BenchmarkEventProjectorFinalText(b *testing.B) {
 	agentDeployment := plainTextDeployment()
-	projection := newEventProjectionState()
-	projector := newEventProjector(newEventProjectorIndex(agentDeployment))
+	projection := NewEventProjectionState()
+	projector := NewEventProjector(NewEventProjectorIndex(agentDeployment))
 	event := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -48,8 +48,8 @@ func BenchmarkEventProjectorPartialText(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		projection := newEventProjectionState()
-		projector := newEventProjector(newEventProjectorIndex(agentDeployment))
+		projection := NewEventProjectionState()
+		projector := NewEventProjector(NewEventProjectorIndex(agentDeployment))
 		_, _, visible := projector.Project(projection, event)
 		if !visible {
 			b.Fatal("event was not visible")
@@ -60,7 +60,7 @@ func BenchmarkEventProjectorPartialText(b *testing.B) {
 func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 	agentDeployment := &deploymentpkg.AgentDeployment{
 		Metadata: deploymentpkg.DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: deploymentpkg.DeploymentSpec{Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+		Spec: deploymentpkg.DeploymentSpec{Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "plain text agent",
@@ -69,8 +69,8 @@ func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 			Tools:       deploymentpkg.ToolAllowlist{Allow: map[string][]string{}},
 		}})},
 	}
-	projection := newEventProjectionState()
-	projector := newEventProjector(newEventProjectorIndex(agentDeployment))
+	projection := NewEventProjectionState()
+	projector := NewEventProjector(NewEventProjectorIndex(agentDeployment))
 	event := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -88,7 +88,7 @@ func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 func TestEventProjectorHidesStructuredPayload(t *testing.T) {
 	agentDeployment := &deploymentpkg.AgentDeployment{
 		Metadata: deploymentpkg.DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: deploymentpkg.DeploymentSpec{Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+		Spec: deploymentpkg.DeploymentSpec{Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "structured agent",
@@ -101,8 +101,8 @@ func TestEventProjectorHidesStructuredPayload(t *testing.T) {
 			Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{}},
 		}})},
 	}
-	projection := newEventProjectionState()
-	projector := newEventProjector(newEventProjectorIndex(agentDeployment))
+	projection := NewEventProjectionState()
+	projector := NewEventProjector(NewEventProjectorIndex(agentDeployment))
 	event := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -118,8 +118,8 @@ func TestEventProjectorHidesStructuredPayload(t *testing.T) {
 }
 
 func TestEventProjectorPreservesStateOnlyFinalEvent(t *testing.T) {
-	projection := newEventProjectionState()
-	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
+	projection := NewEventProjectionState()
+	projector := NewEventProjector(NewEventProjectorIndex(plainTextDeployment()))
 	event := &session.Event{
 		Author: "main",
 		Actions: session.EventActions{
@@ -134,8 +134,8 @@ func TestEventProjectorPreservesStateOnlyFinalEvent(t *testing.T) {
 }
 
 func TestEventProjectorSuppressesFinalTextDuplicateAfterStreaming(t *testing.T) {
-	projection := newEventProjectionState()
-	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
+	projection := NewEventProjectionState()
+	projector := NewEventProjector(NewEventProjectorIndex(plainTextDeployment()))
 	partial := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -161,8 +161,8 @@ func TestEventProjectorSuppressesFinalTextDuplicateAfterStreaming(t *testing.T) 
 }
 
 func TestEventProjectorStateTransitionDoesNotMutatePreviousState(t *testing.T) {
-	projection := newEventProjectionState()
-	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
+	projection := NewEventProjectionState()
+	projector := NewEventProjector(NewEventProjectorIndex(plainTextDeployment()))
 	partial := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -198,8 +198,8 @@ func TestEventProjectorStateTransitionDoesNotMutatePreviousState(t *testing.T) {
 }
 
 func TestEventProjectorKeepsToolFactWhenSuppressingFinalText(t *testing.T) {
-	projection := newEventProjectionState()
-	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
+	projection := NewEventProjectionState()
+	projector := NewEventProjector(NewEventProjectorIndex(plainTextDeployment()))
 	partial := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -233,7 +233,7 @@ func TestEventProjectorKeepsToolFactWhenSuppressingFinalText(t *testing.T) {
 func plainTextDeployment() *deploymentpkg.AgentDeployment {
 	return &deploymentpkg.AgentDeployment{
 		Metadata: deploymentpkg.DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: deploymentpkg.DeploymentSpec{Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+		Spec: deploymentpkg.DeploymentSpec{Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "plain text agent",
@@ -247,7 +247,7 @@ func plainTextDeployment() *deploymentpkg.AgentDeployment {
 func structuredTextDeployment() *deploymentpkg.AgentDeployment {
 	return &deploymentpkg.AgentDeployment{
 		Metadata: deploymentpkg.DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: deploymentpkg.DeploymentSpec{Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+		Spec: deploymentpkg.DeploymentSpec{Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "structured agent",
@@ -288,7 +288,7 @@ func TestExposesModelText(t *testing.T) {
 func TestEventProjectorExposeDecisionMatchesRule(t *testing.T) {
 	for _, agentDeployment := range []*deploymentpkg.AgentDeployment{plainTextDeployment(), structuredTextDeployment()} {
 		entrypoint := agentDeployment.Spec.Agents[0]
-		projector := newEventProjector(newEventProjectorIndex(agentDeployment))
+		projector := NewEventProjector(NewEventProjectorIndex(agentDeployment))
 		definition, expose := projector.definitionFor(entrypoint.Name)
 		if definition == nil {
 			t.Fatalf("definitionFor(%q) returned nil for structured=%v", entrypoint.Name, entrypoint.Output.Structured())

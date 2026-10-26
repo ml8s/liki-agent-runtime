@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"go.opentelemetry.io/otel/attribute"
@@ -20,23 +22,23 @@ import (
 // protocol adapter. It is not a public API and creates no second business path.
 func (r *Runtime) Run(
 	ctx context.Context,
-	request RunRequest,
+	request execution.RunRequest,
 	observe func(*session.Event) error,
-) (result RunResult, runErr error) {
+) (result execution.RunResult, runErr error) {
 	request = normalizeRunRequest(request)
 	if err := validateRunRequest(request); err != nil {
-		return RunResult{}, err
+		return execution.RunResult{}, err
 	}
 	if err := r.ensureDurableRunID(ctx, request.RunID); err != nil {
-		return RunResult{}, err
+		return execution.RunResult{}, err
 	}
 	if !r.runs.begin(request.RunID) {
-		return RunResult{}, domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
+		return execution.RunResult{}, domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
 	}
 	releaseRun, err := r.acquireRun(ctx)
 	if err != nil {
 		r.runs.finish(request.RunID)
-		return RunResult{}, err
+		return execution.RunResult{}, err
 	}
 	defer func() {
 		releaseRun()
@@ -60,19 +62,19 @@ func (r *Runtime) Run(
 	)
 	defer runSpan.End()
 	startedAt := r.config.Now()
-	state := runState{
-		capturePlain: !r.entrypoint.Output.Structured(),
+	state := execution.RunState{
+		CapturePlain: !r.entrypoint.Output.Structured(),
 	}
-	projector := newEventProjector(r.projectorIndex)
-	projection := newEventProjectionState()
+	projector := execution.NewEventProjector(r.projectorIndex)
+	projection := execution.NewEventProjectionState()
 	sessionID := runSessionID(request.RunID)
 	scope := &runExecution{
-		identity: RunIdentity{
+		identity: execution.RunIdentity{
 			RunID:    domain.ID(request.RunID),
 			ThreadID: domain.ID(request.ThreadID),
 			UserID:   request.UserID,
 		},
-		provenance: RunProvenance{
+		provenance: execution.RunProvenance{
 			Protocol: request.Protocol,
 			TraceID:  traceIDFromContext(ctx),
 			SpanID:   spanIDFromContext(ctx),
@@ -89,7 +91,7 @@ func (r *Runtime) Run(
 	defer func() { result.Usage = scope.usage() }()
 	if !r.callAuditor.begin(sessionID, scope) {
 		runErr = domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
-		return RunResult{}, runErr
+		return execution.RunResult{}, runErr
 	}
 	if auditErr := r.recordRunAudit(ctx, scope, audit.EventRunStarted, audit.StatusRunning, nil); auditErr != nil {
 		runErr = auditErr
@@ -102,7 +104,7 @@ func (r *Runtime) Run(
 			UserID:    request.UserID,
 			SessionID: sessionID,
 		})
-		return RunResult{}, runErr
+		return execution.RunResult{}, runErr
 	}
 	defer func() {
 		auditCtx := context.WithoutCancel(ctx)
@@ -142,14 +144,14 @@ func (r *Runtime) Run(
 		runSpan.RecordError(err)
 		runSpan.SetStatus(codes.Error, runtimeError(err).Error())
 		runErr = err
-		return RunResult{}, runErr
+		return execution.RunResult{}, runErr
 	}
 
 	events := r.runner.Run(
 		ctx,
 		request.UserID,
 		sessionID,
-		buildUserContent(request),
+		execution.BuildUserContent(request),
 		agent.RunConfig{StreamingMode: agent.StreamingModeSSE},
 	)
 	for event, err := range events {
@@ -161,16 +163,16 @@ func (r *Runtime) Run(
 					"run_id", request.RunID, "error", runtimeError(err).Error(),
 				)...)
 			runErr = runtimeError(err)
-			return RunResult{}, runErr
+			return execution.RunResult{}, runErr
 		}
-		state = state.consume(event)
+		state = state.Consume(event)
 		var structuredErr error
 		state, structuredErr = r.consumeStructuredEvent(state, event)
 		if structuredErr != nil {
 			runSpan.RecordError(structuredErr)
 			runSpan.SetStatus(codes.Error, runtimeError(structuredErr).Error())
 			runErr = structuredErr
-			return RunResult{}, runErr
+			return execution.RunResult{}, runErr
 		}
 		// Task-mode sub-agents stop their event iterator on finish_task, so
 		// their AfterAgent callback never runs; complete the delegation from
@@ -179,7 +181,7 @@ func (r *Runtime) Run(
 			runSpan.RecordError(delegationErr)
 			runSpan.SetStatus(codes.Error, runtimeError(delegationErr).Error())
 			runErr = runtimeError(delegationErr)
-			return RunResult{}, runErr
+			return execution.RunResult{}, runErr
 		}
 		if observe != nil {
 			var visible *session.Event
@@ -190,40 +192,40 @@ func (r *Runtime) Run(
 					runSpan.RecordError(err)
 					runSpan.SetStatus(codes.Error, runtimeError(err).Error())
 					runErr = runtimeError(err)
-					return RunResult{}, runErr
+					return execution.RunResult{}, runErr
 				}
 			}
 		}
 	}
-	if r.entrypoint.Output.Structured() && state.output.JSON == nil {
+	if r.entrypoint.Output.Structured() && state.Output.JSON == nil {
 		var loadErr error
 		state, loadErr = r.loadStructuredAnalysis(ctx, request, sessionID, state)
 		if loadErr != nil {
 			runSpan.RecordError(loadErr)
 			runSpan.SetStatus(codes.Error, runtimeError(loadErr).Error())
 			runErr = loadErr
-			return RunResult{}, runErr
+			return execution.RunResult{}, runErr
 		}
 	}
 
-	if strings.TrimSpace(state.output.Text) == "" {
+	if strings.TrimSpace(state.Output.Text) == "" {
 		r.config.Logger.Warn("agent_run_empty_response", "run_id", request.RunID)
 		runErr = domain.NewError(domain.CodeRuntimeEmptyResponse, "ADK runtime returned no answer text", nil)
-		return RunResult{}, runErr
+		return execution.RunResult{}, runErr
 	}
 	runSpan.SetStatus(codes.Ok, "")
 	r.config.Logger.InfoContext(ctx, "agent_run_completed",
 		append(traceLogFields(ctx),
 			"run_id", request.RunID,
 			"agent", r.entrypoint.Name,
-			"tools_used", state.tools.Names(),
+			"tools_used", state.Tools(),
 			"model", r.entrypoint.EffectiveModel(r.config.Model),
 		)...)
 
-	return RunResult{
+	return execution.RunResult{
 		Definition: r.definition.DefinitionRef(),
-		Output:     state.output.JSON,
-		Text:       state.output.Text,
+		Output:     state.Output.JSON,
+		Text:       state.Output.Text,
 	}, nil
 }
 
@@ -234,20 +236,20 @@ func (r *Runtime) Run(
 // that yielded no state delta. Repeated final events follow the session's
 // last-write-wins semantics because each delta overwrites the prior result.
 func (r *Runtime) consumeStructuredEvent(
-	state runState,
+	state execution.RunState,
 	event *session.Event,
-) (runState, error) {
+) (execution.RunState, error) {
 	if !r.entrypoint.Output.Structured() ||
 		event == nil ||
 		!event.IsFinalResponse() ||
 		event.Author != r.entrypoint.Name {
 		return state, nil
 	}
-	value, ok := event.Actions.StateDelta[StructuredOutputStateKey(r.entrypoint.Name)]
+	value, ok := event.Actions.StateDelta[execution.StructuredOutputStateKey(r.entrypoint.Name)]
 	if !ok {
 		return state, nil
 	}
-	return state.consumeStructuredOutput(value, r.entrypoint)
+	return state.ConsumeStructuredOutput(value, r.entrypoint)
 }
 
 func (r *Runtime) ensureDurableRunID(ctx context.Context, runID string) error {
@@ -311,10 +313,10 @@ func retryableAuditAppend(err error) bool {
 // preferred.
 func (r *Runtime) loadStructuredAnalysis(
 	ctx context.Context,
-	request RunRequest,
+	request execution.RunRequest,
 	sessionID string,
-	state runState,
-) (runState, error) {
+	state execution.RunState,
+) (execution.RunState, error) {
 	response, err := r.sessions.Get(ctx, &session.GetRequest{
 		AppName:   r.config.AppName,
 		UserID:    request.UserID,
@@ -328,11 +330,11 @@ func (r *Runtime) loadStructuredAnalysis(
 	if response == nil || response.Session == nil {
 		return state, nil
 	}
-	value, err := response.Session.State().Get(StructuredOutputStateKey(r.entrypoint.Name))
+	value, err := response.Session.State().Get(execution.StructuredOutputStateKey(r.entrypoint.Name))
 	if err != nil {
 		return state, nil
 	}
-	return state.consumeStructuredOutput(value, r.entrypoint)
+	return state.ConsumeStructuredOutput(value, r.entrypoint)
 }
 
 // Entrypoint exposes the selected AgentDefinition to protocol adapters.

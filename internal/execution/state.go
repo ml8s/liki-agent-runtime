@@ -1,6 +1,6 @@
-package agent
+package execution
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+import deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 import (
 	"encoding/json"
@@ -9,10 +9,16 @@ import (
 	"google.golang.org/adk/v2/session"
 )
 
-type runState struct {
-	output       OutputResult
-	capturePlain bool
-	tools        toolNameTracker
+// NewRunState returns the initial state for a run and selects plain-text capture.
+func NewRunState(capturePlain bool) RunState {
+	return RunState{CapturePlain: capturePlain}
+}
+
+// RunState is the immutable result state advanced across run events.
+type RunState struct {
+	Output       OutputResult
+	CapturePlain bool
+	tools        ToolNameTracker
 }
 
 // OutputResult is the validated final outcome of a run: the generic structured
@@ -26,14 +32,15 @@ type OutputResult struct {
 	Document any
 }
 
-type toolNameTracker struct {
+// ToolNameTracker preserves first-seen tool names without mutating its value.
+type ToolNameTracker struct {
 	seen []string
 }
 
-// consume returns an updated tracker without mutating the current one. It
+// Consume returns an updated tracker without mutating the current one. It
 // allocates only when an event introduces a tool name not seen before, while
 // copy-on-new preserves deterministic first-seen order.
-func (t toolNameTracker) consume(event *session.Event) toolNameTracker {
+func (t ToolNameTracker) Consume(event *session.Event) ToolNameTracker {
 	if event == nil || event.Content == nil {
 		return t
 	}
@@ -69,26 +76,27 @@ func (t toolNameTracker) consume(event *session.Event) toolNameTracker {
 	if nextSeen == nil {
 		return t
 	}
-	return toolNameTracker{seen: nextSeen}
+	return ToolNameTracker{seen: nextSeen}
 }
 
-func (t toolNameTracker) Names() []string {
+// Names returns a copy of first-seen tool names.
+func (t ToolNameTracker) Names() []string {
 	if len(t.seen) == 0 {
 		return nil
 	}
 	return append([]string(nil), t.seen...)
 }
 
-// consume is a pure event transition: it returns the next run state instead
+// Consume is a pure event transition: it returns the next run state instead
 // of mutating the current one. This keeps final-answer and tool-name rules
 // testable without ADK, sessions, model clients, or audit dependencies.
-func (s runState) consume(event *session.Event) runState {
+func (s RunState) Consume(event *session.Event) RunState {
 	next := s
-	next.tools = s.tools.consume(event)
+	next.tools = s.tools.Consume(event)
 	// A delegated plain-text agent authors the user-facing final answer even
 	// though the entrypoint remains the deployment's root. Capture the last
 	// terminal model response across the delegated tree.
-	if !s.capturePlain || event == nil || event.Partial || !event.IsFinalResponse() {
+	if !s.CapturePlain || event == nil || event.Partial || !event.IsFinalResponse() {
 		return next
 	}
 	if event.Content == nil {
@@ -102,21 +110,27 @@ func (s runState) consume(event *session.Event) runState {
 		text.WriteString(part.Text)
 	}
 	if value := strings.TrimSpace(text.String()); value != "" {
-		next.output = OutputResult{Text: value}
+		next.Output = OutputResult{Text: value}
 	}
 	return next
 }
 
-func (s runState) consumeStructuredOutput(
+// Tools returns the tool names observed so far.
+func (s RunState) Tools() []string {
+	return s.tools.Names()
+}
+
+// ConsumeStructuredOutput validates and attaches final structured output.
+func (s RunState) ConsumeStructuredOutput(
 	value any,
-	definition *agentdeployment.ResolvedAgentDefinition,
-) (runState, error) {
+	definition *deployment.ResolvedAgentDefinition,
+) (RunState, error) {
 	result, err := ParseStructuredOutput(value, definition)
 	if err != nil {
 		return s, err
 	}
 	next := s
-	next.output = result
+	next.Output = result
 	return next, nil
 }
 

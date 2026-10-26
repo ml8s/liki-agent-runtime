@@ -1,6 +1,6 @@
-package agent
+package execution
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+import deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 // ParseStructuredOutput is the single protocol-independent finalizer for ADK
 // structured-output state. Every protocol receives the same validation,
 // canonical JSON, and user-facing pointer text.
-func ParseStructuredOutput(value any, definition *agentdeployment.ResolvedAgentDefinition) (OutputResult, error) {
+func ParseStructuredOutput(value any, definition *deployment.ResolvedAgentDefinition) (OutputResult, error) {
 	if definition == nil || definition.ResolvedOutput == nil {
 		return OutputResult{}, domain.NewError(
 			domain.CodeStructuredOutputInvalid,

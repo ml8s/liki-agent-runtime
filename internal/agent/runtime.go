@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	platformconfig "github.com/ml8s/liki-agent-runtime/internal/platform/config"
@@ -34,14 +36,6 @@ import (
 )
 
 const (
-	// structuredOutputStateKeyPrefix matches llmagent.Config.OutputKey. ADK parses
-	// the model reply against OutputSchema, clears Event.Output before
-	// yielding it, and persists the parsed value into session state under
-	// this key. The final event's StateDelta carries the same value, so the
-	// runtime consumes the event first and reads session state only as a
-	// fallback.
-	structuredOutputStateKeyPrefix = "structured_analysis:"
-
 	// maxCompletedRunIDs bounds duplicate-run detection without turning the
 	// in-memory lifecycle registry into another durable run store.
 	maxCompletedRunIDs = 4096
@@ -61,7 +55,7 @@ type Runtime struct {
 	delegationAuditor *DelegationAuditor
 	toolAuditor       *ToolExecutionAuditor
 	tracer            trace.Tracer
-	projectorIndex    eventProjectorIndex
+	projectorIndex    execution.EventProjectorIndex
 	runs              *runLifecycle
 	runSlots          chan struct{}
 }
@@ -90,7 +84,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		return Config{}, domain.NewError(domain.CodeAgentDefinitionMissing, "AgentDefinition is required", domain.ErrInvalidInput)
 	}
 	switch config.StructuredOutput {
-	case StructuredOutputNone, StructuredOutputJSONSchema, StructuredOutputJSONObject:
+	case execution.StructuredOutputNone, execution.StructuredOutputJSONSchema, execution.StructuredOutputJSONObject:
 	default:
 		return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output capability is invalid", domain.ErrInvalidInput)
 	}
@@ -101,10 +95,10 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		}
 	}
 	switch {
-	case structuredAgents == 0 && config.StructuredOutput != StructuredOutputNone:
+	case structuredAgents == 0 && config.StructuredOutput != execution.StructuredOutputNone:
 		return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output mode is set but no Agent declares an output schema", domain.ErrInvalidInput)
-	case structuredAgents > 0 && config.StructuredOutput == StructuredOutputNone:
-		config.StructuredOutput = DefaultStructuredOutputMode(config.Provider)
+	case structuredAgents > 0 && config.StructuredOutput == execution.StructuredOutputNone:
+		config.StructuredOutput = execution.DefaultStructuredOutputMode(config.Provider)
 	}
 	if config.MCPTimeout <= 0 {
 		config.MCPTimeout = platformconfig.DefaultMCPTimeout
@@ -146,7 +140,7 @@ func newModelBuilder(config Config) func(string) (model.LLM, error) {
 	if config.modelOverride != nil {
 		return func(string) (model.LLM, error) { return config.modelOverride, nil }
 	}
-	useJSONObject := config.StructuredOutput == StructuredOutputJSONObject
+	useJSONObject := config.StructuredOutput == execution.StructuredOutputJSONObject
 	build := func(modelName string) (model.LLM, error) {
 		built, err := openaimodel.NewModel(context.Background(), modelName, &openaimodel.ClientConfig{
 			APIKey:  config.ModelAPIKey,
@@ -234,7 +228,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create ADK agent", err)
 	}
-	projectorIndex := newEventProjectorIndex(config.AgentDeployment)
+	projectorIndex := execution.NewEventProjectorIndex(config.AgentDeployment)
 	retryPlugin, err := retryandreflect.New(
 		retryandreflect.WithMaxRetries(2),
 		retryandreflect.WithErrorIfRetryExceeded(true),

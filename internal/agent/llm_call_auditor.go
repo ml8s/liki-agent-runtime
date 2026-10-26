@@ -9,20 +9,21 @@ import (
 
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 	"google.golang.org/adk/v2/agent"
 )
 
 type llmCallAuditor struct {
 	mu       sync.Mutex
 	recorder audit.Recorder
-	metrics  Metrics
+	metrics  execution.Metrics
 	now      func() time.Time
 	provider string
 	agents   map[string]*agentdeployment.ResolvedAgentDefinition
 	scopes   map[string]*runExecution
 }
 
-func newLLMCallAuditor(recorder audit.Recorder, metrics Metrics, provider string, deployment *agentdeployment.AgentDeployment, now func() time.Time) *llmCallAuditor {
+func newLLMCallAuditor(recorder audit.Recorder, metrics execution.Metrics, provider string, deployment *agentdeployment.AgentDeployment, now func() time.Time) *llmCallAuditor {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}

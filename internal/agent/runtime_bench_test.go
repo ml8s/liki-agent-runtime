@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
@@ -46,12 +48,12 @@ func (f *cyclingLLM) GenerateContent(context.Context, *model.LLMRequest, bool) i
 
 // benchHistory builds a representative mid-length thread so every run
 // exercises the multi-turn seeding and contents assembly at a realistic size.
-func benchHistory() []Message {
-	history := make([]Message, 0, 20)
+func benchHistory() []execution.Message {
+	history := make([]execution.Message, 0, 20)
 	for index := 0; index < 10; index++ {
 		history = append(history,
-			Message{Role: RoleUser, Content: fmt.Sprintf("第 %d 问：请结合盘面结论给出该阶段的要点与依据。", index+1)},
-			Message{Role: RoleAssistant, Content: fmt.Sprintf("第 %d 答结论摘要，含盘面要点、依据与不确定项说明。", index+1)},
+			execution.Message{Role: execution.RoleUser, Content: fmt.Sprintf("第 %d 问：请结合盘面结论给出该阶段的要点与依据。", index+1)},
+			execution.Message{Role: execution.RoleAssistant, Content: fmt.Sprintf("第 %d 答结论摘要，含盘面要点、依据与不确定项说明。", index+1)},
 		)
 	}
 	return history
@@ -90,7 +92,7 @@ func BenchmarkRuntimeRun(b *testing.B) {
 						return
 					}
 					n := benchRunSeq.Add(1)
-					request := RunRequest{
+					request := execution.RunRequest{
 						RunID:       fmt.Sprintf("run_bench_%d", n),
 						ThreadID:    fmt.Sprintf("thread_bench_%d", n),
 						UserID:      "user_bench",

@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"go.opentelemetry.io/otel/trace"
@@ -126,7 +128,7 @@ func fixedLedgerNow() time.Time {
 
 func newTestScope() *runExecution {
 	return &runExecution{
-		identity: RunIdentity{
+		identity: execution.RunIdentity{
 			RunID:    "run_1",
 			ThreadID: "thread_1",
 			UserID:   "user_1",

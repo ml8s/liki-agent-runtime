@@ -3,12 +3,14 @@ package agent
 import (
 	"sync"
 	"time"
+
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 )
 
 type runExecution struct {
 	mu                sync.Mutex
-	identity          RunIdentity
-	provenance        RunProvenance
+	identity          execution.RunIdentity
+	provenance        execution.RunProvenance
 	startedAt         time.Time
 	model             string
 	instructionDigest string
@@ -26,10 +28,10 @@ type runExecution struct {
 }
 
 // usage returns the aggregated model usage recorded for this run so far.
-func (s *runExecution) usage() RunUsage {
+func (s *runExecution) usage() execution.RunUsage {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return RunUsage{
+	return execution.RunUsage{
 		LLMCalls:         s.llmCalls,
 		PromptTokens:     s.promptTokens,
 		CompletionTokens: s.completionTokens,

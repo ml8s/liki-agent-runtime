@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -69,12 +71,12 @@ type Server struct {
 type structuredMemo struct {
 	mu     sync.Mutex
 	event  *session.Event
-	output agent.OutputResult
+	output execution.OutputResult
 	err    error
 	valid  bool
 
-	// parse is a test seam; production always uses agent.ParseStructuredOutput.
-	parse func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (agent.OutputResult, error)
+	// parse is a test seam; production always uses execution.ParseStructuredOutput.
+	parse func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (execution.OutputResult, error)
 }
 
 // structuredOutput returns the memoized parse when the event's state delta
@@ -82,14 +84,14 @@ type structuredMemo struct {
 func (s *Server) structuredOutput(
 	event *session.Event,
 	entrypoint *deploymentpkg.ResolvedAgentDefinition,
-) (output agent.OutputResult, applies bool, err error) {
+) (output execution.OutputResult, applies bool, err error) {
 	if event == nil || entrypoint == nil ||
 		event.Author != entrypoint.Name || !event.IsFinalResponse() {
-		return agent.OutputResult{}, false, nil
+		return execution.OutputResult{}, false, nil
 	}
-	value, ok := event.Actions.StateDelta[agent.StructuredOutputStateKey(entrypoint.Name)]
+	value, ok := event.Actions.StateDelta[execution.StructuredOutputStateKey(entrypoint.Name)]
 	if !ok {
-		return agent.OutputResult{}, false, nil
+		return execution.OutputResult{}, false, nil
 	}
 	s.structured.mu.Lock()
 	if s.structured.valid && s.structured.event == event {
@@ -123,7 +125,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
-	server := &Server{structured: structuredMemo{parse: agent.ParseStructuredOutput}}
+	server := &Server{structured: structuredMemo{parse: execution.ParseStructuredOutput}}
 	root := runtime.RootAgent()
 	deployment := runtime.AgentDeployment()
 	entrypoint := runtime.Entrypoint()
@@ -173,7 +175,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			if applies && err != nil {
 				return nil, err
 			}
-			var structuredPointer *agent.OutputResult
+			var structuredPointer *execution.OutputResult
 			if !applies {
 				structuredPointer = nil
 			} else {
@@ -300,7 +302,7 @@ func agentPart(
 	part *genai.Part,
 	exposesText func(author string) bool,
 	entrypoint *deploymentpkg.ResolvedAgentDefinition,
-	structured *agent.OutputResult,
+	structured *execution.OutputResult,
 ) (*a2a.Part, error) {
 	if part == nil {
 		return nil, nil
@@ -323,14 +325,14 @@ func agentPart(
 		return adka2a.ToA2APart(part, longRunningToolIDs)
 	}
 	if event != nil && entrypoint != nil && event.Author == entrypoint.Name && event.IsFinalResponse() {
-		value, ok := event.Actions.StateDelta[agent.StructuredOutputStateKey(entrypoint.Name)]
+		value, ok := event.Actions.StateDelta[execution.StructuredOutputStateKey(entrypoint.Name)]
 		if ok {
-			var output agent.OutputResult
+			var output execution.OutputResult
 			if structured != nil {
 				// The server already parsed this event once for a prior part.
 				output = *structured
 			} else {
-				parsed, err := agent.ParseStructuredOutput(value, entrypoint)
+				parsed, err := execution.ParseStructuredOutput(value, entrypoint)
 				if err != nil {
 					return nil, err
 				}

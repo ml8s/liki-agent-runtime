@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
@@ -74,7 +76,7 @@ func TestRuntimeRunsTaskDelegationEndToEnd(t *testing.T) {
 	runtime := newTestRuntime(t, agentDeployment, events, taskDelegationLLM())
 
 	var observed []*session.Event
-	result, err := runtime.Run(context.Background(), RunRequest{
+	result, err := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_task_delegation", ThreadID: "thread_task_delegation", UserID: "user_1",
 		UserMessage: "delegate this",
 	}, func(event *session.Event) error {
@@ -283,7 +285,7 @@ func TestRuntimeRunsTwoTaskDelegationsInOneTurn(t *testing.T) {
 	runtime := newTestRuntime(t, agentDeployment, events, llm)
 
 	var observed []*session.Event
-	result, err := runtime.Run(context.Background(), RunRequest{
+	result, err := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_two_task_delegation", ThreadID: "thread_two_task_delegation", UserID: "user_1",
 		UserMessage: "delegate both",
 	}, func(event *session.Event) error {

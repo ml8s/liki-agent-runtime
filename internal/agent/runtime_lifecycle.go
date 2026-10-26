@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/session"
@@ -79,21 +81,10 @@ func (l *runLifecycle) finish(runID string) {
 	}
 }
 
-// RunAuditIdentity identifies an externally driven ADK execution for the LLM
-// audit ledger. It does not create a second execution path.
-type RunAuditIdentity struct {
-	RunID    string
-	ThreadID string
-	UserID   string
-	Protocol string
-}
-
 // BeginAuditRun attaches protocol identity to model callbacks when an official
 // protocol executor drives the shared ADK runtime directly.
 func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope RunAuditIdentity) error {
-	scope.RunID = strings.TrimSpace(scope.RunID)
-	scope.ThreadID = strings.TrimSpace(scope.ThreadID)
-	scope.UserID = strings.TrimSpace(scope.UserID)
+	scope = scope.normalize()
 	identity, err := scope.runIdentity()
 	if err != nil {
 		return err
@@ -114,7 +105,7 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 	}
 	ledgerScope := &runExecution{
 		identity: identity,
-		provenance: RunProvenance{
+		provenance: execution.RunProvenance{
 			Protocol: scope.Protocol,
 			TraceID:  traceIDFromContext(ctx),
 			SpanID:   spanIDFromContext(ctx),
@@ -237,7 +228,7 @@ func runSessionID(runID string) string {
 
 // normalizeRunRequest 去除标识符、协议与用户消息的首尾空白。Run 入口的
 // 所有下游（审计、会话、模型输入）都消费规范化后的值。
-func normalizeRunRequest(request RunRequest) RunRequest {
+func normalizeRunRequest(request execution.RunRequest) execution.RunRequest {
 	request.RunID = strings.TrimSpace(request.RunID)
 	request.ThreadID = strings.TrimSpace(request.ThreadID)
 	request.UserID = strings.TrimSpace(request.UserID)
@@ -248,15 +239,15 @@ func normalizeRunRequest(request RunRequest) RunRequest {
 
 // validateRunRequest 校验一次执行的入参不变量：三类标识符必须存在且为
 // 有界可打印字符，用户消息不得为空，会话历史不得超限。
-func validateRunRequest(request RunRequest) error {
+func validateRunRequest(request execution.RunRequest) error {
 	if request.UserMessage == "" {
 		return domain.NewError(domain.CodeUserMessageRequired, "user message is required", domain.ErrInvalidInput)
 	}
-	if err := request.runIdentity().Validate(); err != nil {
+	if err := request.Identity().Validate(); err != nil {
 		return err
 	}
-	if len(request.History) > MaxHistoryMessages {
-		return domain.NewError(domain.CodeHistoryInvalid, fmt.Sprintf("conversation history exceeds %d messages", MaxHistoryMessages), domain.ErrInvalidInput)
+	if len(request.History) > execution.MaxHistoryMessages {
+		return domain.NewError(domain.CodeHistoryInvalid, fmt.Sprintf("conversation history exceeds %d messages", execution.MaxHistoryMessages), domain.ErrInvalidInput)
 	}
 	return nil
 }

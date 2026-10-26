@@ -1,4 +1,4 @@
-package agent
+package execution
 
 import (
 	"encoding/json"
@@ -7,7 +7,8 @@ import (
 	"google.golang.org/genai"
 )
 
-func buildUserContent(request RunRequest) *genai.Content {
+// BuildUserContent frames context and untrusted user text for the model request.
+func BuildUserContent(request RunRequest) *genai.Content {
 	var prompt strings.Builder
 	prompt.WriteString("<request_context>")
 	if len(request.Context) != 0 && json.Valid(request.Context) {

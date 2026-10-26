@@ -10,6 +10,8 @@ agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 import (
 	"fmt"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
@@ -59,7 +61,7 @@ func (b *agentGraphBuilder) build(definition *agentdeployment.ResolvedAgentDefin
 	b.building[definition.Name] = struct{}{}
 	outputKey := ""
 	if definition.Output.Structured() {
-		outputKey = StructuredOutputStateKey(definition.Name)
+		outputKey = execution.StructuredOutputStateKey(definition.Name)
 	}
 	declaration := &definition.AgentDefinition
 	subAgents := make([]agent.Agent, 0, len(declaration.SubAgents))

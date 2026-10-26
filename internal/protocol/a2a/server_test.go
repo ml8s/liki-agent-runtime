@@ -17,6 +17,7 @@ import (
 	"github.com/ml8s/liki-agent-runtime/internal/agent"
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 	"github.com/ml8s/liki-agent-runtime/internal/protocol/a2a"
 	"github.com/ml8s/liki-agent-runtime/internal/testagent"
 )
@@ -75,7 +76,7 @@ func testRuntimeWithDeployment(t *testing.T, deployment *deploymentpkg.AgentDepl
 		ModelAPIKey:      "test-key",
 		ModelBaseURL:     modelServer.URL + "/v1",
 		AgentDeployment:  deployment,
-		StructuredOutput: agent.StructuredOutputJSONSchema,
+		StructuredOutput: execution.StructuredOutputJSONSchema,
 		Provider:         "test-provider",
 		AuditRecorder:    recorder,
 	})

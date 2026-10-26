@@ -6,6 +6,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 
 	"google.golang.org/adk/v2/model"
@@ -56,7 +58,7 @@ func TestRuntimeRunsParallelSingleTurnDelegation(t *testing.T) {
 	}}
 	runtime := newTestRuntime(t, agentDeployment, events, llm)
 
-	result, err := runtime.Run(context.Background(), RunRequest{
+	result, err := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_parallel_delegation", ThreadID: "thread_parallel", UserID: "user_1",
 		UserMessage: "fan out",
 	}, nil)

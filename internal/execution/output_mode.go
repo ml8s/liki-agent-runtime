@@ -1,4 +1,4 @@
-package agent
+package execution
 
 // Structured output is an optional Agent capability. Plain text is the
 // default so that generic chat Agents do not need an output artifact.

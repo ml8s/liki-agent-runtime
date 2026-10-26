@@ -11,6 +11,7 @@ import (
 
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 	"go.opentelemetry.io/otel/trace"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
@@ -42,7 +43,7 @@ type DelegationExecutionRecord struct {
 // records its run lifecycle.
 type DelegationAuditor struct {
 	recorder   audit.Recorder
-	metrics    Metrics
+	metrics    execution.Metrics
 	now        func() time.Time
 	entrypoint string
 	agents     map[string]*agentdeployment.ResolvedAgentDefinition
@@ -54,7 +55,7 @@ type DelegationAuditor struct {
 
 func newDelegationAuditor(
 	recorder audit.Recorder,
-	metrics Metrics,
+	metrics execution.Metrics,
 	now func() time.Time,
 	deployment *agentdeployment.AgentDeployment, entrypoint string,
 	scope func(sessionID string) (*runExecution, bool),

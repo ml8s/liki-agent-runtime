@@ -1,13 +1,13 @@
 package a2a
 
-import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"fmt"
 	"testing"
 
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 	"github.com/a2aproject/a2a-go/v2/a2a"
-	"github.com/ml8s/liki-agent-runtime/internal/agent"
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 	"github.com/ml8s/liki-agent-runtime/internal/testagent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
@@ -21,15 +21,15 @@ func TestStructuredMemoParsesOncePerEvent(t *testing.T) {
 			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"raw payload"}`}}},
 		},
 		Actions: session.EventActions{StateDelta: map[string]any{
-			agent.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": " 最终结论 "},
+			execution.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": " 最终结论 "},
 		}},
 	}
 	event.Author = entrypoint.Name
 	parseCount := 0
 	server := &Server{structured: structuredMemo{
-		parse: func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (agent.OutputResult, error) {
+		parse: func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (execution.OutputResult, error) {
 			parseCount++
-			return agent.ParseStructuredOutput(value, definition)
+			return execution.ParseStructuredOutput(value, definition)
 		},
 	}}
 
@@ -61,7 +61,7 @@ func TestStructuredMemoParsesOncePerEvent(t *testing.T) {
 			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"next"}`}}},
 		},
 		Actions: session.EventActions{StateDelta: map[string]any{
-			agent.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": " 第二次结论 "},
+			execution.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": " 第二次结论 "},
 		}},
 	}
 	event2.Author = entrypoint.Name
@@ -77,15 +77,15 @@ func TestStructuredMemoMemoizesParseErrors(t *testing.T) {
 	entrypoint := structuredEntrypoint(t)
 	event := &session.Event{
 		Actions: session.EventActions{StateDelta: map[string]any{
-			agent.StructuredOutputStateKey(entrypoint.Name): "not-json",
+			execution.StructuredOutputStateKey(entrypoint.Name): "not-json",
 		}},
 	}
 	event.Author = entrypoint.Name
 	parseCount := 0
 	server := &Server{structured: structuredMemo{
-		parse: func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (agent.OutputResult, error) {
+		parse: func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (execution.OutputResult, error) {
 			parseCount++
-			return agent.ParseStructuredOutput(value, definition)
+			return execution.ParseStructuredOutput(value, definition)
 		},
 	}}
 	for attempt := 0; attempt < 2; attempt++ {
@@ -108,7 +108,7 @@ func TestAgentPartPreparsedResultMatchesInternalParse(t *testing.T) {
 			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"raw payload"}`}}},
 		},
 		Actions: session.EventActions{StateDelta: map[string]any{
-			agent.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": " 最终结论 "},
+			execution.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": " 最终结论 "},
 		}},
 	}
 	event.Author = entrypoint.Name
@@ -117,8 +117,8 @@ func TestAgentPartPreparsedResultMatchesInternalParse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("internal-parse agentPart() error = %v", err)
 	}
-	parsed, err := agent.ParseStructuredOutput(
-		event.Actions.StateDelta[agent.StructuredOutputStateKey(entrypoint.Name)], entrypoint,
+	parsed, err := execution.ParseStructuredOutput(
+		event.Actions.StateDelta[execution.StructuredOutputStateKey(entrypoint.Name)], entrypoint,
 	)
 	if err != nil {
 		t.Fatalf("ParseStructuredOutput() error = %v", err)
@@ -144,10 +144,10 @@ func TestAgentPartDecodesPreparsedCanonicalJSON(t *testing.T) {
 			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"canonical"}`}}},
 		},
 		Actions: session.EventActions{StateDelta: map[string]any{
-			agent.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": "canonical"},
+			execution.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": "canonical"},
 		}},
 	}
-	output := agent.OutputResult{
+	output := execution.OutputResult{
 		JSON:     []byte(`{"answer":"canonical"}`),
 		Text:     "canonical",
 		Document: "defensive-fallback",
@@ -232,7 +232,7 @@ func TestAgentPartSubstitutesDeclaredPointer(t *testing.T) {
 			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"raw payload"}`}}},
 		},
 		Actions: session.EventActions{StateDelta: map[string]any{
-			agent.StructuredOutputStateKey("main"): map[string]any{"answer": " 最终结论 "},
+			execution.StructuredOutputStateKey("main"): map[string]any{"answer": " 最终结论 "},
 		}},
 	}
 	event.Author = "main"
@@ -281,7 +281,7 @@ func TestAgentPartIgnoresNonEntrypointStructuredOutput(t *testing.T) {
 			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"worker payload"}`}}},
 		},
 		Actions: session.EventActions{StateDelta: map[string]any{
-			agent.StructuredOutputStateKey("worker"): map[string]any{"answer": "worker answer"},
+			execution.StructuredOutputStateKey("worker"): map[string]any{"answer": "worker answer"},
 		}},
 	}
 	part, err := agentPart(event, &genai.Part{Text: `{"answer":"worker payload"}`}, exposeNone(), structuredEntrypoint(t), nil)

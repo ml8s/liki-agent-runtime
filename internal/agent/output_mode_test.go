@@ -1,5 +1,9 @@
 package agent
 
+import (
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+)
+
 import "testing"
 
 func TestDefaultStructuredOutputMode(t *testing.T) {
@@ -8,15 +12,15 @@ func TestDefaultStructuredOutputMode(t *testing.T) {
 		provider string
 		want     string
 	}{
-		{provider: "openai", want: StructuredOutputJSONSchema},
-		{provider: "zhipu", want: StructuredOutputJSONObject},
-		{provider: "bigmodel", want: StructuredOutputJSONObject},
-		{provider: "glm", want: StructuredOutputJSONObject},
-		{provider: "", want: StructuredOutputJSONObject},
+		{provider: "openai", want: execution.StructuredOutputJSONSchema},
+		{provider: "zhipu", want: execution.StructuredOutputJSONObject},
+		{provider: "bigmodel", want: execution.StructuredOutputJSONObject},
+		{provider: "glm", want: execution.StructuredOutputJSONObject},
+		{provider: "", want: execution.StructuredOutputJSONObject},
 	}
 	for _, test := range tests {
-		if got := DefaultStructuredOutputMode(test.provider); got != test.want {
-			t.Errorf("DefaultStructuredOutputMode(%q) = %q, want %q", test.provider, got, test.want)
+		if got := execution.DefaultStructuredOutputMode(test.provider); got != test.want {
+			t.Errorf("execution.DefaultStructuredOutputMode(%q) = %q, want %q", test.provider, got, test.want)
 		}
 	}
 }

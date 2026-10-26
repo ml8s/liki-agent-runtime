@@ -1,6 +1,6 @@
-package agent
+package execution
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+import deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 import (
 	"encoding/json"
@@ -8,6 +8,11 @@ import (
 
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
+
+// structuredOutputStateKeyPrefix matches llmagent.Config.OutputKey. ADK parses
+// the model reply against OutputSchema, clears Event.Output before yielding it,
+// and persists the parsed value into session state under this key.
+const structuredOutputStateKeyPrefix = "structured_analysis:"
 
 // Role is a conversation-message role.
 type Role string
@@ -41,8 +46,8 @@ type RunRequest struct {
 	Context     json.RawMessage
 }
 
-// runIdentity projects the request's caller-owned identity fields.
-func (r RunRequest) runIdentity() RunIdentity {
+// Identity projects caller-owned request identity for lifecycle validation.
+func (r RunRequest) Identity() RunIdentity {
 	return RunIdentity{
 		RunID:    domain.ID(r.RunID),
 		ThreadID: domain.ID(r.ThreadID),
@@ -52,7 +57,7 @@ func (r RunRequest) runIdentity() RunIdentity {
 
 // RunResult is the validated outcome of one execution.
 type RunResult struct {
-	Definition agentdeployment.DefinitionRef
+	Definition deployment.DefinitionRef
 	Output     json.RawMessage
 	Text       string
 	Usage      RunUsage

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/otel/trace"
@@ -23,7 +25,7 @@ type Config struct {
 	ModelTimeout     time.Duration
 	Temperature      float64
 	AuditRecorder    audit.Recorder
-	Metrics          Metrics
+	Metrics          execution.Metrics
 	Provider         string
 	StructuredOutput string
 	// MaxOutputTokens bounds every model response; 0 leaves the provider

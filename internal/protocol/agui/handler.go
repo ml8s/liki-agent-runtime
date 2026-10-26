@@ -11,12 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	aguievents "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	aguitypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	aguisse "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/encoding/sse"
-	"github.com/ml8s/liki-agent-runtime/internal/agent"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"github.com/ml8s/liki-agent-runtime/internal/notify"
 	"github.com/ml8s/liki-agent-runtime/internal/observability"
@@ -59,7 +60,7 @@ type Handler struct {
 
 // runtime is the single ADK runtime dependency consumed by this protocol adapter.
 type runtime interface {
-	Run(ctx context.Context, request agent.RunRequest, observe func(*session.Event) error) (agent.RunResult, error)
+	Run(ctx context.Context, request execution.RunRequest, observe func(*session.Event) error) (execution.RunResult, error)
 	Entrypoint() *agentdeployment.AgentDefinition
 }
 
@@ -108,7 +109,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	callerIdentity, _ := identity.FromContext(r.Context())
 	caller := callerIdentity.UserID
-	if !agent.ValidIdentifier(threadID) || !agent.ValidIdentifier(runID) {
+	if !domain.ValidIdentifier(threadID) || !domain.ValidIdentifier(runID) {
 		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIMessage, "thread and run identifiers must contain at most 128 printable bytes")
 		return
 	}
@@ -121,8 +122,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIMessage, err.Error())
 		return
 	}
-	if len(input.Messages) > agent.MaxHistoryMessages+1 {
-		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIMessage, fmt.Sprintf("AG-UI request exceeds %d history messages", agent.MaxHistoryMessages))
+	if len(input.Messages) > execution.MaxHistoryMessages+1 {
+		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIMessage, fmt.Sprintf("AG-UI request exceeds %d history messages", execution.MaxHistoryMessages))
 		return
 	}
 
@@ -158,7 +159,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		runID:      runID,
 		entrypoint: h.entrypoint,
 	})
-	spec := agent.RunRequest{
+	spec := execution.RunRequest{
 		RunID:       runID,
 		ThreadID:    threadID,
 		UserID:      caller,
@@ -229,8 +230,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // exchange twice (the relay is the rollback lever and may carry traffic while
 // the callback secret is already configured).
 func (h *Handler) notifyCompletion(
-	spec agent.RunRequest,
-	result agent.RunResult,
+	spec execution.RunRequest,
+	result execution.RunResult,
 	runErr error,
 	clientErr error,
 	direct bool,

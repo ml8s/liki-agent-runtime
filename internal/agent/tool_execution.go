@@ -10,6 +10,7 @@ import (
 
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 )
@@ -43,7 +44,7 @@ type ToolCallRecord struct {
 // evidence for every LLM Agent in the deployment, including delegated agents.
 type ToolExecutionAuditor struct {
 	recorder audit.Recorder
-	metrics  Metrics
+	metrics  execution.Metrics
 	now      func() time.Time
 	provider string
 
@@ -56,7 +57,7 @@ type ToolExecutionAuditor struct {
 
 func newToolExecutionAuditor(
 	recorder audit.Recorder,
-	metrics Metrics,
+	metrics execution.Metrics,
 	now func() time.Time,
 	provider string,
 	deployment *agentdeployment.AgentDeployment, scope func(sessionID string) (*runExecution, bool),

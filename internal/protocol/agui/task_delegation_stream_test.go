@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/agent"
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 	"github.com/ml8s/liki-agent-runtime/internal/protocol/agui"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
@@ -28,7 +28,7 @@ func TestAGUIAttributesTaskDelegatedWorkerByAuthor(t *testing.T) {
 	}
 	scripted := &scriptedRuntime{
 		events: events,
-		result: agent.RunResult{Text: "root answer"},
+		result: execution.RunResult{Text: "root answer"},
 	}
 	handler, err := agui.New(scripted, agui.Config{RunTimeout: time.Second})
 	if err != nil {

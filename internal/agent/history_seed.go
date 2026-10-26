@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
@@ -26,7 +28,7 @@ import (
 //     chat invocation's visibility rules;
 //   - untrusted history text stays opaque inside its own structural content
 //     part; native turns have no textual framing to break out of.
-func (r *Runtime) seedConversationHistory(ctx context.Context, request RunRequest, sessionID string) error {
+func (r *Runtime) seedConversationHistory(ctx context.Context, request execution.RunRequest, sessionID string) error {
 	if len(request.History) == 0 {
 		return nil
 	}
@@ -44,7 +46,7 @@ func (r *Runtime) seedConversationHistory(ctx context.Context, request RunReques
 	for _, message := range request.History {
 		role := genai.Role(genai.RoleUser)
 		author := "user"
-		if message.Role == RoleAssistant {
+		if message.Role == execution.RoleAssistant {
 			role = genai.Role(genai.RoleModel)
 			author = r.entrypoint.Name
 		}

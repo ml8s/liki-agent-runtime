@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	aguitypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
-	"github.com/ml8s/liki-agent-runtime/internal/agent"
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 )
 
 // validateTextChatProfile rejects capabilities this runtime does not consume.
@@ -57,7 +57,7 @@ func isEmptyClientState(state any) bool {
 	}
 }
 
-func lastUserConversation(messages []aguitypes.Message) (string, []agent.Message, error) {
+func lastUserConversation(messages []aguitypes.Message) (string, []execution.Message, error) {
 	lastIndex := -1
 	for index := len(messages) - 1; index >= 0; index-- {
 		if messages[index].Role == aguitypes.RoleUser {
@@ -76,7 +76,7 @@ func lastUserConversation(messages []aguitypes.Message) (string, []agent.Message
 		return "", nil, fmt.Errorf("the latest user message is empty")
 	}
 
-	history := make([]agent.Message, 0, len(messages)-1)
+	history := make([]execution.Message, 0, len(messages)-1)
 	for index, message := range messages {
 		if index == lastIndex || message.Role != aguitypes.RoleUser && message.Role != aguitypes.RoleAssistant {
 			continue
@@ -88,11 +88,11 @@ func lastUserConversation(messages []aguitypes.Message) (string, []agent.Message
 		if strings.TrimSpace(text) == "" {
 			continue
 		}
-		role := agent.RoleUser
+		role := execution.RoleUser
 		if message.Role == aguitypes.RoleAssistant {
-			role = agent.RoleAssistant
+			role = execution.RoleAssistant
 		}
-		history = append(history, agent.Message{Role: role, Content: text})
+		history = append(history, execution.Message{Role: role, Content: text})
 	}
 	return content, history, nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/ml8s/liki-agent-runtime/internal/agent"
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 	"github.com/ml8s/liki-agent-runtime/internal/notify"
 	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
 	"github.com/ml8s/liki-agent-runtime/internal/protocol/agui"
@@ -31,14 +32,14 @@ func (r *recordingAuditEvents) Record(_ context.Context, _ *audit.Event) error {
 
 func newRuntime(t *testing.T) *agent.Runtime {
 	t.Helper()
-	agentDeployment := testagent.AgentDeployment(t)
+	artifactDeployment := testagent.AgentDeployment(t)
 	t.Logf("endpoint=%q", os.Getenv("TEST_MCP_ENDPOINT"))
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		AgentDeployment:  agentDeployment,
-		StructuredOutput: agent.StructuredOutputJSONSchema,
+		AgentDeployment:  artifactDeployment,
+		StructuredOutput: execution.StructuredOutputJSONSchema,
 		AuditRecorder:    &recordingAuditEvents{},
 	})
 	if err != nil {
@@ -79,7 +80,7 @@ func TestAGUIRejectsMalformedInput(t *testing.T) {
 }
 
 func TestAGUIRejectsOversizedIdentifiersBeforeStreamStarts(t *testing.T) {
-	handler, err := agui.New(&capturingRuntime{capture: &agent.RunRequest{}}, agui.Config{RunTimeout: time.Second})
+	handler, err := agui.New(&capturingRuntime{capture: &execution.RunRequest{}}, agui.Config{RunTimeout: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +99,7 @@ func TestAGUIRejectsOversizedIdentifiersBeforeStreamStarts(t *testing.T) {
 
 type scriptedRuntime struct {
 	events []*session.Event
-	result agent.RunResult
+	result execution.RunResult
 	err    error
 }
 
@@ -106,10 +107,10 @@ func (r *scriptedRuntime) Entrypoint() *agentdeployment.AgentDefinition {
 	return &agentdeployment.AgentDefinition{Name: "main"}
 }
 
-func (r *scriptedRuntime) Run(_ context.Context, _ agent.RunRequest, observe func(*session.Event) error) (agent.RunResult, error) {
+func (r *scriptedRuntime) Run(_ context.Context, _ execution.RunRequest, observe func(*session.Event) error) (execution.RunResult, error) {
 	for _, event := range r.events {
 		if err := observe(event); err != nil {
-			return agent.RunResult{}, err
+			return execution.RunResult{}, err
 		}
 	}
 	return r.result, r.err
@@ -137,9 +138,9 @@ func (r *recordingNotifier) Notify(record notify.Record) {
 
 func TestAGUINotifiesCompletedRun(t *testing.T) {
 	notifier := &recordingNotifier{}
-	runtime := &scriptedRuntime{result: agent.RunResult{
+	runtime := &scriptedRuntime{result: execution.RunResult{
 		Text:  "答案",
-		Usage: agent.RunUsage{LLMCalls: 2, PromptTokens: 10, CompletionTokens: 20, ThoughtTokens: 1},
+		Usage: execution.RunUsage{LLMCalls: 2, PromptTokens: 10, CompletionTokens: 20, ThoughtTokens: 1},
 	}}
 	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second, Notifier: notifier})
 	if err != nil {
@@ -201,7 +202,7 @@ func TestAGUINotifiesCanceledAndFailedRuns(t *testing.T) {
 
 func TestAGUINotifiesOnlyMutualTLSRuns(t *testing.T) {
 	notifier := &recordingNotifier{}
-	handler, err := agui.New(&scriptedRuntime{result: agent.RunResult{Text: "答案"}}, agui.Config{RunTimeout: time.Second, Notifier: notifier})
+	handler, err := agui.New(&scriptedRuntime{result: execution.RunResult{Text: "答案"}}, agui.Config{RunTimeout: time.Second, Notifier: notifier})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -237,7 +238,7 @@ func TestAGUIRejectsUnsupportedCapabilitiesInsteadOfDroppingThem(t *testing.T) {
 
 func TestAGUIAcceptsStandardEmptyClientState(t *testing.T) {
 	scripted := &scriptedRuntime{
-		result: agent.RunResult{Text: "ready"},
+		result: execution.RunResult{Text: "ready"},
 	}
 	handler, err := agui.New(scripted, agui.Config{RunTimeout: time.Second})
 	if err != nil {
@@ -291,7 +292,7 @@ func TestAGUIStreamsPartialTextDeltas(t *testing.T) {
 	}
 	scripted := &scriptedRuntime{
 		events: events,
-		result: agent.RunResult{Text: "Hello streaming"},
+		result: execution.RunResult{Text: "Hello streaming"},
 	}
 	handler, err := agui.New(scripted, agui.Config{RunTimeout: time.Second})
 	if err != nil {
@@ -318,7 +319,7 @@ func TestAGUIStreamsPartialTextDeltas(t *testing.T) {
 
 func TestAGUIEmitsStructuredAnswerAsTextLifecycle(t *testing.T) {
 	runtime := &scriptedRuntime{
-		result: agent.RunResult{Output: []byte(`{"answer":"结构化答案"}`), Text: "结构化答案"},
+		result: execution.RunResult{Output: []byte(`{"answer":"结构化答案"}`), Text: "结构化答案"},
 	}
 	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second})
 	if err != nil {
@@ -395,7 +396,7 @@ func TestAGUIEmitsFullToolCallSequenceWithStructuredAnswer(t *testing.T) {
 	}
 	runtime := &scriptedRuntime{
 		events: events,
-		result: agent.RunResult{
+		result: execution.RunResult{
 			Output: []byte(`{"answer":"最终分析"}`),
 			Text:   "最终分析",
 		},
@@ -445,10 +446,10 @@ func TestAGUIEmitsFullToolCallSequenceWithStructuredAnswer(t *testing.T) {
 }
 
 func TestAGUIPassesHistoryToRuntime(t *testing.T) {
-	var captured agent.RunRequest
+	var captured execution.RunRequest
 	runtime := &capturingRuntime{
 		capture: &captured,
-		result:  agent.RunResult{Output: []byte(`{"answer":"好的"}`), Text: "好的"},
+		result:  execution.RunResult{Output: []byte(`{"answer":"好的"}`), Text: "好的"},
 	}
 	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second})
 	if err != nil {
@@ -468,10 +469,10 @@ func TestAGUIPassesHistoryToRuntime(t *testing.T) {
 	if len(captured.History) != 2 {
 		t.Fatalf("History length = %d, want 2", len(captured.History))
 	}
-	if captured.History[0].Role != agent.RoleUser || captured.History[0].Content != "看事业" {
+	if captured.History[0].Role != execution.RoleUser || captured.History[0].Content != "看事业" {
 		t.Fatalf("History[0] = %+v", captured.History[0])
 	}
-	if captured.History[1].Role != agent.RoleAssistant || captured.History[1].Content != "事业方面有压力。" {
+	if captured.History[1].Role != execution.RoleAssistant || captured.History[1].Content != "事业方面有压力。" {
 		t.Fatalf("History[1] = %+v", captured.History[1])
 	}
 	if captured.ThreadID != "t1" || captured.RunID != "r1" {
@@ -480,8 +481,8 @@ func TestAGUIPassesHistoryToRuntime(t *testing.T) {
 }
 
 type capturingRuntime struct {
-	capture *agent.RunRequest
-	result  agent.RunResult
+	capture *execution.RunRequest
+	result  execution.RunResult
 }
 
 type runFinishedFailureWriter struct {
@@ -498,8 +499,8 @@ func (w *runFinishedFailureWriter) Write(body []byte) (int, error) {
 
 func TestAGUIDoesNotEmitRunErrorAfterRunFinished(t *testing.T) {
 	runtime := &capturingRuntime{
-		capture: &agent.RunRequest{},
-		result:  agent.RunResult{Text: "complete"},
+		capture: &execution.RunRequest{},
+		result:  execution.RunResult{Text: "complete"},
 	}
 	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second})
 	if err != nil {
@@ -564,7 +565,7 @@ func (r *capturingRuntime) Entrypoint() *agentdeployment.AgentDefinition {
 	return &agentdeployment.AgentDefinition{Name: "main"}
 }
 
-func (r *capturingRuntime) Run(_ context.Context, request agent.RunRequest, _ func(*session.Event) error) (agent.RunResult, error) {
+func (r *capturingRuntime) Run(_ context.Context, request execution.RunRequest, _ func(*session.Event) error) (execution.RunResult, error) {
 	*r.capture = request
 	return r.result, nil
 }

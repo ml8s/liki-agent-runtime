@@ -1,4 +1,4 @@
-package agent
+package execution
 
 import (
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
@@ -38,16 +38,4 @@ type RunProvenance struct {
 	Protocol string
 	TraceID  string
 	SpanID   string
-}
-
-func (s RunAuditIdentity) runIdentity() (RunIdentity, error) {
-	identity := RunIdentity{
-		RunID:    domain.ID(s.RunID),
-		ThreadID: domain.ID(s.ThreadID),
-		UserID:   s.UserID,
-	}
-	if err := identity.Validate(); err != nil {
-		return RunIdentity{}, err
-	}
-	return identity, nil
 }

@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -79,13 +81,13 @@ func testDeployment(t testing.TB) (*deploymentpkg.AgentDeployment, error) {
 }
 
 func TestRunStateRejectsInvalidStructuredOutput(t *testing.T) {
-	state := &runState{}
+	state := &execution.RunState{}
 	agentDeployment := plainTestDeployment(t)
 	entrypoint, err := agentDeployment.EntrypointDefinition()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = state.consumeStructuredOutput(map[string]any{"unexpected": true}, entrypoint)
+	_, err = state.ConsumeStructuredOutput(map[string]any{"unexpected": true}, entrypoint)
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeStructuredOutputInvalid {
 		t.Fatalf("consumeStructuredOutput() error = %v, want %s", err, domain.CodeStructuredOutputInvalid)
@@ -111,8 +113,8 @@ func TestEventProjectorFiltersObserverFacts(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			projector := newEventProjector(newEventProjectorIndex(NewTestDeployment(t)))
-			projection := newEventProjectionState()
+			projector := execution.NewEventProjector(execution.NewEventProjectorIndex(NewTestDeployment(t)))
+			projection := execution.NewEventProjectionState()
 			visible, _, visibleOK := projector.Project(projection, testCase.event)
 			if testCase.wantNil {
 				if visibleOK {
@@ -128,7 +130,7 @@ func TestEventProjectorFiltersObserverFacts(t *testing.T) {
 }
 
 func TestRunStateCapturesDelegatedPlainFinalAnswer(t *testing.T) {
-	state := runState{capturePlain: true}
+	state := execution.RunState{CapturePlain: true}
 	event := &session.Event{
 		Author: "bazi",
 		LLMResponse: model.LLMResponse{
@@ -136,17 +138,17 @@ func TestRunStateCapturesDelegatedPlainFinalAnswer(t *testing.T) {
 			Content:      genai.NewContentFromText("delegated answer", genai.RoleModel),
 		},
 	}
-	next := state.consume(event)
-	if next.output.Text != "delegated answer" {
-		t.Fatalf("output text = %q", next.output.Text)
+	next := state.Consume(event)
+	if next.Output.Text != "delegated answer" {
+		t.Fatalf("output text = %q", next.Output.Text)
 	}
-	if state.output.Text != "" {
-		t.Fatalf("input state text = %q, want unchanged", state.output.Text)
+	if state.Output.Text != "" {
+		t.Fatalf("input state text = %q, want unchanged", state.Output.Text)
 	}
 }
 
 func TestRunStateTracksToolNamesAsPureTransition(t *testing.T) {
-	state := runState{}
+	state := execution.RunState{}
 	response := func(name string) *session.Event {
 		return &session.Event{LLMResponse: model.LLMResponse{
 			Content: &genai.Content{Parts: []*genai.Part{
@@ -155,22 +157,22 @@ func TestRunStateTracksToolNamesAsPureTransition(t *testing.T) {
 		}}
 	}
 
-	state = state.consume(response("engine.search"))
+	state = state.Consume(response("engine.search"))
 	first := state
-	state = state.consume(response("engine.search"))
-	state = state.consume(response("counsel.analyze"))
+	state = state.Consume(response("engine.search"))
+	state = state.Consume(response("counsel.analyze"))
 
 	want := []string{"engine.search", "counsel.analyze"}
-	if got := state.tools.Names(); !slices.Equal(got, want) {
+	if got := state.Tools(); !slices.Equal(got, want) {
 		t.Fatalf("tool names = %v, want %v", got, want)
 	}
-	if got := first.tools.Names(); !slices.Equal(got, want[:1]) {
+	if got := first.Tools(); !slices.Equal(got, want[:1]) {
 		t.Fatalf("previous state tool names = %v, want %v", got, want[:1])
 	}
 }
 
 func TestRunStateTracksMultipleToolsInOneEvent(t *testing.T) {
-	state := runState{}
+	state := execution.RunState{}
 	event := &session.Event{LLMResponse: model.LLMResponse{
 		Content: &genai.Content{Parts: []*genai.Part{
 			{FunctionResponse: &genai.FunctionResponse{Name: "engine.search"}},
@@ -179,13 +181,13 @@ func TestRunStateTracksMultipleToolsInOneEvent(t *testing.T) {
 		}},
 	}}
 
-	next := state.consume(event)
+	next := state.Consume(event)
 	want := []string{"engine.search", "counsel.analyze"}
-	if got := next.tools.Names(); !slices.Equal(got, want) {
+	if got := next.Tools(); !slices.Equal(got, want) {
 		t.Fatalf("tool names = %v, want %v", got, want)
 	}
-	if len(state.tools.Names()) != 0 {
-		t.Fatalf("input state tool names = %v, want empty", state.tools.Names())
+	if len(state.Tools()) != 0 {
+		t.Fatalf("input state tool names = %v, want empty", state.Tools())
 	}
 }
 
@@ -343,7 +345,7 @@ func TestNewRuntimeRejectsRedundantStructuredOutputMode(t *testing.T) {
 	_, err := NewRuntime(Config{
 		Model:            "fake-model",
 		AgentDeployment:  plainTestDeployment(t),
-		StructuredOutput: StructuredOutputJSONObject,
+		StructuredOutput: execution.StructuredOutputJSONObject,
 		AuditRecorder:    &recordingAudit{},
 	})
 	var domainErr *domain.Error
@@ -358,7 +360,7 @@ func TestRuntimeRunReturnsPlainTextForGenericAgent(t *testing.T) {
 	runtime := newTestRuntime(t, plainTestDeployment(t), events, &fakeLLM{responses: []*model.LLMResponse{{
 		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: answer}}},
 	}}})
-	result, err := runtime.Run(context.Background(), RunRequest{
+	result, err := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_plain", ThreadID: "thread_plain", UserID: "user_1", UserMessage: "hello",
 	}, nil)
 	if err != nil {
@@ -380,7 +382,7 @@ func TestRuntimeRunRejectsDuplicateRunID(t *testing.T) {
 	runtime := newTestRuntime(t, plainTestDeployment(t), events, &fakeLLM{responses: []*model.LLMResponse{{
 		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "first"}}},
 	}}})
-	request := RunRequest{
+	request := execution.RunRequest{
 		RunID: "run_duplicate", ThreadID: "thread_1", UserID: "user_1", UserMessage: "hello",
 	}
 	if _, err := runtime.Run(context.Background(), request, nil); err != nil {
@@ -399,7 +401,7 @@ func TestRuntimeRunRejectsWorkBeyondConcurrentRunLimit(t *testing.T) {
 	runtime := newTestRuntimeWithLimit(t, NewTestDeployment(t), events, llm, 1)
 	firstDone := make(chan error, 1)
 	go func() {
-		_, err := runtime.Run(context.Background(), RunRequest{
+		_, err := runtime.Run(context.Background(), execution.RunRequest{
 			RunID: "run_active", ThreadID: "thread_1", UserID: "user_1", UserMessage: "first",
 		}, nil)
 		firstDone <- err
@@ -412,7 +414,7 @@ func TestRuntimeRunRejectsWorkBeyondConcurrentRunLimit(t *testing.T) {
 	}
 	limitedCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
-	_, err := runtime.Run(limitedCtx, RunRequest{
+	_, err := runtime.Run(limitedCtx, execution.RunRequest{
 		RunID: "run_limited", ThreadID: "thread_1", UserID: "user_1", UserMessage: "second",
 	}, nil)
 	var domainErr *domain.Error
@@ -430,7 +432,7 @@ func TestRuntimeRunDeletesRunScopedSession(t *testing.T) {
 	runtime := newTestRuntime(t, plainTestDeployment(t), events, &fakeLLM{responses: []*model.LLMResponse{{
 		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "complete"}}},
 	}}})
-	request := RunRequest{
+	request := execution.RunRequest{
 		RunID: "run_cleanup", ThreadID: "thread_1", UserID: "user_1", UserMessage: "hello",
 	}
 	if _, err := runtime.Run(context.Background(), request, nil); err != nil {
@@ -454,7 +456,7 @@ func TestRunAuditUsesEntrypointModelOverride(t *testing.T) {
 		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"ok"}`}}},
 	}}})
 
-	if _, err := runtime.Run(context.Background(), RunRequest{
+	if _, err := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_model", ThreadID: "thread_model", UserID: "user_1", UserMessage: "hello",
 	}, nil); err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -552,7 +554,7 @@ func TestRuntimeRunFailsClosedWhenTerminalAuditWriteFails(t *testing.T) {
 	}}})
 	failing := &terminalAuditRecorder{delegate: events}
 	runtime.config.AuditRecorder = failing
-	_, err := runtime.Run(context.Background(), RunRequest{
+	_, err := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_audit_fail", ThreadID: "thread_1", UserID: "user_1", UserMessage: "hello",
 	}, nil)
 	var domainErr *domain.Error
@@ -572,7 +574,7 @@ func TestRuntimeRunExecutesMCPToolBeforeAuditCompletion(t *testing.T) {
 		{Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "final answer"}}}},
 	}})
 
-	result, err := runtime.Run(context.Background(), RunRequest{
+	result, err := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_tool", ThreadID: "thread_tool", UserID: "user_1", UserMessage: "use tool",
 	}, nil)
 	if err != nil {
@@ -608,7 +610,7 @@ func TestRuntimeRunProducesStructuredAnswerWithoutPayloadLeak(t *testing.T) {
 	}}})
 
 	observed := make([]*session.Event, 0)
-	result, err := runtime.Run(context.Background(), RunRequest{
+	result, err := runtime.Run(context.Background(), execution.RunRequest{
 		RunID:       "run_1",
 		ThreadID:    "thread_1",
 		UserID:      "user_1",
@@ -661,8 +663,8 @@ func TestRuntimeRunProducesStructuredAnswerWithoutPayloadLeak(t *testing.T) {
 
 // TestStructuredAnswerConsistentAcrossProtocolSources proves the two protocol
 // adapters derive the same user-facing answer from one run: AG-UI reads the
-// validated session-state value (RunResult.Text) while A2A reads the event
-// StateDelta, and both must finalize through ParseStructuredOutput.
+// validated session-state value (execution.RunResult.Text) while A2A reads the event
+// StateDelta, and both must finalize through execution.ParseStructuredOutput.
 func TestStructuredAnswerConsistentAcrossProtocolSources(t *testing.T) {
 	agentDeployment := NewTestDeployment(t)
 	entrypoint, err := agentDeployment.EntrypointDefinition()
@@ -677,11 +679,11 @@ func TestStructuredAnswerConsistentAcrossProtocolSources(t *testing.T) {
 
 	var stateDelta any
 	var sawDelta bool
-	result, err := runtime.Run(context.Background(), RunRequest{
+	result, err := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_consistency", ThreadID: "thread_consistency", UserID: "user_1", UserMessage: "看事业",
 	}, func(event *session.Event) error {
 		if event != nil && event.Actions.StateDelta != nil {
-			if value, ok := event.Actions.StateDelta[StructuredOutputStateKey(entrypoint.Name)]; ok {
+			if value, ok := event.Actions.StateDelta[execution.StructuredOutputStateKey(entrypoint.Name)]; ok {
 				stateDelta = value
 				sawDelta = true
 			}
@@ -694,9 +696,9 @@ func TestStructuredAnswerConsistentAcrossProtocolSources(t *testing.T) {
 	if !sawDelta {
 		t.Fatal("structured entrypoint run did not project an observable StateDelta")
 	}
-	a2aOutput, err := ParseStructuredOutput(stateDelta, entrypoint)
+	a2aOutput, err := execution.ParseStructuredOutput(stateDelta, entrypoint)
 	if err != nil {
-		t.Fatalf("ParseStructuredOutput(StateDelta) error = %v", err)
+		t.Fatalf("execution.ParseStructuredOutput(StateDelta) error = %v", err)
 	}
 	if result.Text != a2aOutput.Text {
 		t.Fatalf("AG-UI answer %q != A2A answer %q", result.Text, a2aOutput.Text)
@@ -711,7 +713,7 @@ func TestRuntimeRunEmptyResponse(t *testing.T) {
 	runtime := newTestRuntime(t, NewTestDeployment(t), events, &fakeLLM{responses: []*model.LLMResponse{{
 		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: ""}}},
 	}}})
-	_, runErr := runtime.Run(context.Background(), RunRequest{
+	_, runErr := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_empty", ThreadID: "thread_1", UserID: "user_1", UserMessage: "看事业",
 	}, nil)
 	var domainErr *domain.Error
@@ -732,7 +734,7 @@ func TestRuntimeRunMarksObserverFailureAsFailedRun(t *testing.T) {
 			{FunctionCall: &genai.FunctionCall{ID: "call_1", Name: "test_tool"}},
 		}},
 	}}})
-	_, runErr := runtime.Run(context.Background(), RunRequest{
+	_, runErr := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_observer", ThreadID: "thread_1", UserID: "user_1", UserMessage: "test",
 	}, func(*session.Event) error {
 		return observerErr
@@ -752,7 +754,7 @@ func TestRuntimeRunContextCancelled(t *testing.T) {
 	}}})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, runErr := runtime.Run(ctx, RunRequest{
+	_, runErr := runtime.Run(ctx, execution.RunRequest{
 		RunID: "run_cancel", ThreadID: "thread_1", UserID: "user_1", UserMessage: "看事业",
 	}, nil)
 	var domainErr *domain.Error
@@ -765,7 +767,7 @@ func TestRuntimeRunLLMError(t *testing.T) {
 	events := &recordingAudit{}
 	llmErr := errors.New("model overloaded")
 	runtime := newTestRuntime(t, NewTestDeployment(t), events, &fakeLLM{err: llmErr})
-	_, runErr := runtime.Run(context.Background(), RunRequest{
+	_, runErr := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_err", ThreadID: "thread_1", UserID: "user_1", UserMessage: "看事业",
 	}, nil)
 	var domainErr *domain.Error
@@ -842,7 +844,7 @@ func TestRuntimeBuildsStandardADKAgentGraph(t *testing.T) {
 func TestRuntimeRunTerminalEvidenceAfterChildLifecycles(t *testing.T) {
 	events := &recordingAudit{}
 	runtime := newTestRuntime(t, plainTestDeployment(t), events, &fakeLLM{err: errors.New("model unavailable")})
-	_, runErr := runtime.Run(context.Background(), RunRequest{
+	_, runErr := runtime.Run(context.Background(), execution.RunRequest{
 		RunID: "run_order", ThreadID: "thread_order", UserID: "user_1", UserMessage: "x",
 	}, nil)
 	if runErr == nil {

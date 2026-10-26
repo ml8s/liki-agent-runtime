@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/tool"
@@ -59,7 +61,7 @@ type cachedToolset struct {
 	inner   tool.Toolset
 	ttl     time.Duration
 	now     func() time.Time
-	metrics Metrics
+	metrics execution.Metrics
 
 	mu         sync.Mutex
 	tools      []tool.Tool
@@ -74,7 +76,7 @@ func newCachedToolset(
 	inner tool.Toolset,
 	ttl time.Duration,
 	now func() time.Time,
-	metrics Metrics,
+	metrics execution.Metrics,
 ) *cachedToolset {
 	if ttl <= 0 {
 		ttl = mcpCatalogTTL

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
+
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/adk/v2/agent"
@@ -56,7 +58,7 @@ func (s *catalogStub) callCount() int {
 	return s.calls
 }
 
-func newCatalogCache(stub *catalogStub, now func() time.Time, metrics Metrics) *cachedToolset {
+func newCatalogCache(stub *catalogStub, now func() time.Time, metrics execution.Metrics) *cachedToolset {
 	return newCachedToolset("engine", stub, time.Minute, now, metrics)
 }
 

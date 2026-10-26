@@ -7,6 +7,7 @@ import (
 	"time"
 
 	agent "github.com/ml8s/liki-agent-runtime/internal/agent"
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
@@ -74,7 +75,7 @@ func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
 		ModelAPIKey:      "test-key",
 		AgentDeployment:  agentDeployment,
 		AuditRecorder:    failing,
-		StructuredOutput: agent.StructuredOutputJSONSchema,
+		StructuredOutput: execution.StructuredOutputJSONSchema,
 	})
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRuntimeInitFailed {
@@ -90,7 +91,7 @@ func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
 		ModelAPIKey:      "test-key",
 		AgentDeployment:  agentDeployment,
 		AuditRecorder:    recovered,
-		StructuredOutput: agent.StructuredOutputJSONSchema,
+		StructuredOutput: execution.StructuredOutputJSONSchema,
 	})
 	if err != nil {
 		t.Fatalf("NewRuntime(recovery success) error = %v", err)
@@ -126,7 +127,7 @@ func TestNewRuntimeUsesInjectedOfficialSessionService(t *testing.T) {
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
 		AgentDeployment:  agentDeployment,
-		StructuredOutput: agent.StructuredOutputJSONSchema,
+		StructuredOutput: execution.StructuredOutputJSONSchema,
 		AuditRecorder:    nopAuditRecorder{},
 		SessionService:   injected,
 	})
@@ -144,7 +145,7 @@ func TestNewRuntimeRequiresMCPEndpointEnvironment(t *testing.T) {
 	_, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		AgentDeployment:  agentDeployment,
-		StructuredOutput: agent.StructuredOutputJSONSchema,
+		StructuredOutput: execution.StructuredOutputJSONSchema,
 		AuditRecorder:    nopAuditRecorder{},
 	})
 	var domainErr *domain.Error
@@ -169,7 +170,7 @@ func TestNewRuntimeRejectsInvalidMCPEndpoint(t *testing.T) {
 			_, err := agent.NewRuntime(agent.Config{
 				Model:            "test-model",
 				AgentDeployment:  agent.NewTestDeployment(t),
-				StructuredOutput: agent.StructuredOutputJSONSchema,
+				StructuredOutput: execution.StructuredOutputJSONSchema,
 				AuditRecorder:    nopAuditRecorder{},
 			})
 			var domainErr *domain.Error

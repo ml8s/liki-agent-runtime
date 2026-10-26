@@ -1,28 +1,28 @@
-package agent
+package execution
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+import deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 import (
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
-// eventProjector is immutable configuration for converting internal ADK
+// EventProjector is immutable configuration for converting internal ADK
 // events into the runtime's observable event format. It is the single place
 // that decides whether partial model output, finalized model output, and tool
 // facts are visible to protocols.
-type eventProjector struct {
-	index eventProjectorIndex
+type EventProjector struct {
+	index EventProjectorIndex
 }
 
-// eventProjectionState is explicit per-run transition state. Project consumes
+// EventProjectionState is explicit per-run transition state. Project consumes
 // the current state and returns the state used by the next event; the shared
 // projector itself never changes.
-type eventProjectionState struct {
+type EventProjectionState struct {
 	partialText map[string]bool
 }
 
-func (s eventProjectionState) clone() eventProjectionState {
+func (s EventProjectionState) clone() EventProjectionState {
 	next := s
 	if s.partialText == nil {
 		return next
@@ -34,7 +34,7 @@ func (s eventProjectionState) clone() eventProjectionState {
 	return next
 }
 
-func (s eventProjectionState) markPartial(author string) eventProjectionState {
+func (s EventProjectionState) markPartial(author string) EventProjectionState {
 	if s.partialText[author] {
 		return s
 	}
@@ -46,7 +46,7 @@ func (s eventProjectionState) markPartial(author string) eventProjectionState {
 	return next
 }
 
-func (s eventProjectionState) clearPartial(author string) eventProjectionState {
+func (s EventProjectionState) clearPartial(author string) EventProjectionState {
 	if !s.partialText[author] {
 		return s
 	}
@@ -55,26 +55,29 @@ func (s eventProjectionState) clearPartial(author string) eventProjectionState {
 	return next
 }
 
-// eventProjectorIndex is the immutable deployment lookup shared by every run.
-type eventProjectorIndex struct {
-	definitions map[string]*agentdeployment.ResolvedAgentDefinition
+// EventProjectorIndex is the immutable deployment lookup shared by every run.
+type EventProjectorIndex struct {
+	definitions map[string]*deployment.ResolvedAgentDefinition
 }
 
-func newEventProjectorIndex(deployment *agentdeployment.AgentDeployment) eventProjectorIndex {
-	definitions := make(map[string]*agentdeployment.ResolvedAgentDefinition, len(deployment.Spec.Agents))
-	for index := range deployment.Spec.Agents {
-		definition := &deployment.Spec.Agents[index]
+// NewEventProjectorIndex builds the deployment-scoped author lookup.
+func NewEventProjectorIndex(aggregate *deployment.AgentDeployment) EventProjectorIndex {
+	definitions := make(map[string]*deployment.ResolvedAgentDefinition, len(aggregate.Spec.Agents))
+	for index := range aggregate.Spec.Agents {
+		definition := &aggregate.Spec.Agents[index]
 		definitions[definition.Name] = definition
 	}
-	return eventProjectorIndex{definitions: definitions}
+	return EventProjectorIndex{definitions: definitions}
 }
 
-func newEventProjector(index eventProjectorIndex) eventProjector {
-	return eventProjector{index: index}
+// NewEventProjector builds a reusable projector from an immutable index.
+func NewEventProjector(index EventProjectorIndex) EventProjector {
+	return EventProjector{index: index}
 }
 
-func newEventProjectionState() eventProjectionState {
-	return eventProjectionState{partialText: make(map[string]bool)}
+// NewEventProjectionState returns the initial state for one run.
+func NewEventProjectionState() EventProjectionState {
+	return EventProjectionState{partialText: make(map[string]bool)}
 }
 
 // Project returns the observer-visible form of an ADK event.
@@ -84,10 +87,10 @@ func newEventProjectionState() eventProjectionState {
 // runtime validates the complete output. Tool call/response facts are protocol
 // events and remain visible, while thought and partial function-call chunks do
 // not create duplicate protocol facts.
-func (p eventProjector) Project(
-	state eventProjectionState,
+func (p EventProjector) Project(
+	state EventProjectionState,
 	event *session.Event,
-) (*session.Event, eventProjectionState, bool) {
+) (*session.Event, EventProjectionState, bool) {
 	if event == nil {
 		return nil, state, false
 	}
@@ -106,10 +109,10 @@ func (p eventProjector) Project(
 	return projected, next, true
 }
 
-func (s eventProjectionState) projectPartial(
+func (s EventProjectionState) projectPartial(
 	event *session.Event,
-	definition *agentdeployment.AgentDefinition, exposeModelText bool,
-) (*session.Event, eventProjectionState) {
+	definition *deployment.AgentDefinition, exposeModelText bool,
+) (*session.Event, EventProjectionState) {
 	if !exposeModelText {
 		return nil, s
 	}
@@ -144,10 +147,10 @@ func (s eventProjectionState) projectPartial(
 	return &projected, s
 }
 
-func (s eventProjectionState) projectFinal(
+func (s EventProjectionState) projectFinal(
 	event *session.Event,
-	definition *agentdeployment.AgentDefinition, exposeModelText bool,
-) (*session.Event, eventProjectionState) {
+	definition *deployment.AgentDefinition, exposeModelText bool,
+) (*session.Event, EventProjectionState) {
 	if event.Content == nil {
 		// ADK can represent a terminal state transition without model content.
 		// Keep the event visible so protocol adapters can consume StateDelta,
@@ -159,7 +162,7 @@ func (s eventProjectionState) projectFinal(
 		projected.Content = nil
 		return &projected, s
 	}
-	if definition != nil && !agentdeployment.ExposesModelText(definition) {
+	if definition != nil && !deployment.ExposesModelText(definition) {
 		exposeModelText = false
 	}
 	if definition == nil {
@@ -235,10 +238,10 @@ func (s eventProjectionState) projectFinal(
 	return &projected, next
 }
 
-func (p eventProjector) definitionFor(author string) (*agentdeployment.AgentDefinition, bool) {
+func (p EventProjector) definitionFor(author string) (*deployment.AgentDefinition, bool) {
 	definition, ok := p.index.definitions[author]
 	if !ok || definition == nil {
 		return nil, false
 	}
-	return &definition.AgentDefinition, agentdeployment.ExposesModelText(&definition.AgentDefinition)
+	return &definition.AgentDefinition, deployment.ExposesModelText(&definition.AgentDefinition)
 }
