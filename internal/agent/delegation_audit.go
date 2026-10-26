@@ -180,11 +180,12 @@ func (a *DelegationAuditor) complete(
 	record DelegationExecutionRecord,
 ) error {
 	finishedAt := a.now()
-	record.FinishedAt = finishedAt
-	record.DurationMS = finishedAt.Sub(record.StartedAt).Milliseconds()
-	record.Status = audit.StatusSucceeded
-	if err := a.record(ctx, scope, record, audit.EventDelegationCompleted); err != nil {
+	record, err := completeDelegation(record, finishedAt)
+	if err != nil {
 		return err
+	}
+	if auditErr := a.record(ctx, scope, record, audit.EventDelegationCompleted); auditErr != nil {
+		return auditErr
 	}
 	a.mu.Lock()
 	delete(a.pending, key)
@@ -203,7 +204,7 @@ func (a *DelegationAuditor) FailPending(ctx context.Context, scope *runExecution
 	a.mu.Lock()
 	pending := make(map[string]DelegationExecutionRecord)
 	for key, record := range a.pending {
-		if scope == nil || string(record.RunID) == string(scope.runID) {
+		if scope == nil || string(record.RunID) == string(scope.identity.RunID) {
 			pending[key] = record
 		}
 	}
@@ -211,11 +212,18 @@ func (a *DelegationAuditor) FailPending(ctx context.Context, scope *runExecution
 
 	var firstErr error
 	for key, record := range pending {
-		record.FinishedAt = a.now()
-		record.DurationMS = record.FinishedAt.Sub(record.StartedAt).Milliseconds()
-		record.Status = audit.StatusFailed
-		record.ErrorCode = domain.CodeDelegationFailed
-		record.ErrorMessage = "agent delegation interrupted by run end"
+		record, lifecycleErr := failDelegation(
+			record,
+			a.now(),
+			domain.CodeDelegationFailed,
+			"agent delegation interrupted by run end",
+		)
+		if lifecycleErr != nil {
+			if firstErr == nil {
+				firstErr = lifecycleErr
+			}
+			continue
+		}
 		if auditErr := a.record(ctx, scope, record, audit.EventDelegationFailed); auditErr != nil {
 			if firstErr == nil {
 				firstErr = auditErr
@@ -248,10 +256,10 @@ func (a *DelegationAuditor) startedRecord(
 	}
 	caller, depth := callerFromAgentPath(path, a.entrypoint)
 	return DelegationExecutionRecord{
-		RootRunID:             scope.runID,
-		RunID:                 scope.runID,
-		ThreadID:              scope.threadID,
-		UserID:                scope.userID,
+		RootRunID:             scope.identity.RunID,
+		RunID:                 scope.identity.RunID,
+		ThreadID:              scope.identity.ThreadID,
+		UserID:                scope.identity.UserID,
 		CallerAgent:           caller,
 		TargetAgent:           target,
 		AgentDefinitionDigest: definitionDigest,
@@ -276,7 +284,7 @@ func (a *DelegationAuditor) record(ctx context.Context, scope *runExecution, rec
 	}
 	sc := trace.SpanContextFromContext(ctx)
 	event := scopedEvent(scope)
-	event.ID = fmt.Sprintf("%s/%s:%s", scope.runID, record.AgentPath, eventType)
+	event.ID = fmt.Sprintf("%s/%s:%s", scope.identity.RunID, record.AgentPath, eventType)
 	event.Type = eventType
 	event.TraceID = sc.TraceID().String()
 	event.SpanID = sc.SpanID().String()
@@ -286,7 +294,7 @@ func (a *DelegationAuditor) record(ctx context.Context, scope *runExecution, rec
 	event.CallerAgent = record.CallerAgent
 	event.TargetAgent = record.TargetAgent
 	event.DelegationDepth = record.Depth
-	event.ParentRunID = scope.runID
+	event.ParentRunID = scope.identity.RunID
 	event.Status = status
 	event.DurationMS = record.DurationMS
 	event.ErrorCode = record.ErrorCode

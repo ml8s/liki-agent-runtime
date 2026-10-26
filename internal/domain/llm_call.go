@@ -55,12 +55,19 @@ type LLMCall struct {
 	FinishedAt            time.Time
 }
 
-// Normalize trims whitespace from identifier and code fields.
+// NormalizeLLMCall returns a normalized copy of the call. The input call is
+// never modified.
+func NormalizeLLMCall(call LLMCall) LLMCall {
+	call.ID = strings.TrimSpace(call.ID)
+	call.AgentName = strings.TrimSpace(call.AgentName)
+	call.Model = strings.TrimSpace(call.Model)
+	call.ErrorCode = strings.TrimSpace(call.ErrorCode)
+	return call
+}
+
+// Normalize trims whitespace from identifier and code fields in place.
 func (c *LLMCall) Normalize() {
-	c.ID = strings.TrimSpace(c.ID)
-	c.AgentName = strings.TrimSpace(c.AgentName)
-	c.Model = strings.TrimSpace(c.Model)
-	c.ErrorCode = strings.TrimSpace(c.ErrorCode)
+	*c = NormalizeLLMCall(*c)
 }
 
 // Validate reports whether the call carries the required provenance.
@@ -84,28 +91,46 @@ func (c *LLMCall) Validate() error {
 	return nil
 }
 
+// CompleteLLMCall returns the succeeded terminal form of a running call.
+func CompleteLLMCall(
+	call LLMCall,
+	usage LLMTokenUsage,
+	finishedAt time.Time,
+) LLMCall {
+	next := call
+	next.Status = LLMCallCompleted
+	next.PromptTokens = usage.PromptTokens
+	next.CompletionTokens = usage.CompletionTokens
+	next.ThoughtTokens = usage.ThoughtTokens
+	next.TotalTokens = usage.TotalTokens
+	next.FinishedAt = finishedAt
+	next.DurationMS = finishedAt.Sub(call.StartedAt).Milliseconds()
+	return next
+}
+
+// FailLLMCall returns the failed terminal form of a running call.
+func FailLLMCall(call LLMCall, err error, finishedAt time.Time) LLMCall {
+	next := call
+	next.Status = LLMCallFailed
+	next.FinishedAt = finishedAt
+	next.DurationMS = finishedAt.Sub(call.StartedAt).Milliseconds()
+	var domainErr *Error
+	if errors.As(err, &domainErr) {
+		next.ErrorCode = domainErr.Code
+		next.ErrorMessage = domainErr.Message
+		return next
+	}
+	next.ErrorCode = CodeLLMCallFailed
+	next.ErrorMessage = "LLM call failed"
+	return next
+}
+
 // Complete marks the call succeeded and records its token usage.
 func (c *LLMCall) Complete(usage LLMTokenUsage, finishedAt time.Time) {
-	c.Status = LLMCallCompleted
-	c.PromptTokens = usage.PromptTokens
-	c.CompletionTokens = usage.CompletionTokens
-	c.ThoughtTokens = usage.ThoughtTokens
-	c.TotalTokens = usage.TotalTokens
-	c.FinishedAt = finishedAt
-	c.DurationMS = finishedAt.Sub(c.StartedAt).Milliseconds()
+	*c = CompleteLLMCall(*c, usage, finishedAt)
 }
 
 // Fail marks the call failed with a stable error code.
 func (c *LLMCall) Fail(err error, finishedAt time.Time) {
-	c.Status = LLMCallFailed
-	c.FinishedAt = finishedAt
-	c.DurationMS = finishedAt.Sub(c.StartedAt).Milliseconds()
-	var domainErr *Error
-	if errors.As(err, &domainErr) {
-		c.ErrorCode = domainErr.Code
-		c.ErrorMessage = domainErr.Message
-		return
-	}
-	c.ErrorCode = CodeLLMCallFailed
-	c.ErrorMessage = "LLM call failed"
+	*c = FailLLMCall(*c, err, finishedAt)
 }

@@ -15,6 +15,18 @@ func TestLLMCallNormalize(t *testing.T) {
 	}
 }
 
+func TestNormalizeLLMCallDoesNotMutateInput(t *testing.T) {
+	t.Parallel()
+	input := LLMCall{ID: " call_1 ", AgentName: " main ", Model: " model "}
+	normalized := NormalizeLLMCall(input)
+	if normalized.ID != "call_1" || normalized.AgentName != "main" || normalized.Model != "model" {
+		t.Fatalf("normalized call = %+v", normalized)
+	}
+	if input.ID != " call_1 " || input.AgentName != " main " || input.Model != " model " {
+		t.Fatalf("input call = %+v, want unchanged", input)
+	}
+}
+
 func TestLLMCallValidate(t *testing.T) {
 	t.Parallel()
 	started := time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)
@@ -75,5 +87,27 @@ func TestLLMCallLifecycle(t *testing.T) {
 	call.Fail(errors.New("network failed"), finished)
 	if call.ErrorCode != CodeLLMCallFailed || call.ErrorMessage != "LLM call failed" {
 		t.Fatalf("generic failed call = %+v", call)
+	}
+}
+
+func TestPureLLMCallTransitionsDoNotMutateInput(t *testing.T) {
+	t.Parallel()
+	startedAt := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	started := LLMCall{ID: "call_1", RunID: "run_1", ThreadID: "thread_1", UserID: "user_1", AgentName: "main", Model: "model", Status: LLMCallRunning, StartedAt: startedAt}
+
+	completed := CompleteLLMCall(started, LLMTokenUsage{PromptTokens: 2, CompletionTokens: 3, TotalTokens: 5}, startedAt.Add(time.Second))
+	if completed.Status != LLMCallCompleted || completed.TotalTokens != 5 {
+		t.Fatalf("completed = %#v", completed)
+	}
+	if started.Status != LLMCallRunning || started.TotalTokens != 0 {
+		t.Fatalf("input after complete = %#v, want unchanged", started)
+	}
+
+	failed := FailLLMCall(started, errors.New("failed"), startedAt.Add(time.Second))
+	if failed.Status != LLMCallFailed || failed.ErrorCode != CodeLLMCallFailed {
+		t.Fatalf("failed = %#v", failed)
+	}
+	if started.Status != LLMCallRunning || started.ErrorCode != "" {
+		t.Fatalf("input after fail = %#v, want unchanged", started)
 	}
 }

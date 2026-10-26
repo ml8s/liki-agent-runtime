@@ -124,9 +124,11 @@ func fixedLedgerNow() time.Time {
 
 func newTestScope() *runExecution {
 	return &runExecution{
-		runID:             "run_1",
-		threadID:          "thread_1",
-		userID:            "user_1",
+		identity: RunIdentity{
+			RunID:    "run_1",
+			ThreadID: "thread_1",
+			UserID:   "user_1",
+		},
 		model:             "test-model",
 		instructionDigest: "test-instruction",
 		definitionName:    "test-definition",
@@ -161,8 +163,8 @@ func TestLedgerReconciledTerminalKeepsTrace(t *testing.T) {
 	)
 	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	scope.traceID = traceID
-	scope.spanID = spanID
+	scope.provenance.TraceID = traceID
+	scope.provenance.SpanID = spanID
 	if !callAuditor.begin("session_trace", scope) {
 		t.Fatal("begin() returned false")
 	}

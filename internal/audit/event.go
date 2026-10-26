@@ -73,27 +73,35 @@ type Event struct {
 	Payload               map[string]any
 }
 
-// Normalize trims whitespace from identifier fields.
+// NormalizeEvent returns an equivalent event with whitespace removed from
+// identifier and provenance fields. The input event is never modified.
+func NormalizeEvent(event Event) Event {
+	event.ID = strings.TrimSpace(event.ID)
+	event.Type = EventType(strings.TrimSpace(string(event.Type)))
+	event.UserID = strings.TrimSpace(event.UserID)
+	event.Protocol = strings.TrimSpace(event.Protocol)
+	event.TraceID = strings.ToLower(strings.TrimSpace(event.TraceID))
+	event.SpanID = strings.ToLower(strings.TrimSpace(event.SpanID))
+	event.AgentName = strings.TrimSpace(event.AgentName)
+	event.AgentVersion = strings.TrimSpace(event.AgentVersion)
+	event.CallerAgent = strings.TrimSpace(event.CallerAgent)
+	event.TargetAgent = strings.TrimSpace(event.TargetAgent)
+	event.ToolName = strings.TrimSpace(event.ToolName)
+	event.Model = strings.TrimSpace(event.Model)
+	event.Provider = strings.TrimSpace(event.Provider)
+	event.ErrorCode = strings.TrimSpace(event.ErrorCode)
+	return event
+}
+
+// Normalize trims whitespace from identifier fields in place.
 func (e *Event) Normalize() {
-	e.ID = strings.TrimSpace(e.ID)
-	e.Type = EventType(strings.TrimSpace(string(e.Type)))
-	e.UserID = strings.TrimSpace(e.UserID)
-	e.Protocol = strings.TrimSpace(e.Protocol)
-	e.TraceID = strings.ToLower(strings.TrimSpace(e.TraceID))
-	e.SpanID = strings.ToLower(strings.TrimSpace(e.SpanID))
-	e.AgentName = strings.TrimSpace(e.AgentName)
-	e.AgentVersion = strings.TrimSpace(e.AgentVersion)
-	e.CallerAgent = strings.TrimSpace(e.CallerAgent)
-	e.TargetAgent = strings.TrimSpace(e.TargetAgent)
-	e.ToolName = strings.TrimSpace(e.ToolName)
-	e.Model = strings.TrimSpace(e.Model)
-	e.Provider = strings.TrimSpace(e.Provider)
-	e.ErrorCode = strings.TrimSpace(e.ErrorCode)
+	*e = NormalizeEvent(*e)
 }
 
 // Validate reports whether the event carries the required lifecycle evidence.
 func (e *Event) Validate() error {
-	e.Normalize()
+	normalized := NormalizeEvent(*e)
+	*e = normalized
 	switch {
 	case e.ID == "":
 		return NewError(CodeIDRequired, "audit event id is required", domain.ErrInvalidInput)

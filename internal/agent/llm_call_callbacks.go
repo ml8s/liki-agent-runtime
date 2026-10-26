@@ -39,11 +39,11 @@ func (l *llmCallAuditor) beforeModel(ctx agent.Context, request *model.LLMReques
 	scope.mu.Unlock()
 	callID := fmt.Sprintf("%s/%s/%d", ctx.InvocationID(), modelName, callSeq)
 	startedAt := l.now()
-	call := &domain.LLMCall{
+	call := domain.LLMCall{
 		ID:                callID,
-		RunID:             scope.runID,
-		ThreadID:          scope.threadID,
-		UserID:            scope.userID,
+		RunID:             scope.identity.RunID,
+		ThreadID:          scope.identity.ThreadID,
+		UserID:            scope.identity.UserID,
 		AgentName:         ctx.AgentName(),
 		Model:             modelName,
 		Provider:          l.provider,
@@ -55,11 +55,11 @@ func (l *llmCallAuditor) beforeModel(ctx agent.Context, request *model.LLMReques
 		StartedAt:         startedAt,
 	}
 	call.Normalize()
-	l.applyAgent(call, call.AgentName)
+	l.applyAgent(&call, call.AgentName)
 	if err := call.Validate(); err != nil {
 		return nil, err
 	}
-	if err := l.recordCall(ctx, scope, call, audit.EventLLMCallStarted, audit.StatusRunning); err != nil {
+	if err := l.recordCall(ctx, scope, &call, audit.EventLLMCallStarted, audit.StatusRunning); err != nil {
 		return nil, err
 	}
 	runtime := llmCallRuntime{
@@ -96,11 +96,11 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 	}
 
 	finishedAt := l.now()
-	call := &domain.LLMCall{
+	call := domain.LLMCall{
 		ID:                runtime.id,
-		RunID:             scope.runID,
-		ThreadID:          scope.threadID,
-		UserID:            scope.userID,
+		RunID:             scope.identity.RunID,
+		ThreadID:          scope.identity.ThreadID,
+		UserID:            scope.identity.UserID,
 		AgentName:         ctx.AgentName(),
 		Model:             modelName,
 		Provider:          l.provider,
@@ -112,22 +112,21 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 		StartedAt:         runtime.startedAt,
 		FinishedAt:        finishedAt,
 	}
-	call.DurationMS = finishedAt.Sub(call.StartedAt).Milliseconds()
 	if responseErr != nil {
-		call.Fail(responseErr, finishedAt)
+		call = domain.FailLLMCall(call, responseErr, finishedAt)
 	} else if response != nil && response.UsageMetadata != nil {
-		call.Complete(llmUsageFromResponse(response.UsageMetadata), finishedAt)
+		call = domain.CompleteLLMCall(call, llmUsageFromResponse(response.UsageMetadata), finishedAt)
 	} else {
-		call.Complete(domain.LLMTokenUsage{}, finishedAt)
+		call = domain.CompleteLLMCall(call, domain.LLMTokenUsage{}, finishedAt)
 	}
-	call.Normalize()
+	call = domain.NormalizeLLMCall(call)
 	scope.mu.Lock()
 	scope.llmCalls++
 	scope.promptTokens += int(call.PromptTokens)
 	scope.completionTokens += int(call.CompletionTokens)
 	scope.thoughtTokens += int(call.ThoughtTokens)
 	scope.mu.Unlock()
-	l.applyAgent(call, call.AgentName)
+	l.applyAgent(&call, call.AgentName)
 	if err := call.Validate(); err != nil {
 		return response, err
 	}
@@ -137,7 +136,7 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 		terminalEvent = audit.EventLLMCallFailed
 		terminalStatus = audit.StatusFailed
 	}
-	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, call, terminalEvent, terminalStatus); auditErr != nil {
+	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, &call, terminalEvent, terminalStatus); auditErr != nil {
 		return response, auditErr
 	}
 	scope.mu.Lock()
@@ -197,11 +196,11 @@ func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMReque
 		}
 	}
 	finishedAt := l.now()
-	call := &domain.LLMCall{
+	call := domain.LLMCall{
 		ID:                runtime.id,
-		RunID:             scope.runID,
-		ThreadID:          scope.threadID,
-		UserID:            scope.userID,
+		RunID:             scope.identity.RunID,
+		ThreadID:          scope.identity.ThreadID,
+		UserID:            scope.identity.UserID,
 		AgentName:         ctx.AgentName(),
 		Model:             modelName,
 		Provider:          l.provider,
@@ -213,14 +212,13 @@ func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMReque
 		StartedAt:         runtime.startedAt,
 		FinishedAt:        finishedAt,
 	}
-	call.DurationMS = finishedAt.Sub(call.StartedAt).Milliseconds()
-	call.Fail(requestErr, finishedAt)
-	call.Normalize()
-	l.applyAgent(call, call.AgentName)
+	call = domain.FailLLMCall(call, requestErr, finishedAt)
+	call = domain.NormalizeLLMCall(call)
+	l.applyAgent(&call, call.AgentName)
 	if err := call.Validate(); err != nil {
 		return nil, err
 	}
-	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, call, audit.EventLLMCallFailed, audit.StatusFailed); auditErr != nil {
+	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, &call, audit.EventLLMCallFailed, audit.StatusFailed); auditErr != nil {
 		return nil, auditErr
 	}
 	if exists {

@@ -170,20 +170,19 @@ func (a *ToolExecutionAuditor) AfterTool(
 	}
 
 	finishedAt := a.now()
-	record.FinishedAt = finishedAt
-	record.DurationMS = finishedAt.Sub(record.StartedAt).Milliseconds()
-	outputDigest, outputBytes, digestErr := audit.CanonicalDigest(result)
-	if digestErr != nil {
-		return result, domain.NewError(domain.CodeToolProvenanceInvalid, "digest tool result", digestErr)
-	}
-	record.OutputDigest = outputDigest
-	record.OutputBytes = outputBytes
+	var lifecycleErr error
 	if err != nil {
-		record.Status = audit.StatusFailed
-		record.ErrorCode = domain.CodeToolExecutionFailed
-		record.ErrorMessage = "MCP tool execution failed"
+		record, lifecycleErr = failToolCall(
+			record,
+			finishedAt,
+			domain.CodeToolExecutionFailed,
+			"MCP tool execution failed",
+		)
 	} else {
-		record.Status = audit.StatusSucceeded
+		record, lifecycleErr = succeedToolCall(record, result, finishedAt)
+	}
+	if lifecycleErr != nil {
+		return result, lifecycleErr
 	}
 	eventType := audit.EventToolCallCompleted
 	if record.Status == audit.StatusFailed {
@@ -216,7 +215,7 @@ func (a *ToolExecutionAuditor) FailPending(
 	a.mu.Lock()
 	pending := make(map[string]ToolCallRecord)
 	for key, record := range a.pending {
-		if scope == nil || string(record.RunID) == string(scope.runID) {
+		if scope == nil || string(record.RunID) == string(scope.identity.RunID) {
 			pending[key] = record
 		}
 	}
@@ -224,11 +223,18 @@ func (a *ToolExecutionAuditor) FailPending(
 
 	var firstErr error
 	for key, record := range pending {
-		record.FinishedAt = a.now()
-		record.DurationMS = record.FinishedAt.Sub(record.StartedAt).Milliseconds()
-		record.Status = audit.StatusFailed
-		record.ErrorCode = domain.CodeToolExecutionInterrupted
-		record.ErrorMessage = "tool execution interrupted by run end"
+		record, lifecycleErr := failToolCall(
+			record,
+			a.now(),
+			domain.CodeToolExecutionInterrupted,
+			"tool execution interrupted by run end",
+		)
+		if lifecycleErr != nil {
+			if firstErr == nil {
+				firstErr = lifecycleErr
+			}
+			continue
+		}
 		if auditErr := a.record(ctx, scope, record, audit.EventToolCallFailed); auditErr != nil {
 			if firstErr == nil {
 				firstErr = auditErr
@@ -252,10 +258,10 @@ func (a *ToolExecutionAuditor) startedRecord(
 	scope *runExecution,
 ) (ToolCallRecord, error) {
 	record := ToolCallRecord{
-		RootRunID: scope.runID,
-		RunID:     scope.runID,
-		ThreadID:  scope.threadID,
-		UserID:    scope.userID,
+		RootRunID: scope.identity.RunID,
+		RunID:     scope.identity.RunID,
+		ThreadID:  scope.identity.ThreadID,
+		UserID:    scope.identity.UserID,
 	}
 	definition, ok := a.agents[ctx.AgentName()]
 	if !ok {
@@ -309,7 +315,7 @@ func (a *ToolExecutionAuditor) record(
 		status = audit.StatusFailed
 	}
 	event := scopedEvent(scope)
-	event.ID = fmt.Sprintf("%s/%s/%s:%s", scope.runID, record.AgentName, record.CallID, eventType)
+	event.ID = fmt.Sprintf("%s/%s/%s:%s", scope.identity.RunID, record.AgentName, record.CallID, eventType)
 	event.Type = eventType
 	event.AgentName = record.AgentName
 	event.AgentVersion = record.AgentVersion

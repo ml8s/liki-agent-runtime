@@ -3,21 +3,15 @@ package agent
 import (
 	"sync"
 	"time"
-
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
 
 type runExecution struct {
 	mu                sync.Mutex
-	runID             domain.ID
-	threadID          domain.ID
-	userID            string
+	identity          RunIdentity
+	provenance        RunProvenance
 	startedAt         time.Time
-	protocol          string
 	model             string
 	instructionDigest string
-	traceID           string
-	spanID            string
 	releaseRun        func()
 	definitionName    string
 	definitionVersion string

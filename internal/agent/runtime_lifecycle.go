@@ -121,14 +121,18 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 		return err
 	}
 	ledgerScope := &runExecution{
-		runID:             domain.ID(scope.RunID),
-		threadID:          domain.ID(scope.ThreadID),
-		userID:            scope.UserID,
-		protocol:          scope.Protocol,
+		identity: RunIdentity{
+			RunID:    domain.ID(scope.RunID),
+			ThreadID: domain.ID(scope.ThreadID),
+			UserID:   scope.UserID,
+		},
+		provenance: RunProvenance{
+			Protocol: scope.Protocol,
+			TraceID:  traceIDFromContext(ctx),
+			SpanID:   spanIDFromContext(ctx),
+		},
 		model:             r.entrypoint.EffectiveModel(r.config.Model),
 		instructionDigest: r.entrypoint.InstructionDigest,
-		traceID:           traceIDFromContext(ctx),
-		spanID:            spanIDFromContext(ctx),
 		definitionName:    r.definition.Metadata.Name,
 		definitionVersion: r.definition.Metadata.Version,
 		definitionDigest:  r.definition.Digest,
@@ -182,11 +186,11 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 	// is operational noise and must not change the durable execution outcome.
 	if deleteErr := r.sessions.Delete(ctx, &session.DeleteRequest{
 		AppName:   r.config.AppName,
-		UserID:    scope.userID,
+		UserID:    scope.identity.UserID,
 		SessionID: sessionID,
 	}); deleteErr != nil {
 		r.config.Logger.WarnContext(ctx, "external_run_session_cleanup_failed",
-			"run_id", string(scope.runID),
+			"run_id", string(scope.identity.RunID),
 			"error", runtimeError(deleteErr).Error(),
 		)
 	}
@@ -194,7 +198,7 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 	if scope.releaseRun != nil {
 		scope.releaseRun()
 	}
-	r.runs.finish(string(scope.runID))
+	r.runs.finish(string(scope.identity.RunID))
 	return nil
 }
 
@@ -209,7 +213,7 @@ func (r *Runtime) runEvent(
 	cause error,
 ) audit.Event {
 	event := scopedEvent(scope)
-	event.ID = string(scope.runID) + ":" + string(eventType)
+	event.ID = string(scope.identity.RunID) + ":" + string(eventType)
 	event.Type = eventType
 	event.OccurredAt = r.config.Now()
 	event.AgentName = r.entrypoint.Name

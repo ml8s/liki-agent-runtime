@@ -91,17 +91,17 @@ func (l *llmCallAuditor) failActive(scope *runExecution, err error, finishedAt t
 	defer scope.mu.Unlock()
 	var firstErr error
 	for callbackKey, runtime := range scope.activeCalls {
-		call := &domain.LLMCall{
-			ID: runtime.id, RunID: scope.runID, ThreadID: scope.threadID,
-			UserID: scope.userID, AgentName: runtime.agentName, Model: runtime.model,
+		call := domain.LLMCall{
+			ID: runtime.id, RunID: scope.identity.RunID, ThreadID: scope.identity.ThreadID,
+			UserID: scope.identity.UserID, AgentName: runtime.agentName, Model: runtime.model,
 			Provider: l.provider, Status: domain.LLMCallFailed,
 			PromptVersion: runtime.instructionDigest,
 			StartedAt:     runtime.startedAt, FinishedAt: finishedAt,
 		}
-		call.DurationMS = finishedAt.Sub(call.StartedAt).Milliseconds()
-		call.Fail(err, finishedAt)
-		l.applyAgent(call, call.AgentName)
-		recordErr := l.recordCall(context.Background(), scope, call, audit.EventLLMCallFailed, audit.StatusFailed)
+		call = domain.FailLLMCall(call, err, finishedAt)
+		call = domain.NormalizeLLMCall(call)
+		l.applyAgent(&call, call.AgentName)
+		recordErr := l.recordCall(context.Background(), scope, &call, audit.EventLLMCallFailed, audit.StatusFailed)
 		if recordErr == nil {
 			delete(scope.activeCalls, callbackKey)
 		} else if firstErr == nil {
@@ -133,11 +133,11 @@ func (l *llmCallAuditor) applyAgent(call *domain.LLMCall, name string) {
 // without a matching BeforeModel callback, preserving the audit rule that
 // every model call has started and terminal evidence.
 func (l *llmCallAuditor) recordCallStarted(ctx agent.Context, scope *runExecution, runtime llmCallRuntime) error {
-	call := &domain.LLMCall{
+	call := domain.LLMCall{
 		ID:                runtime.id,
-		RunID:             scope.runID,
-		ThreadID:          scope.threadID,
-		UserID:            scope.userID,
+		RunID:             scope.identity.RunID,
+		ThreadID:          scope.identity.ThreadID,
+		UserID:            scope.identity.UserID,
 		AgentName:         runtime.agentName,
 		Model:             runtime.model,
 		Provider:          l.provider,
@@ -149,11 +149,11 @@ func (l *llmCallAuditor) recordCallStarted(ctx agent.Context, scope *runExecutio
 		StartedAt:         runtime.startedAt,
 	}
 	call.Normalize()
-	l.applyAgent(call, call.AgentName)
+	l.applyAgent(&call, call.AgentName)
 	if err := call.Validate(); err != nil {
 		return err
 	}
-	return l.recordCall(context.WithoutCancel(ctx), scope, call, audit.EventLLMCallStarted, audit.StatusRunning)
+	return l.recordCall(context.WithoutCancel(ctx), scope, &call, audit.EventLLMCallStarted, audit.StatusRunning)
 }
 
 func (l *llmCallAuditor) recordCall(ctx context.Context, scope *runExecution, call *domain.LLMCall, eventType audit.EventType, status audit.Status) error {
@@ -174,12 +174,12 @@ func (l *llmCallAuditor) recordCall(ctx context.Context, scope *runExecution, ca
 	event.ErrorMessage = call.ErrorMessage
 	event.TraceID = traceIDFromContext(ctx)
 	event.SpanID = spanIDFromContext(ctx)
-	if event.TraceID == "" && scope.traceID != "" {
+	if event.TraceID == "" && scope.provenance.TraceID != "" {
 		// Reconciliation paths may lack a live span context (for example
 		// failActive). Fall back to the run-scoped trace so reconciled
 		// terminal events stay correlatable (DOMAIN invariant 9).
-		event.TraceID = scope.traceID
-		event.SpanID = scope.spanID
+		event.TraceID = scope.provenance.TraceID
+		event.SpanID = scope.provenance.SpanID
 	}
 	event.Payload = map[string]any{
 		"prompt_version":    call.PromptVersion,

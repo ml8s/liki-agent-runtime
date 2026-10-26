@@ -65,14 +65,18 @@ func (r *Runtime) Run(
 	projection := newEventProjectionState()
 	sessionID := runSessionID(request.RunID)
 	scope := &runExecution{
-		runID:             domain.ID(request.RunID),
-		threadID:          domain.ID(request.ThreadID),
-		userID:            request.UserID,
-		protocol:          request.Protocol,
+		identity: RunIdentity{
+			RunID:    domain.ID(request.RunID),
+			ThreadID: domain.ID(request.ThreadID),
+			UserID:   request.UserID,
+		},
+		provenance: RunProvenance{
+			Protocol: request.Protocol,
+			TraceID:  traceIDFromContext(ctx),
+			SpanID:   spanIDFromContext(ctx),
+		},
 		model:             r.entrypoint.EffectiveModel(r.config.Model),
 		instructionDigest: r.entrypoint.InstructionDigest,
-		traceID:           traceIDFromContext(ctx),
-		spanID:            spanIDFromContext(ctx),
 		definitionName:    r.definition.Metadata.Name,
 		definitionVersion: r.definition.Metadata.Version,
 		definitionDigest:  r.definition.Digest,
