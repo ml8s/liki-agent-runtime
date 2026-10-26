@@ -1,12 +1,33 @@
 package agent
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/tool"
+	"google.golang.org/genai"
 )
+
+// systemReadonlyContext is a minimal root-scope ReadonlyContext for catalog
+// calls the runtime initiates outside any agent invocation (startup warmup).
+// The MCP list call only uses the context for cancellation and deadlines.
+type systemReadonlyContext struct{ context.Context }
+
+func (systemReadonlyContext) UserContent() *genai.Content { return nil }
+func (systemReadonlyContext) InvocationID() string        { return "" }
+func (systemReadonlyContext) AgentName() string           { return "" }
+
+func (systemReadonlyContext) ReadonlyState() session.ReadonlyState {
+	return nil
+}
+
+func (systemReadonlyContext) UserID() string    { return "" }
+func (systemReadonlyContext) AppName() string   { return "" }
+func (systemReadonlyContext) SessionID() string { return "" }
+func (systemReadonlyContext) Branch() string    { return "" }
 
 // mcpCatalogTTL bounds how long one standard tools/list discovery round is
 // reused. Deployment artifacts are immutable; a server-side catalog changes

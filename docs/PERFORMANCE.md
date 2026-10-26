@@ -43,9 +43,21 @@ Optimizations follow one loop, and correctness outranks every number in it:
 | Recovery scan window (7 days) | Startup orphan scan stays index-bounded as the audit ledger grows; every prior startup already closed older orphans | `TestAuditEventRepositoryRecoverySkipsEventsOutsideWindow` |
 | Audit secondary-index trim (8 → 3) | Insert path maintains three secondary B-trees instead of eight; sequential appends −20%, parallel grouped appends −20–30% vs the untrimmed recorder. Retained: `run_id` (idempotency), `event_type+occurred_at` (recovery), `trace_id` (incident correlation). Dropped dimensions (root run, agent, tool, tool call, definition) remain queryable via table scans; their aggregate questions are answered by Prometheus counters | `migrations/00004_trim_audit_indexes.sql`, `TestAuditEventIndexSetMatchesWritePathContract` |
 | Native multi-turn Contents | Caller history is seeded as run-scoped session events instead of a JSON array inside one user message: chronological user/model turns, latest message last, no JSON framing overhead, and a stable prefix every later turn can reuse through provider prefix caching. Wire contracts unchanged; the session stays run-scoped and caller-owned history stays authoritative | `internal/agent/history_seed.go`, `TestRunSeedsHistoryAsNativeMultiTurnContents` |
+| Runtime load benchmark (`BenchmarkRuntimeRun`) | End-to-end per-run measurement at concurrency 1/8/32 with seeded 20-message history, MCP tool call, and the real audit recorder — the evidence base for the allocation findings below | `internal/agent/runtime_bench_test.go` |
+| Load-profile findings (measured, c=32) | Runtime framework overhead ≈ 0.2–1.2ms per run. Dominant remaining costs are external-library internals: the MCP SDK's JSON codec (~67% of allocations, scales with tool-result volume), ADK's per-call content clone (13.6% CPU, scales with thread length), and GC (~50% CPU samples at full concurrency). Own-code paths (seeding, audit event build, projection) are single-digit percentages | `go test -bench BenchmarkRuntimeRun -cpuprofile/-memprofile` |
+| Outbound TLS session cache + fan-out-sized idle pool | Parallel tool calls multiply outbound fan-out beyond the old `2×concurrency` pool, forcing TCP+TLS handshakes per burst; the pool is now sized for fan-out (`8×concurrency`, capped) and TLS session tickets are cached so fresh connections resume in fewer round trips | `newOutboundTransport` |
+| MCP catalog startup warmup | The first run after a restart no longer pays lazy cold start (session initialize + `tools/list` per server); warmup is best-effort, bounded, and failures fall through to the on-demand stale/error path | `internal/agent/warmup.go` |
+| Parallel single-turn delegation verified & pinned | ADK runs sibling single-turn calls concurrently via the standard tool pipeline (distinct sub-branches per invocation), so coordinator fan-out to sub-experts costs the slowest branch instead of the sum; task mode stays sequential by framework design. Delegation audit stays per-invocation correct under concurrency | `TestRuntimeRunsParallelSingleTurnDelegation` |
 
 ## Deferred (needs cross-repo alignment)
 
 - Audit retention/archival policy (ownership with `liki-deploy`).
 - Run concurrency and HPA tuning after the audit writer is validated in
   production.
+- GC tuning under CPU limits: at full concurrency GC consumes ~50% of CPU
+  samples but does not bound wall time when cores are spare (measured:
+  `GOGC=200` neutral here). Under container CPU limits, `GOGC`/`GOMEMLIMIT`
+  (standard Go env, deploy-owned) are expected to return most of that headroom.
+- MCP tool-result slimming: the SDK's JSON decode allocations scale with tool
+  result volume; the lever is server-side payload size (Engine/Counsel repos),
+  not the runtime.

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -209,8 +210,19 @@ func newOutboundTransport(maxConcurrentRuns int) *http.Transport {
 		base = &http.Transport{}
 	}
 	tuned := base.Clone()
-	perHost := max(8, min(256, 2*maxConcurrentRuns))
+	// ADK executes the function calls of one model response concurrently
+	// (platform.RunTasks), so concurrent runs multiply their outbound fan-out
+	// by the parallel-tool count. Size the idle pool for that fan-out so a
+	// burst of parallel tool calls reuses warm connections instead of paying
+	// a TCP+TLS handshake per call.
+	perHost := max(64, min(512, 8*maxConcurrentRuns))
 	tuned.MaxIdleConns = max(tuned.MaxIdleConns, perHost)
 	tuned.MaxIdleConnsPerHost = perHost
+	// Cache TLS session tickets so a fresh connection after an idle gap
+	// resumes instead of paying a full handshake.
+	if tuned.TLSClientConfig == nil {
+		tuned.TLSClientConfig = &tls.Config{}
+	}
+	tuned.TLSClientConfig.ClientSessionCache = tls.NewLRUClientSessionCache(0)
 	return tuned
 }

@@ -268,6 +268,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	warmMCPCatalogs(config, mcpToolsets)
 	toolAuditor := newToolExecutionAuditor(
 		config.AuditRecorder,
 		config.Metrics,

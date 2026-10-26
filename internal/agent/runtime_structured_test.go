@@ -230,12 +230,12 @@ func (r *recordingAudit) eventsOfType(eventType audit.EventType) []audit.Event {
 
 // newTestRuntime wires a fake model and an in-memory MCP server. This avoids
 // network dependencies while retaining ADK's real runner and toolset behavior.
-func newTestRuntime(t *testing.T, deployment *Deployment, events *recordingAudit, llm model.LLM) *Runtime {
+func newTestRuntime(t testing.TB, deployment *Deployment, events *recordingAudit, llm model.LLM) *Runtime {
 	return newTestRuntimeWithLimit(t, deployment, events, llm, 0)
 }
 
 func newTestRuntimeWithLimit(
-	t *testing.T,
+	t testing.TB,
 	deployment *Deployment,
 	events *recordingAudit,
 	llm model.LLM,
@@ -271,7 +271,7 @@ func newTestRuntimeWithLimit(
 	return runtime
 }
 
-func plainTestDeployment(t *testing.T) *Deployment {
+func plainTestDeployment(t testing.TB) *Deployment {
 	t.Helper()
 	deployment := NewTestDeployment(t)
 	for index := range deployment.Spec.Agents {

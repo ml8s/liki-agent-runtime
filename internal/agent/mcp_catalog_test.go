@@ -11,9 +11,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/adk/v2/agent"
-	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/tool"
-	"google.golang.org/genai"
 )
 
 type catalogTool struct {
@@ -212,19 +210,6 @@ func catalogClock() func() time.Time {
 	return func() time.Time { return now }
 }
 
-type readonlyCatalogContext struct {
-	context.Context
-}
-
-func (readonlyCatalogContext) UserContent() *genai.Content          { return nil }
-func (readonlyCatalogContext) InvocationID() string                 { return "test-invocation" }
-func (readonlyCatalogContext) AgentName() string                    { return "test-agent" }
-func (readonlyCatalogContext) ReadonlyState() session.ReadonlyState { return nil }
-func (readonlyCatalogContext) UserID() string                       { return "user_1" }
-func (readonlyCatalogContext) AppName() string                      { return "liki-agent-runtime" }
-func (readonlyCatalogContext) SessionID() string                    { return "session_1" }
-func (readonlyCatalogContext) Branch() string                       { return "" }
-
 // TestNewMCPToolsetsMemoizeDiscovery wires the cache exactly as the runtime
 // graph does (FilterToolset over the cached toolset) against a real in-memory
 // MCP server, and proves repeated flows share one tools/list round.
@@ -284,7 +269,7 @@ func TestNewMCPToolsetsMemoizeDiscovery(t *testing.T) {
 	// Mirror agent graph construction: allowlist filtering after the cache.
 	filtered := tool.FilterToolset(toolsets[0], tool.AllowedToolsPredicate([]string{"test_tool"}))
 
-	ctx := readonlyCatalogContext{Context: context.Background()}
+	ctx := systemReadonlyContext{Context: context.Background()}
 	for flow := 0; flow < 3; flow++ {
 		tools, err := filtered.Tools(ctx)
 		if err != nil {
