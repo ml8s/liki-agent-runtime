@@ -163,11 +163,11 @@ failures, never editing history; records exclude conversation or domain payloads
 
 After installing the pinned Node/Go toolchains, run `npm ci` once; Markdown
 linting uses the locked local development dependency. Run `make check`,
-`make validate`, `make test`, `make gate`, and `make build`.
+`make test`, `make gate`, and `make build`.
 
 `make gate` is the pre-push gate. It runs documentation linting, Go static
-checks, `golangci-lint`, isolated race tests, the coverage floor, and deployment
-validation. It does not call a real model provider or external MCP. CI
+checks, race tests, and the coverage floor. `make check` includes deployment
+validation. Neither command calls a real model provider or external MCP. CI
 additionally runs `govulncheck` and production npm dependency auditing.
 Images are built locally (`make image`) with the tag derived from git; CI does
 not build or publish images. `liki` consumes the local image as its experts

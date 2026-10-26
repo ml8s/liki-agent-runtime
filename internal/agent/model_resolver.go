@@ -1,26 +1,55 @@
 package agent
 
-import "google.golang.org/adk/v2/model"
+import (
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"google.golang.org/adk/v2/model"
+)
 
-// modelResolver constructs provider model clients lazily and memoizes them by
-// model name so each distinct per-Agent model is built once per runtime.
-type modelResolver struct {
-	build  func(name string) (model.LLM, error)
+// modelRegistry is immutable after construction. Deployment graph validation
+// guarantees every Agent is reachable from the entrypoint, so construction can
+// eagerly build each distinct model client once and runtime event flow only
+// performs read-only lookups.
+type modelRegistry struct {
 	models map[string]model.LLM
 }
 
-func newModelResolver(build func(string) (model.LLM, error)) *modelResolver {
-	return &modelResolver{build: build, models: make(map[string]model.LLM)}
+func newModelRegistry(config Config, deployment *Deployment) (modelRegistry, error) {
+	return newModelRegistryWithBuilder(newModelBuilder(config), deploymentModelNames(deployment, config.Model))
 }
 
-func (r *modelResolver) resolve(name string) (model.LLM, error) {
-	if cached, ok := r.models[name]; ok {
-		return cached, nil
+func newModelRegistryWithBuilder(
+	build func(name string) (model.LLM, error),
+	names []string,
+) (modelRegistry, error) {
+	models := make(map[string]model.LLM, len(names))
+	for _, name := range names {
+		if _, built := models[name]; built {
+			continue
+		}
+		built, err := build(name)
+		if err != nil {
+			return modelRegistry{}, err
+		}
+		models[name] = built
 	}
-	built, err := r.build(name)
-	if err != nil {
-		return nil, err
+	return modelRegistry{models: models}, nil
+}
+
+func deploymentModelNames(deployment *Deployment, defaultModel string) []string {
+	names := make([]string, 0, len(deployment.Spec.Agents))
+	for index := range deployment.Spec.Agents {
+		names = append(names, deployment.Spec.Agents[index].EffectiveModel(defaultModel))
 	}
-	r.models[name] = built
-	return built, nil
+	return names
+}
+
+func (r modelRegistry) resolve(name string) (model.LLM, error) {
+	if built, ok := r.models[name]; ok {
+		return built, nil
+	}
+	return nil, domain.NewError(
+		domain.CodeLLMModelMissing,
+		"model is not registered for the deployment",
+		domain.ErrInvalidInput,
+	)
 }

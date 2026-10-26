@@ -43,12 +43,12 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
       - name: Run static checks and tests
-        run: make check test-coverage-report
-      - name: Upload Go coverage HTML
+        run: make check test
+      - name: Upload Go coverage profile
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: go-coverage-html
-          path: coverage.html
+          name: go-coverage
+          path: coverage.out
           if-no-files-found: error
 
   build:

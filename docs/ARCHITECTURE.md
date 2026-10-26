@@ -64,6 +64,11 @@ instructions, schemas, and skills roll out and roll back as one unit.
 6. `internal/domain` remains free of transport, provider, adapter, and storage
    imports.
 7. Standard libraries and framework APIs are preferred over local equivalents.
+8. Mapping, validation, visibility, and policy rules are pure functions with
+   explicit inputs and outputs where practical. Mutable state is confined to
+   named runtime components, injected through configuration, scoped to a run or
+   component lifetime, and protected where shared. Startup-derived lookup and
+   SQL plans are immutable after construction.
 
 ## Dependencies and modules
 

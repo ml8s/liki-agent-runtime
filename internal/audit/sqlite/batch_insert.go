@@ -16,10 +16,19 @@ var (
 	auditEventSchemaValue *schema.Schema
 	auditEventSchemaErr   error
 
-	batchSQLMu             sync.Mutex
-	batchSQLCache          = map[int]string{}
-	auditInsertFieldsValue []*schema.Field
+	auditInsertPlanOnce sync.Once
+	auditInsertPlan     auditEventInsertPlan
 )
+
+// auditEventInsertPlan is immutable after one-time construction. The batch
+// writer reads derived metadata and pre-rendered SQL; it never populates a
+// shared runtime cache.
+type auditEventInsertPlan struct {
+	fields     []*schema.Field
+	columns    []string
+	table      string
+	statements map[int]string
+}
 
 func auditEventSchema() *schema.Schema {
 	auditEventSchemaOnce.Do(func() {
@@ -38,40 +47,52 @@ func auditEventSchema() *schema.Schema {
 	return auditEventSchemaValue
 }
 
-// auditEventInsertFields returns the model fields GORM would write, in struct
-// order, so the batch statement and the per-row Create path stay identical.
-func auditEventInsertFields() []*schema.Field {
-	if auditInsertFieldsValue == nil {
-		for _, field := range auditEventSchema().Fields {
-			if field.DBName != "" && field.Creatable {
-				auditInsertFieldsValue = append(auditInsertFieldsValue, field)
+func auditEventInsertPlanValue() auditEventInsertPlan {
+	auditInsertPlanOnce.Do(func() {
+		schemaValue := auditEventSchema()
+		fields := make([]*schema.Field, 0, len(schemaValue.Fields))
+		columns := make([]string, 0, len(schemaValue.Fields))
+		for _, field := range schemaValue.Fields {
+			if field.DBName == "" || !field.Creatable {
+				continue
 			}
+			fields = append(fields, field)
+			columns = append(columns, field.DBName)
 		}
-	}
-	return auditInsertFieldsValue
+		statements := make(map[int]string, recorderMaxBatch)
+		for count := 1; count <= recorderMaxBatch; count++ {
+			statements[count] = auditBatchSQL(schemaValue.Table, columns, count)
+		}
+		auditInsertPlan = auditEventInsertPlan{
+			fields:     fields,
+			columns:    columns,
+			table:      schemaValue.Table,
+			statements: statements,
+		}
+	})
+	return auditInsertPlan
 }
 
 // auditBatchPlaceholders returns the multi-row INSERT statement for a batch
-// size. Statements are cached per size: GORM's prepared-statement cache keys
-// by SQL text, so each size is parsed by SQLite once per process.
+// size. Common recorder batch sizes are immutable pre-rendered values; a
+// defensive fallback builds unusual sizes without mutating shared state.
 func auditBatchPlaceholders(count int) string {
-	batchSQLMu.Lock()
-	defer batchSQLMu.Unlock()
-	if sql, ok := batchSQLCache[count]; ok {
+	plan := auditEventInsertPlanValue()
+	if sql, ok := plan.statements[count]; ok {
 		return sql
 	}
-	fields := auditEventInsertFields()
-	columns := make([]string, 0, len(fields))
-	for _, field := range fields {
-		columns = append(columns, field.DBName)
+	return auditBatchSQL(plan.table, plan.columns, count)
+}
+
+func auditBatchSQL(table string, columns []string, count int) string {
+	if count <= 0 || len(columns) == 0 {
+		return ""
 	}
 	row := "(" + strings.TrimSuffix(strings.Repeat("?,", len(columns)), ",") + ")"
-	sql := fmt.Sprintf(
+	return fmt.Sprintf(
 		"INSERT INTO %s (%s) VALUES %s",
-		auditEventSchema().Table,
+		table,
 		strings.Join(columns, ","),
 		strings.TrimSuffix(strings.Repeat(row+",", count), ","),
 	)
-	batchSQLCache[count] = sql
-	return sql
 }

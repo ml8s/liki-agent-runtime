@@ -1,10 +1,7 @@
-# 统一语义（四仓一致）：
-#   make lint   静态检查聚合
-#   make check  纯静态检查（lint+格式+vet+validate；不跑测试、不写盘）
-#   make test   本仓全部测试（单元/集成；不含 e2e）
-#   make smoke  本仓镜像启动 + operational/public endpoint 冒烟
-#   make build  本仓产物（liki-agent-runtime 二进制）
-#   make e2e    系统 E2E 聚合（liki-deploy 编排）
+# 统一语义：
+#   make check  静态检查（docs、format、lint、vet、artifact、action pinning）
+#   make test   本仓全部测试（unit/integration，race + coverage floor）
+#   make gate   check + test
 
 RELEASE_VERSION ?=
 export RELEASE_VERSION
@@ -33,53 +30,37 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-coverage-report bench build run dev dev-down validate gate image smoke
+.PHONY: help check test gate bench build run dev dev-down image smoke
 help:
-	@echo "make check    - static checks: docs, formatting, lint, vet, and artifact"
-	@echo "make lint-readme - lint and test developer documentation"
-	@echo "make test     - run isolated tests (no deployed Engine dependency)"
+	@echo "make check    - static checks: docs, formatting, lint, vet, artifact, and action pinning"
+	@echo "make test     - run tests with race detection and the coverage floor"
 	@echo "make bench    - run focused performance benchmarks"
-	@echo "make test-coverage - run tests and enforce the coverage floor"
 	@echo "make gate     - run the full pre-push source gate"
 	@echo "make smoke    - smoke the local liki-agent-runtime image"
 	@echo "make build    - build ./bin/liki-agent-runtime"
 	@echo "make image    - build a local image (tag from git)"
 	@echo "make dev      - run the development Agent and MCP containers in the foreground"
 	@echo "make dev-down - remove the development Agent workload"
-	@echo "make validate - validate the AgentDeployment artifact without starting the server"
 
-fmt:
-	golangci-lint fmt ./...
-
-fmt-check:
-	golangci-lint fmt --diff ./...
-
-lint-readme:
-	$(NPM) run lint:docs
-
-lint-engine:
-	golangci-lint run ./...
-
-vet:
-	$(GO) vet ./...
-
-test:
+test: ## Run tests and enforce the coverage floor
 	$(GO) test -race -count=1 -coverprofile=$(COVER_PROFILE) $(TEST_PACKAGES)
-
-test-coverage: test ## Run tests and enforce the coverage floor
+	@# Coverage policy is part of `make test`; there is no separate coverage target.
 	@COV=$$($(GO) tool cover -func=$(COVER_PROFILE) | tail -1 | awk '{print $$3}' | sed 's/%//'); \
 		echo "coverage: $$COV% (floor $(COVER_MIN)%)"; \
 		if awk -v c="$$COV" -v m="$(COVER_MIN)" 'BEGIN {exit !(c < m)}'; then \
 			echo "❌ coverage $$COV% < $(COVER_MIN)%" >&2; exit 1; \
 		fi
 
-test-coverage-report: test-coverage ## Run tests, enforce coverage, and emit the HTML report
-	$(GO) tool cover -html=$(COVER_PROFILE) -o coverage.html
-
 bench: ## Run focused performance benchmarks with allocation stats
 	$(GO) test -run '^$$' -bench . -benchmem -count=1 $(BENCH_PACKAGES)
 
-check: lint-readme fmt-check lint-engine vet validate check-actions
+check: ## Run static checks.
+	$(NPM) run lint:docs
+	golangci-lint fmt --diff ./...
+	golangci-lint run ./...
+	$(GO) vet ./...
+	$(GO) run ./cmd/liki-agent-runtime validate -deployment $(if $(LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE),$(LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE),./dev/agent-deployment/deployment.json)
+	python3 scripts/check_actions_pinned.py
 
 build: ## Build the local liki-agent-runtime binary.
 	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/liki-agent-runtime ./cmd/liki-agent-runtime
@@ -100,13 +81,7 @@ smoke: image ## Smoke the local runtime image with the development deployment
 run:
 	./scripts/dev.sh
 
-gate: check test-coverage
-
-check-actions: ## Reject mutable reusable workflow/action references
-	python3 scripts/check_actions_pinned.py
-
-validate:
-	@$(GO) run ./cmd/liki-agent-runtime validate -deployment $(if $(LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE),$(LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE),./dev/agent-deployment/deployment.json)
+gate: check test
 
 dev-down:
 	docker compose --project-directory . $(COMPOSE_ENV_FILE) -f dev/docker-compose.yml down --remove-orphans

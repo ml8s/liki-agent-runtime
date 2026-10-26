@@ -130,6 +130,41 @@ func TestAgentPartPreparsedResultMatchesInternalParse(t *testing.T) {
 	}
 }
 
+// TestAgentPartDecodesPreparsedCanonicalJSON pins the defensive fallback used
+// when an OutputResult carries canonical JSON without its map-shaped decoded
+// document. It must decode the retained bytes directly, without first copying
+// them into a string.
+func TestAgentPartDecodesPreparsedCanonicalJSON(t *testing.T) {
+	entrypoint := structuredEntrypoint(t)
+	event := &session.Event{
+		Author: entrypoint.Name,
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"canonical"}`}}},
+		},
+		Actions: session.EventActions{StateDelta: map[string]any{
+			agent.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": "canonical"},
+		}},
+	}
+	output := agent.OutputResult{
+		JSON:     []byte(`{"answer":"canonical"}`),
+		Text:     "canonical",
+		Document: "defensive-fallback",
+	}
+
+	part, err := agentPart(event, &genai.Part{Text: `{"answer":"canonical"}`}, exposeNone(), entrypoint, &output)
+	if err != nil {
+		t.Fatalf("agentPart() error = %v", err)
+	}
+	data, ok := part.Content.(a2a.Data)
+	if !ok {
+		t.Fatalf("content = %#v, want structured data", part.Content)
+	}
+	payload, ok := data.Value.(map[string]any)
+	if !ok || payload["answer"] != "canonical" {
+		t.Fatalf("data = %#v, want canonical answer", data.Value)
+	}
+}
+
 // exposeAll treats every author as plain-text visible; exposeNone hides every
 // author's model text. Both stand in for a deployment-derived resolver.
 func exposeAll() func(string) bool { return func(string) bool { return true } }

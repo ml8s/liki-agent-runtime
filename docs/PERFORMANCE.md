@@ -1,7 +1,8 @@
 # Performance Program
 
 This document is the standing plan and record for runtime performance work.
-Optimizations follow one loop, and correctness outranks every number in it:
+Optimizations follow one loop, and correctness and maintainability outrank
+every number in it:
 
 1. **Baseline** — add or reuse a metric/benchmark that shows the current cost.
 2. **Invariants** — write the correctness and security invariants down before
@@ -26,6 +27,15 @@ Optimizations follow one loop, and correctness outranks every number in it:
 - Failures fail closed: backpressure and unavailability return coded errors
   instead of blocking indefinitely or silently degrading security controls.
 
+## Maintainability gate
+
+- A critical write path keeps one canonical implementation unless a grouped or
+  batched path has a durable, measured win and preserves per-item outcome
+  semantics.
+- If an optimization requires a special fast path plus a semantic fallback for
+  conflicts, retries, or provider behavior, reject it unless the win is large
+  enough to justify maintaining both paths.
+
 ## Completed
 
 | Item | Result | Evidence |
@@ -44,6 +54,7 @@ Optimizations follow one loop, and correctness outranks every number in it:
 | Audit secondary-index trim (8 → 3) | Insert path maintains three secondary B-trees instead of eight; sequential appends −20%, parallel grouped appends −20–30% vs the untrimmed recorder. Retained: `run_id` (idempotency), `event_type+occurred_at` (recovery), `trace_id` (incident correlation). Dropped dimensions (root run, agent, tool, tool call, definition) remain queryable via table scans; their aggregate questions are answered by Prometheus counters | `migrations/00004_trim_audit_indexes.sql`, `TestAuditEventIndexSetMatchesWritePathContract` |
 | Native multi-turn Contents | Caller history is seeded as run-scoped session events instead of a JSON array inside one user message: chronological user/model turns, latest message last, no JSON framing overhead, and a stable prefix every later turn can reuse through provider prefix caching. Wire contracts unchanged; the session stays run-scoped and caller-owned history stays authoritative | `internal/agent/history_seed.go`, `TestRunSeedsHistoryAsNativeMultiTurnContents` |
 | Runtime load benchmark (`BenchmarkRuntimeRun`) | End-to-end per-run measurement at concurrency 1/8/32 with seeded 20-message history, MCP tool call, and the real audit recorder — the evidence base for the allocation findings below | `internal/agent/runtime_bench_test.go` |
+| Event projector zero-copy fast path | Count visible parts before constructing a replacement. A fully visible final event dropped from ~150ns/1 alloc to ~25ns/0 allocs; a fully visible partial delta (including projector construction) dropped from ~860ns/3 allocs to ~73ns/0 allocs on the benchmark host. Visibility, partial-duplicate suppression, tool facts, and state-only events are unchanged | `internal/agent/event_projector.go`, `BenchmarkEventProjectorFinalText`, `BenchmarkEventProjectorPartialText` |
 | Load-profile findings (measured, c=32) | Runtime framework overhead ≈ 0.2–1.2ms per run. Dominant remaining costs are external-library internals: the MCP SDK's JSON codec (~67% of allocations, scales with tool-result volume), ADK's per-call content clone (13.6% CPU, scales with thread length), and GC (~50% CPU samples at full concurrency). Own-code paths (seeding, audit event build, projection) are single-digit percentages | `go test -bench BenchmarkRuntimeRun -cpuprofile/-memprofile` |
 | Outbound TLS session cache + fan-out-sized idle pool | Parallel tool calls multiply outbound fan-out beyond the old `2×concurrency` pool, forcing TCP+TLS handshakes per burst; the pool is now sized for fan-out (`8×concurrency`, capped) and TLS session tickets are cached so fresh connections resume in fewer round trips | `newOutboundTransport` |
 | MCP catalog startup warmup | The first run after a restart no longer pays lazy cold start (session initialize + `tools/list` per server); warmup is best-effort, bounded, and failures fall through to the on-demand stale/error path | `internal/agent/warmup.go` |

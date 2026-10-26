@@ -83,13 +83,13 @@ func (a *AgentReferenceAuditor) BeforeAgent(ctx adkagent.Context) (*genai.Conten
 	if ctx.AgentName() == a.entrypoint {
 		return nil, nil
 	}
-	record, err := a.startedRecord(ctx)
-	if err != nil {
-		return nil, err
-	}
 	scope, ok := a.scope(ctx.SessionID())
 	if !ok {
 		return nil, domain.NewError(domain.CodeAuditSessionRequired, "delegation has no audit scope", nil)
+	}
+	record, err := a.startedRecord(ctx, scope)
+	if err != nil {
+		return nil, err
 	}
 	key := a.pendingKey(ctx)
 	a.mu.Lock()
@@ -232,11 +232,10 @@ func (a *AgentReferenceAuditor) FailPending(ctx context.Context, scope *runScope
 	return firstErr
 }
 
-func (a *AgentReferenceAuditor) startedRecord(ctx adkagent.Context) (DelegationExecutionRecord, error) {
-	scope, ok := a.scope(ctx.SessionID())
-	if !ok {
-		return DelegationExecutionRecord{}, domain.NewError(domain.CodeAuditSessionRequired, "delegation has no audit scope", nil)
-	}
+func (a *AgentReferenceAuditor) startedRecord(
+	ctx adkagent.Context,
+	scope *runScope,
+) (DelegationExecutionRecord, error) {
 	target := ctx.AgentName()
 	definition, ok := a.agents[target]
 	if !ok {

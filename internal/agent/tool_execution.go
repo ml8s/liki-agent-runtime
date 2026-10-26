@@ -123,7 +123,7 @@ func (a *ToolExecutionAuditor) BeforeTool(
 	if !ok {
 		return args, domain.NewError(domain.CodeAuditSessionRequired, "tool execution has no audit scope", nil)
 	}
-	record, err := a.startedRecord(ctx, tool, args)
+	record, err := a.startedRecord(ctx, tool, args, scope)
 	if err != nil {
 		return args, err
 	}
@@ -249,11 +249,8 @@ func (a *ToolExecutionAuditor) startedRecord(
 	ctx adkagent.Context,
 	tool tool.Tool,
 	args map[string]any,
+	scope *runScope,
 ) (ToolExecutionRecord, error) {
-	scope, ok := a.scope(ctx.SessionID())
-	if !ok {
-		return ToolExecutionRecord{}, domain.NewError(domain.CodeAuditSessionRequired, "tool execution has no audit scope", nil)
-	}
 	record := ToolExecutionRecord{
 		RootRunID: scope.runID,
 		RunID:     scope.runID,

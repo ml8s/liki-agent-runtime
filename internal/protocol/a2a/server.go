@@ -3,6 +3,7 @@
 package a2a
 
 import (
+	"bytes"
 	"context"
 	"encoding/gob"
 	"encoding/json"
@@ -339,7 +340,7 @@ func agentPart(
 				// decode of the same bytes.
 				data = document
 			} else {
-				decoder := json.NewDecoder(strings.NewReader(string(output.JSON)))
+				decoder := json.NewDecoder(bytes.NewReader(output.JSON))
 				decoder.UseNumber()
 				if err := decoder.Decode(&data); err != nil {
 					return nil, fmt.Errorf("decode structured A2A data: %w", err)

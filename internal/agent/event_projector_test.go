@@ -8,6 +8,53 @@ import (
 	"google.golang.org/genai"
 )
 
+// BenchmarkEventProjectorFinalText measures the per-event cost paid by
+// observing protocol streams. A plain final event is the common case where the
+// projector can safely return the framework-native event unchanged.
+func BenchmarkEventProjectorFinalText(b *testing.B) {
+	deployment := plainTextDeployment()
+	projection := newEventProjectionState()
+	projector := newEventProjector(newEventProjectorIndex(deployment))
+	event := &session.Event{
+		Author: "main",
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Parts: []*genai.Part{{Text: "final answer"}}},
+		},
+	}
+
+	b.ReportAllocs()
+	for range b.N {
+		_, _, visible := projector.Project(projection, event)
+		if !visible {
+			b.Fatal("event was not visible")
+		}
+	}
+}
+
+// BenchmarkEventProjectorPartialText measures the streaming path for a fully
+// visible text delta, including per-run projector construction.
+func BenchmarkEventProjectorPartialText(b *testing.B) {
+	deployment := plainTextDeployment()
+	event := &session.Event{
+		Author: "main",
+		LLMResponse: model.LLMResponse{
+			Partial: true,
+			Content: &genai.Content{Parts: []*genai.Part{{Text: "delta"}}},
+		},
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		projection := newEventProjectionState()
+		projector := newEventProjector(newEventProjectorIndex(deployment))
+		_, _, visible := projector.Project(projection, event)
+		if !visible {
+			b.Fatal("event was not visible")
+		}
+	}
+}
+
 func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 	deployment := &Deployment{
 		Metadata: DeploymentMetadata{Name: "test", Version: "1.0.0"},
@@ -20,6 +67,7 @@ func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 			Tools:       ToolAllowlist{Allow: map[string][]string{}},
 		}}},
 	}
+	projection := newEventProjectionState()
 	projector := newEventProjector(newEventProjectorIndex(deployment))
 	event := &session.Event{
 		Author: "main",
@@ -29,7 +77,7 @@ func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 		},
 	}
 
-	projected, visible := projector.Project(event)
+	projected, _, visible := projector.Project(projection, event)
 	if !visible || projected == nil || len(projected.Content.Parts) != 1 || projected.Content.Parts[0].Text != "stream" {
 		t.Fatalf("projected = %#v, visible = %v", projected, visible)
 	}
@@ -51,6 +99,7 @@ func TestEventProjectorHidesStructuredPayload(t *testing.T) {
 			Tools: ToolAllowlist{Allow: map[string][]string{}},
 		}}},
 	}
+	projection := newEventProjectionState()
 	projector := newEventProjector(newEventProjectorIndex(deployment))
 	event := &session.Event{
 		Author: "main",
@@ -60,13 +109,14 @@ func TestEventProjectorHidesStructuredPayload(t *testing.T) {
 		},
 	}
 
-	projected, visible := projector.Project(event)
+	projected, _, visible := projector.Project(projection, event)
 	if visible || projected != nil {
 		t.Fatalf("projected = %#v, visible = %v; structured payload must be hidden", projected, visible)
 	}
 }
 
 func TestEventProjectorPreservesStateOnlyFinalEvent(t *testing.T) {
+	projection := newEventProjectionState()
 	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
 	event := &session.Event{
 		Author: "main",
@@ -75,13 +125,14 @@ func TestEventProjectorPreservesStateOnlyFinalEvent(t *testing.T) {
 		},
 	}
 
-	projected, visible := projector.Project(event)
+	projected, _, visible := projector.Project(projection, event)
 	if !visible || projected == nil || projected.Content != nil {
 		t.Fatalf("projected = %#v, visible = %v; want state-only event without content", projected, visible)
 	}
 }
 
 func TestEventProjectorSuppressesFinalTextDuplicateAfterStreaming(t *testing.T) {
+	projection := newEventProjectionState()
 	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
 	partial := &session.Event{
 		Author: "main",
@@ -97,16 +148,18 @@ func TestEventProjectorSuppressesFinalTextDuplicateAfterStreaming(t *testing.T) 
 		},
 	}
 
-	if _, visible := projector.Project(partial); !visible {
+	_, projection, visible := projector.Project(projection, partial)
+	if !visible {
 		t.Fatal("partial text was not projected")
 	}
-	projected, visible := projector.Project(final)
+	projected, _, visible := projector.Project(projection, final)
 	if visible || projected != nil {
 		t.Fatalf("final duplicate = %#v, visible = %v; want suppressed", projected, visible)
 	}
 }
 
 func TestEventProjectorKeepsToolFactWhenSuppressingFinalText(t *testing.T) {
+	projection := newEventProjectionState()
 	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
 	partial := &session.Event{
 		Author: "main",
@@ -115,7 +168,8 @@ func TestEventProjectorKeepsToolFactWhenSuppressingFinalText(t *testing.T) {
 			Content: &genai.Content{Parts: []*genai.Part{{Text: "Hello "}}},
 		},
 	}
-	if _, visible := projector.Project(partial); !visible {
+	_, projection, visible := projector.Project(projection, partial)
+	if !visible {
 		t.Fatal("partial text was not projected")
 	}
 
@@ -128,7 +182,7 @@ func TestEventProjectorKeepsToolFactWhenSuppressingFinalText(t *testing.T) {
 			}},
 		},
 	}
-	projected, visible := projector.Project(final)
+	projected, _, visible := projector.Project(projection, final)
 	if !visible || projected == nil || len(projected.Content.Parts) != 1 {
 		t.Fatalf("projected = %#v, visible = %v; want one tool fact", projected, visible)
 	}

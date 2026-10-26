@@ -1,0 +1,279 @@
+package agent
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"google.golang.org/adk/v2/session"
+)
+
+type runLifecycle struct {
+	mu         sync.Mutex
+	active     map[string]struct{}
+	completed  map[string]struct{}
+	order      []string
+	orderStart int
+}
+
+func (r *Runtime) acquireRun(ctx context.Context) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		r.observeRunRejection("cancelled")
+		return nil, runtimeError(err)
+	}
+	select {
+	case r.runSlots <- struct{}{}:
+		return func() { <-r.runSlots }, nil
+	default:
+		r.observeRunRejection("busy")
+		return nil, domain.NewError(domain.CodeRuntimeBusy, "runtime is at its concurrent run limit", ctx.Err())
+	}
+}
+
+func (r *Runtime) observeRunRejection(reason string) {
+	if r.config.Metrics != nil {
+		r.config.Metrics.ObserveRunRejection(reason)
+	}
+}
+
+func newRunLifecycle() *runLifecycle {
+	return &runLifecycle{
+		active:    make(map[string]struct{}),
+		completed: make(map[string]struct{}),
+	}
+}
+
+func (l *runLifecycle) begin(runID string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, exists := l.active[runID]; exists {
+		return false
+	}
+	if _, exists := l.completed[runID]; exists {
+		return false
+	}
+	l.active[runID] = struct{}{}
+	return true
+}
+
+func (l *runLifecycle) finish(runID string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.active, runID)
+	l.completed[runID] = struct{}{}
+	l.order = append(l.order, runID)
+	// Ring eviction keeps duplicate-run detection bounded without repeatedly
+	// reslicing the backing array, which would grow forever.
+	for len(l.order)-l.orderStart > maxCompletedRunIDs {
+		delete(l.completed, l.order[l.orderStart])
+		l.order[l.orderStart] = ""
+		l.orderStart++
+	}
+	if l.orderStart == len(l.order) {
+		l.order = l.order[:0]
+		l.orderStart = 0
+	}
+}
+
+// AuditRunScope identifies an externally driven ADK execution for the LLM
+// audit ledger. It does not create a second execution path.
+type AuditRunScope struct {
+	RunID    string
+	ThreadID string
+	UserID   string
+	Protocol string
+}
+
+// BeginAuditRun attaches protocol identity to model callbacks when an official
+// protocol executor drives the shared ADK runtime directly.
+func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope AuditRunScope) error {
+	scope.RunID = strings.TrimSpace(scope.RunID)
+	scope.ThreadID = strings.TrimSpace(scope.ThreadID)
+	scope.UserID = strings.TrimSpace(scope.UserID)
+	if scope.RunID == "" || scope.ThreadID == "" || scope.UserID == "" {
+		return domain.NewError(domain.CodeAuditScopeRequired, "run, thread, and user identifiers are required", domain.ErrInvalidInput)
+	}
+	if !ValidIdentifier(scope.RunID) {
+		return domain.NewError(domain.CodeRunIDInvalid, "run id must contain at most 128 printable bytes", domain.ErrInvalidInput)
+	}
+	if !ValidIdentifier(scope.ThreadID) {
+		return domain.NewError(domain.CodeThreadIDInvalid, "thread id must contain at most 128 printable bytes", domain.ErrInvalidInput)
+	}
+	if !ValidIdentifier(scope.UserID) {
+		return domain.NewError(domain.CodeUserIDInvalid, "user id must contain at most 128 printable bytes", domain.ErrInvalidInput)
+	}
+	if err := r.ensureDurableRunID(ctx, scope.RunID); err != nil {
+		return err
+	}
+	if sessionID == "" {
+		return domain.NewError(domain.CodeAuditSessionRequired, "audit session identifier is required", domain.ErrInvalidInput)
+	}
+	if !r.runs.begin(scope.RunID) {
+		return domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
+	}
+	releaseRun, err := r.acquireRun(ctx)
+	if err != nil {
+		r.runs.finish(scope.RunID)
+		return err
+	}
+	ledgerScope := &runScope{
+		runID:             domain.ID(scope.RunID),
+		threadID:          domain.ID(scope.ThreadID),
+		userID:            scope.UserID,
+		protocol:          scope.Protocol,
+		model:             r.entrypoint.EffectiveModel(r.config.Model),
+		instructionDigest: r.entrypoint.InstructionDigest,
+		traceID:           traceIDFromContext(ctx),
+		spanID:            spanIDFromContext(ctx),
+		definitionName:    r.definition.Metadata.Name,
+		definitionVersion: r.definition.Metadata.Version,
+		definitionDigest:  r.definition.Digest,
+		startedAt:         r.config.Now(),
+		releaseRun:        releaseRun,
+		activeCalls:       make(map[string]llmCallRuntime),
+	}
+	if !r.callAuditor.begin(sessionID, ledgerScope) {
+		releaseRun()
+		r.runs.finish(scope.RunID)
+		return domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
+	}
+	event := r.runEvent(ctx, ledgerScope, audit.EventRunStarted, audit.StatusRunning, nil)
+	if err := r.recordAuditWithRetry(ctx, &event); err != nil {
+		r.runs.finish(scope.RunID)
+		_, _ = r.callAuditor.end(sessionID, err)
+		_ = r.delegationAuditor.FailPending(ctx, ledgerScope)
+		_ = r.toolAuditor.FailPending(ctx, ledgerScope)
+		releaseRun()
+		return err
+	}
+	return nil
+}
+
+// EndAuditRun completes an externally driven audit lifecycle exactly once.
+//
+// The run scope is released only after the terminal run event is durably
+// appended. A transient append failure therefore returns without releasing the
+// scope or the concurrency slot, so the executor's cleanup callback retries the
+// terminal append rather than stranding an orphaned started event. Startup
+// recovery remains the last resort if the process exits before a retry succeeds.
+func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr error) error {
+	ctx = context.WithoutCancel(ctx)
+	if sessionID == "" {
+		return nil
+	}
+	scope, existed := r.callAuditor.scope(sessionID)
+	if !existed {
+		return nil
+	}
+
+	// 终态证据事务（与 Run 共用唯一实现，见 run_evidence.go）：关闭
+	// in-flight → 补偿 → 终态事件。追加失败时直接返回——作用域保留，
+	// 执行方清理回调负责重试；在此之前不释放任何进程状态。因果与补偿
+	// 错误已编码为终态事件的失败原因。
+	if err := r.closeRunEvidence(ctx, scope, runErr); err != nil {
+		return err
+	}
+
+	// Terminal evidence is durable: release process state exactly once. Cleanup
+	// is operational noise and must not change the durable execution outcome.
+	if deleteErr := r.sessions.Delete(ctx, &session.DeleteRequest{
+		AppName:   r.config.AppName,
+		UserID:    scope.userID,
+		SessionID: sessionID,
+	}); deleteErr != nil {
+		r.config.Logger.WarnContext(ctx, "external_run_session_cleanup_failed",
+			"run_id", string(scope.runID),
+			"error", runtimeError(deleteErr).Error(),
+		)
+	}
+	r.callAuditor.forget(sessionID)
+	if scope.releaseRun != nil {
+		scope.releaseRun()
+	}
+	r.runs.finish(string(scope.runID))
+	return nil
+}
+
+// runEvent is the single constructor for run-lifecycle audit events, shared by
+// the protocol-driven Run path and the externally driven BeginAuditRun /
+// EndAuditRun path.
+func (r *Runtime) runEvent(
+	ctx context.Context,
+	scope *runScope,
+	eventType audit.EventType,
+	status audit.Status,
+	cause error,
+) audit.Event {
+	event := scopedEvent(scope)
+	event.ID = string(scope.runID) + ":" + string(eventType)
+	event.Type = eventType
+	event.OccurredAt = r.config.Now()
+	event.AgentName = r.entrypoint.Name
+	event.AgentVersion = r.entrypoint.Version
+	event.AgentDefinitionDigest = r.entrypoint.Digest
+	event.Model = r.entrypoint.EffectiveModel(r.config.Model)
+	event.Provider = r.config.Provider
+	event.Status = status
+	event.DurationMS = r.config.Now().Sub(scope.startedAt).Milliseconds()
+	event.TraceID = traceIDFromContext(ctx)
+	event.SpanID = spanIDFromContext(ctx)
+	if cause != nil {
+		event.ErrorCode, event.ErrorMessage = errorFields(cause)
+	}
+	return event
+}
+
+// errorFields maps an arbitrary error to stable audit error fields.
+func errorFields(cause error) (code, message string) {
+	runtimeErr := runtimeError(cause)
+	var domainErr *domain.Error
+	if errors.As(runtimeErr, &domainErr) {
+		return domainErr.Code, domainErr.Message
+	}
+	return domain.CodeRuntimeFailed, runtimeErr.Error()
+}
+
+// runSessionID 返回 Run 的 run-scoped ADK 会话标识：会话即运行，
+// 终态删除，不承载跨 Run 的持久历史（持久历史归调用方所有）。
+func runSessionID(runID string) string {
+	return "run:" + runID
+}
+
+// normalizeRunRequest 去除标识符、协议与用户消息的首尾空白。Run 入口的
+// 所有下游（审计、会话、模型输入）都消费规范化后的值。
+func normalizeRunRequest(request RunRequest) RunRequest {
+	request.RunID = strings.TrimSpace(request.RunID)
+	request.ThreadID = strings.TrimSpace(request.ThreadID)
+	request.UserID = strings.TrimSpace(request.UserID)
+	request.Protocol = strings.TrimSpace(request.Protocol)
+	request.UserMessage = strings.TrimSpace(request.UserMessage)
+	return request
+}
+
+// validateRunRequest 校验一次执行的入参不变量：三类标识符必须存在且为
+// 有界可打印字符，用户消息不得为空，会话历史不得超限。
+func validateRunRequest(request RunRequest) error {
+	switch {
+	case request.RunID == "":
+		return domain.NewError(domain.CodeRunIDRequired, "run id is required", domain.ErrInvalidInput)
+	case request.ThreadID == "":
+		return domain.NewError(domain.CodeThreadIDRequired, "thread id is required", domain.ErrInvalidInput)
+	case request.UserID == "":
+		return domain.NewError(domain.CodeUserIDRequired, "user id is required", domain.ErrInvalidInput)
+	case request.UserMessage == "":
+		return domain.NewError(domain.CodeUserMessageRequired, "user message is required", domain.ErrInvalidInput)
+	case !ValidIdentifier(request.RunID):
+		return domain.NewError(domain.CodeRunIDInvalid, "run id must contain at most 128 printable bytes", domain.ErrInvalidInput)
+	case !ValidIdentifier(request.ThreadID):
+		return domain.NewError(domain.CodeThreadIDInvalid, "thread id must contain at most 128 printable bytes", domain.ErrInvalidInput)
+	case !ValidIdentifier(request.UserID):
+		return domain.NewError(domain.CodeUserIDInvalid, "user id must contain at most 128 printable bytes", domain.ErrInvalidInput)
+	case len(request.History) > MaxHistoryMessages:
+		return domain.NewError(domain.CodeHistoryInvalid, fmt.Sprintf("conversation history exceeds %d messages", MaxHistoryMessages), domain.ErrInvalidInput)
+	}
+	return nil
+}

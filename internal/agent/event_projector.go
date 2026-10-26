@@ -5,13 +5,18 @@ import (
 	"google.golang.org/genai"
 )
 
-// eventProjector converts internal ADK events into the runtime's observable
-// event format. It is the single place that decides whether partial model
-// output, finalized model output, and tool facts are visible to protocols.
+// eventProjector is immutable configuration for converting internal ADK
+// events into the runtime's observable event format. It is the single place
+// that decides whether partial model output, finalized model output, and tool
+// facts are visible to protocols.
 type eventProjector struct {
 	index eventProjectorIndex
-	// partialText is per-run mutable state; the index above is shared and
-	// read-only after runtime construction.
+}
+
+// eventProjectionState is explicit per-run transition state. Project consumes
+// the current state and returns the state used by the next event; the shared
+// projector itself never changes.
+type eventProjectionState struct {
 	partialText map[string]bool
 }
 
@@ -30,7 +35,11 @@ func newEventProjectorIndex(deployment *Deployment) eventProjectorIndex {
 }
 
 func newEventProjector(index eventProjectorIndex) eventProjector {
-	return eventProjector{index: index, partialText: make(map[string]bool)}
+	return eventProjector{index: index}
+}
+
+func newEventProjectionState() eventProjectionState {
+	return eventProjectionState{partialText: make(map[string]bool)}
 }
 
 // Project returns the observer-visible form of an ADK event.
@@ -40,25 +49,29 @@ func newEventProjector(index eventProjectorIndex) eventProjector {
 // runtime validates the complete output. Tool call/response facts are protocol
 // events and remain visible, while thought and partial function-call chunks do
 // not create duplicate protocol facts.
-func (p eventProjector) Project(event *session.Event) (*session.Event, bool) {
+func (p eventProjector) Project(
+	state eventProjectionState,
+	event *session.Event,
+) (*session.Event, eventProjectionState, bool) {
 	if event == nil {
-		return nil, false
+		return nil, state, false
 	}
 	definition, exposeModelText := p.definitionFor(event.Author)
+	next := state
 
 	var projected *session.Event
 	if event.Partial {
-		projected = p.projectPartial(event, definition, exposeModelText)
+		projected = next.projectPartial(event, definition, exposeModelText)
 	} else {
-		projected = p.projectFinal(event, definition, exposeModelText)
+		projected = next.projectFinal(event, definition, exposeModelText)
 	}
 	if projected == nil {
-		return nil, false
+		return nil, next, false
 	}
-	return projected, true
+	return projected, next, true
 }
 
-func (p eventProjector) projectPartial(
+func (s *eventProjectionState) projectPartial(
 	event *session.Event,
 	definition *AgentDefinition,
 	exposeModelText bool,
@@ -67,13 +80,27 @@ func (p eventProjector) projectPartial(
 		return nil
 	}
 
-	text := nonThoughtTextParts(event)
-	if len(text) == 0 {
+	kept := 0
+	for _, part := range event.Content.Parts {
+		if part != nil && part.Text != "" && !part.Thought {
+			kept++
+		}
+	}
+	if kept == 0 {
 		return nil
 	}
-
 	if definition != nil {
-		p.partialText[definition.Name] = true
+		s.partialText[definition.Name] = true
+	}
+	if kept == len(event.Content.Parts) {
+		return event
+	}
+
+	text := make([]*genai.Part, 0, kept)
+	for _, part := range event.Content.Parts {
+		if part != nil && part.Text != "" && !part.Thought {
+			text = append(text, part)
+		}
 	}
 	projected := *event
 	projected.Content = &genai.Content{
@@ -83,7 +110,7 @@ func (p eventProjector) projectPartial(
 	return &projected
 }
 
-func (p eventProjector) projectFinal(
+func (s *eventProjectionState) projectFinal(
 	event *session.Event,
 	definition *AgentDefinition,
 	exposeModelText bool,
@@ -107,30 +134,48 @@ func (p eventProjector) projectFinal(
 		// explicit tool facts remain visible.
 		exposeModelText = false
 	}
-	parts := make([]*genai.Part, 0, len(event.Content.Parts))
+	// The final aggregate repeats text already emitted as partial deltas.
+	// Decide that once so the common fully-visible and fully-suppressed cases
+	// can avoid allocating an intermediate part slice.
+	suppressText := definition != nil && s.partialText[definition.Name]
 	hasToolFact := false
+	kept := 0
 
 	for _, part := range event.Content.Parts {
 		switch {
 		case part == nil:
 			continue
 		case part.FunctionCall != nil || part.FunctionResponse != nil:
-			parts = append(parts, part)
 			hasToolFact = true
+			kept++
 		case exposeModelText && part.Text != "" && !part.Thought:
-			parts = append(parts, part)
+			if !suppressText {
+				kept++
+			}
 		}
 	}
+	if kept == len(event.Content.Parts) {
+		if definition != nil {
+			delete(s.partialText, definition.Name)
+		}
+		return event
+	}
 
-	if definition != nil && p.partialText[definition.Name] {
-		// The text was already projected as partial deltas. A streaming model's
-		// final aggregate repeats the same text and must not be emitted twice.
-		parts = filterParts(parts, func(part *genai.Part) bool {
-			return part.Text == "" || part.Thought
-		})
+	parts := make([]*genai.Part, 0, kept)
+	for _, part := range event.Content.Parts {
+		switch {
+		case part == nil:
+			continue
+		case part.FunctionCall != nil || part.FunctionResponse != nil:
+			parts = append(parts, part)
+		case exposeModelText && part.Text != "" && !part.Thought:
+			if !suppressText {
+				parts = append(parts, part)
+			}
+		}
 	}
 	if definition != nil {
-		delete(p.partialText, definition.Name)
+		delete(s.partialText, definition.Name)
 	}
 
 	// Preserve events that carry only runtime state (for example structured
@@ -161,28 +206,4 @@ func (p eventProjector) definitionFor(author string) (*AgentDefinition, bool) {
 		return nil, false
 	}
 	return definition, ExposesModelText(definition)
-}
-
-func nonThoughtTextParts(event *session.Event) []*genai.Part {
-	if event == nil || event.Content == nil {
-		return nil
-	}
-	parts := make([]*genai.Part, 0, len(event.Content.Parts))
-	for _, part := range event.Content.Parts {
-		if part == nil || part.Text == "" || part.Thought {
-			continue
-		}
-		parts = append(parts, part)
-	}
-	return parts
-}
-
-func filterParts(parts []*genai.Part, keep func(*genai.Part) bool) []*genai.Part {
-	filtered := make([]*genai.Part, 0, len(parts))
-	for _, part := range parts {
-		if part != nil && keep(part) {
-			filtered = append(filtered, part)
-		}
-	}
-	return filtered
 }

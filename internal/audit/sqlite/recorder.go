@@ -358,7 +358,7 @@ func (r *AuditRecorder) commitInserts(batch []recorderJob) (survived bool) {
 // cache keys by SQL text, so each distinct batch size is parsed once per
 // process instead of once per transaction.
 func (r *AuditRecorder) execBatchInsert(batch []recorderJob) error {
-	fields := auditEventInsertFields()
+	fields := auditEventInsertPlanValue().fields
 	placeholders := auditBatchPlaceholders(len(batch))
 	args := make([]any, 0, len(batch)*len(fields))
 	for _, job := range batch {

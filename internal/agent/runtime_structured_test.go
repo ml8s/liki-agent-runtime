@@ -7,6 +7,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -82,7 +83,7 @@ func TestRunStateRejectsInvalidStructuredOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = state.consumeStructuredOutput(map[string]any{"unexpected": true}, entrypoint)
+	_, err = state.consumeStructuredOutput(map[string]any{"unexpected": true}, entrypoint)
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeStructuredOutputInvalid {
 		t.Fatalf("consumeStructuredOutput() error = %v, want %s", err, domain.CodeStructuredOutputInvalid)
@@ -109,7 +110,8 @@ func TestEventProjectorFiltersObserverFacts(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			projector := newEventProjector(newEventProjectorIndex(NewTestDeployment(t)))
-			visible, visibleOK := projector.Project(testCase.event)
+			projection := newEventProjectionState()
+			visible, _, visibleOK := projector.Project(projection, testCase.event)
 			if testCase.wantNil {
 				if visibleOK {
 					t.Fatalf("visible event = %+v, want none", visible)
@@ -124,7 +126,7 @@ func TestEventProjectorFiltersObserverFacts(t *testing.T) {
 }
 
 func TestRunStateCapturesDelegatedPlainFinalAnswer(t *testing.T) {
-	state := &runState{capturePlain: true}
+	state := runState{capturePlain: true}
 	event := &session.Event{
 		Author: "bazi",
 		LLMResponse: model.LLMResponse{
@@ -132,9 +134,56 @@ func TestRunStateCapturesDelegatedPlainFinalAnswer(t *testing.T) {
 			Content:      genai.NewContentFromText("delegated answer", genai.RoleModel),
 		},
 	}
-	state.consume(event)
-	if state.output.Text != "delegated answer" {
-		t.Fatalf("output text = %q", state.output.Text)
+	next := state.consume(event)
+	if next.output.Text != "delegated answer" {
+		t.Fatalf("output text = %q", next.output.Text)
+	}
+	if state.output.Text != "" {
+		t.Fatalf("input state text = %q, want unchanged", state.output.Text)
+	}
+}
+
+func TestRunStateTracksToolNamesAsPureTransition(t *testing.T) {
+	state := runState{}
+	response := func(name string) *session.Event {
+		return &session.Event{LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Parts: []*genai.Part{
+				{FunctionResponse: &genai.FunctionResponse{Name: name}},
+			}},
+		}}
+	}
+
+	state = state.consume(response("engine.search"))
+	first := state
+	state = state.consume(response("engine.search"))
+	state = state.consume(response("counsel.analyze"))
+
+	want := []string{"engine.search", "counsel.analyze"}
+	if got := state.tools.Names(); !slices.Equal(got, want) {
+		t.Fatalf("tool names = %v, want %v", got, want)
+	}
+	if got := first.tools.Names(); !slices.Equal(got, want[:1]) {
+		t.Fatalf("previous state tool names = %v, want %v", got, want[:1])
+	}
+}
+
+func TestRunStateTracksMultipleToolsInOneEvent(t *testing.T) {
+	state := runState{}
+	event := &session.Event{LLMResponse: model.LLMResponse{
+		Content: &genai.Content{Parts: []*genai.Part{
+			{FunctionResponse: &genai.FunctionResponse{Name: "engine.search"}},
+			{FunctionResponse: &genai.FunctionResponse{Name: "counsel.analyze"}},
+			{FunctionResponse: &genai.FunctionResponse{Name: "engine.search"}},
+		}},
+	}}
+
+	next := state.consume(event)
+	want := []string{"engine.search", "counsel.analyze"}
+	if got := next.tools.Names(); !slices.Equal(got, want) {
+		t.Fatalf("tool names = %v, want %v", got, want)
+	}
+	if len(state.tools.Names()) != 0 {
+		t.Fatalf("input state tool names = %v, want empty", state.tools.Names())
 	}
 }
 

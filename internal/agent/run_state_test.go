@@ -103,7 +103,7 @@ func TestStructuredOutputPreservesJSONNumberFidelity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := &runState{}
+	state := runState{}
 	definition := &AgentDefinition{
 		Output: OutputDefinition{
 			Schema:      FileReference{Path: "output.schema.json"},
@@ -112,11 +112,15 @@ func TestStructuredOutputPreservesJSONNumberFidelity(t *testing.T) {
 		ResolvedOutput: resolved,
 	}
 
-	if err := state.consumeStructuredOutput(`{"answer":"ok","id":9007199254740993}`, definition); err != nil {
+	next, err := state.consumeStructuredOutput(`{"answer":"ok","id":9007199254740993}`, definition)
+	if err != nil {
 		t.Fatalf("consumeStructuredOutput() error = %v", err)
 	}
-	if string(state.output.JSON) != `{"answer":"ok","id":9007199254740993}` {
-		t.Fatalf("structured output JSON = %s", state.output.JSON)
+	if string(next.output.JSON) != `{"answer":"ok","id":9007199254740993}` {
+		t.Fatalf("structured output JSON = %s", next.output.JSON)
+	}
+	if state.output.JSON != nil {
+		t.Fatalf("input state JSON = %s, want unchanged", state.output.JSON)
 	}
 }
 
@@ -148,6 +152,12 @@ func TestParseStructuredOutputRejections(t *testing.T) {
 func TestDecodeJSONDocumentRejectsTrailingValues(t *testing.T) {
 	if _, err := decodeJSONDocument([]byte(`{"a":1} trailing`)); err == nil {
 		t.Fatal("decodeJSONDocument() accepted a trailing JSON value")
+	}
+}
+
+func TestCanonicalJSONFailsClosed(t *testing.T) {
+	if raw, err := canonicalJSON(map[string]any{"unsupported": make(chan int)}); err == nil || raw != nil {
+		t.Fatalf("canonicalJSON() = %q, %v; want an error and no silent null", raw, err)
 	}
 }
 
