@@ -14,7 +14,7 @@ type subagentActivation struct {
 	branch string
 }
 
-func (s *stream) subagentID(event *session.Event) string {
+func (s stream) subagentID(event *session.Event) string {
 	if event == nil || event.Author == "" || event.Author == s.config.entrypoint {
 		return ""
 	}
@@ -27,7 +27,7 @@ func (s *stream) subagentID(event *session.Event) string {
 	return ""
 }
 
-func (s *stream) activationName(subagentID string) string {
+func (s stream) activationName(subagentID string) string {
 	for _, activation := range s.state.subagents {
 		if activation.id == subagentID {
 			return activation.name
@@ -36,33 +36,32 @@ func (s *stream) activationName(subagentID string) string {
 	return ""
 }
 
-func (s *stream) observeSubagent(event *session.Event, emit func(aguievents.Event) error) error {
+func (s stream) observeSubagent(event *session.Event) (stream, []aguievents.Event) {
 	if event == nil || event.Author == "" || event.Author == s.config.entrypoint {
-		return s.finishDeeperThan(eventBranch(event), emit)
+		return s.finishDeeperThan(eventBranch(event))
 	}
 	branch := effectiveBranch(event)
-	if err := s.finishDeeperThan(branch, emit); err != nil {
-		return err
-	}
+	next, events := s.finishDeeperThan(branch)
 	if branch == "" {
-		return nil
+		return next, events
 	}
-	for _, activation := range s.state.subagents {
+	for _, activation := range next.state.subagents {
 		if activation.branch == branch {
-			return nil
+			return next, events
 		}
 	}
 
-	s.state.nextID++
+	next = next.clone()
+	next.state.nextID++
 	activation := &subagentActivation{
-		id:     s.config.runID + ":subagent:" + strconv.Itoa(s.state.nextID),
+		id:     next.config.runID + ":subagent:" + strconv.Itoa(next.state.nextID),
 		name:   event.Author,
 		branch: branch,
 	}
 	started := aguievents.NewSubagentStartedEvent(activation.id, activation.name)
-	started.ParentSubagentRunID = s.parentID(branch)
-	s.state.subagents = append(s.state.subagents, activation)
-	return emit(started)
+	started.ParentSubagentRunID = next.parentID(branch)
+	next.state.subagents = append(next.state.subagents, activation)
+	return next, append(events, started)
 }
 
 func eventBranch(event *session.Event) string {
@@ -87,51 +86,50 @@ func effectiveBranch(event *session.Event) string {
 	return event.Author
 }
 
-func (s *stream) finishDeeperThan(branch string, emit func(aguievents.Event) error) error {
+func (s stream) finishDeeperThan(branch string) (stream, []aguievents.Event) {
+	next := s.clone()
 	closed := 0
-	for index := len(s.state.subagents) - 1; index >= 0; index-- {
-		activation := s.state.subagents[index]
+	var events []aguievents.Event
+	for index := len(next.state.subagents) - 1; index >= 0; index-- {
+		activation := next.state.subagents[index]
 		if isBranchPrefix(activation.branch, branch) {
 			break
 		}
 		closed++
-		if err := emit(aguievents.NewSubagentFinishedEvent(activation.id)); err != nil {
-			return err
-		}
+		events = append(events, aguievents.NewSubagentFinishedEvent(activation.id))
 	}
 	if closed == 0 {
-		return nil
+		return s, nil
 	}
-	s.state.subagents = s.state.subagents[:len(s.state.subagents)-closed]
-	return nil
+	next.state.subagents = next.state.subagents[:len(next.state.subagents)-closed]
+	return next, events
 }
 
-func (s *stream) finishSubagents(emit func(aguievents.Event) error) error {
-	for index := len(s.state.subagents) - 1; index >= 0; index-- {
-		if err := emit(aguievents.NewSubagentFinishedEvent(s.state.subagents[index].id)); err != nil {
-			return err
-		}
-	}
-	s.state.subagents = nil
-	return nil
-}
-
-func (s stream) failSubagents(message, code string, emit func(aguievents.Event) error) (stream, error) {
-	next := s
+func (s stream) finishSubagents() (stream, []aguievents.Event) {
+	next := s.clone()
+	var events []aguievents.Event
 	for index := len(next.state.subagents) - 1; index >= 0; index-- {
-		if err := emit(aguievents.NewSubagentErrorEvent(
+		events = append(events, aguievents.NewSubagentFinishedEvent(next.state.subagents[index].id))
+	}
+	next.state.subagents = nil
+	return next, events
+}
+
+func (s stream) failSubagents(message, code string) (stream, []aguievents.Event) {
+	next := s.clone()
+	var events []aguievents.Event
+	for index := len(next.state.subagents) - 1; index >= 0; index-- {
+		events = append(events, aguievents.NewSubagentErrorEvent(
 			next.state.subagents[index].id,
 			message,
 			aguievents.WithSubagentErrorCode(code),
-		)); err != nil {
-			return next, err
-		}
+		))
 	}
 	next.state.subagents = nil
-	return next, nil
+	return next, events
 }
 
-func (s *stream) parentID(branch string) string {
+func (s stream) parentID(branch string) string {
 	parent := branch
 	found := false
 	if index := strings.LastIndex(branch, "."); index >= 0 {

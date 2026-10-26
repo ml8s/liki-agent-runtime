@@ -7,45 +7,42 @@ import (
 	aguitypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 )
 
-func (s *stream) openText(subagentID string, emit func(aguievents.Event) error) error {
+func (s stream) openText(subagentID string) (stream, []aguievents.Event) {
 	if s.state.textActive {
-		return nil
+		return s, nil
 	}
-	s.state.messageSequence++
-	s.state.textMessageID = fmt.Sprintf("%s:assistant:%d", s.config.runID, s.state.messageSequence)
-	s.state.textSubagentID = subagentID
-	s.state.textActive = true
+	next := s.clone()
+	next.state.messageSequence++
+	next.state.textMessageID = fmt.Sprintf("%s:assistant:%d", next.config.runID, next.state.messageSequence)
+	next.state.textSubagentID = subagentID
+	next.state.textActive = true
 	if subagentID == "" {
-		s.state.rootStreamedText = true
+		next.state.rootStreamedText = true
 	}
 	start := aguievents.NewTextMessageStartEvent(
-		s.state.textMessageID,
+		next.state.textMessageID,
 		aguievents.WithRole(string(aguitypes.RoleAssistant)),
 	)
 	start.SubagentRunID = subagentID
-	start.Name = s.activationName(subagentID)
-	return emit(start)
+	start.Name = next.activationName(subagentID)
+	return next, []aguievents.Event{start}
 }
 
-func (s *stream) emitTextDelta(delta, subagentID string, emit func(aguievents.Event) error) error {
-	if err := s.openText(subagentID, emit); err != nil {
-		return err
-	}
-	content := aguievents.NewTextMessageContentEvent(s.state.textMessageID, delta)
+func (s stream) emitTextDelta(delta, subagentID string) (stream, []aguievents.Event) {
+	next, events := s.openText(subagentID)
+	content := aguievents.NewTextMessageContentEvent(next.state.textMessageID, delta)
 	content.SubagentRunID = subagentID
-	return emit(content)
+	return next, append(events, content)
 }
 
-func (s *stream) closeText(emit func(aguievents.Event) error) error {
+func (s stream) closeText() (stream, []aguievents.Event) {
 	if !s.state.textActive {
-		return nil
+		return s, nil
 	}
-	end := aguievents.NewTextMessageEndEvent(s.state.textMessageID)
-	end.SubagentRunID = s.state.textSubagentID
-	if err := emit(end); err != nil {
-		return err
-	}
-	s.state.textActive = false
-	s.state.textSubagentID = ""
-	return nil
+	next := s.clone()
+	end := aguievents.NewTextMessageEndEvent(next.state.textMessageID)
+	end.SubagentRunID = next.state.textSubagentID
+	next.state.textActive = false
+	next.state.textSubagentID = ""
+	return next, []aguievents.Event{end}
 }

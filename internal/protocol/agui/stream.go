@@ -8,16 +8,15 @@ import (
 	"google.golang.org/adk/v2/session"
 )
 
-func (s stream) emitRunFinished(
-	event *aguievents.RunFinishedEvent,
-	emit func(aguievents.Event) error,
-) (stream, error) {
+// finishRun returns the terminal state and the RUN_FINISHED event. It is a
+// no-op transition after the run has already finished.
+func (s stream) finishRun(event *aguievents.RunFinishedEvent) (stream, []aguievents.Event) {
 	if s.state.runFinished {
 		return s, nil
 	}
-	next := s
+	next := s.clone()
 	next.state.runFinished = true
-	return next, emit(event)
+	return next, []aguievents.Event{event}
 }
 
 // streamConfig is immutable protocol identity for one AG-UI run.
@@ -51,44 +50,43 @@ func newStream(config streamConfig) stream {
 	return stream{config: config}
 }
 
-func (s stream) consume(event *session.Event, emit func(aguievents.Event) error) (stream, error) {
+func (s stream) clone() stream {
 	next := s
-	if err := next.observeSubagent(event, emit); err != nil {
-		return next, err
-	}
+	next.state = next.state.clone()
+	return next
+}
+
+func (s stream) consume(event *session.Event) (stream, []aguievents.Event) {
+	next, outgoing := s.observeSubagent(event)
 	if event == nil || event.Content == nil {
-		return next, nil
+		return next, outgoing
 	}
 	subagentID := next.subagentID(event)
 	if next.state.textActive && next.state.textSubagentID != subagentID {
-		if err := next.closeText(emit); err != nil {
-			return next, err
-		}
+		var textEvents []aguievents.Event
+		next, textEvents = next.closeText()
+		outgoing = append(outgoing, textEvents...)
 	}
 	for _, part := range event.Content.Parts {
 		if part == nil || part.Text == "" || part.Thought {
 			continue
 		}
-		if err := next.emitTextDelta(part.Text, subagentID, emit); err != nil {
-			return next, err
-		}
+		var textEvents []aguievents.Event
+		next, textEvents = next.emitTextDelta(part.Text, subagentID)
+		outgoing = append(outgoing, textEvents...)
 	}
-
 	for _, part := range event.Content.Parts {
 		if part == nil || part.FunctionCall == nil {
 			continue
 		}
-		var callID string
-		if err := next.closeText(emit); err != nil {
-			return next, err
-		}
+		textEvents := []aguievents.Event(nil)
+		next, textEvents = next.closeText()
+		outgoing = append(outgoing, textEvents...)
 		call := part.FunctionCall
+		var callID string
 		next.state, callID = nextToolCallID(next.state, next.config.runID, call.Name, call.ID)
 		start := aguievents.NewToolCallStartEvent(callID, call.Name)
 		start.SubagentRunID = subagentID
-		if err := emit(start); err != nil {
-			return next, err
-		}
 		args, err := json.Marshal(call.Args)
 		if err != nil {
 			args = []byte("{}")
@@ -99,27 +97,21 @@ func (s stream) consume(event *session.Event, emit func(aguievents.Event) error)
 		}
 		argsEvent := aguievents.NewToolCallArgsEvent(callID, delta)
 		argsEvent.SubagentRunID = subagentID
-		if err := emit(argsEvent); err != nil {
-			return next, err
-		}
 		// AG-UI tool-call lifecycle: START -> ARGS -> END -> RESULT. END closes
 		// the argument stream as soon as the call is specified, so a call whose
 		// response never arrives is not left dangling.
 		endEvent := aguievents.NewToolCallEndEvent(callID)
 		endEvent.SubagentRunID = subagentID
-		if err := emit(endEvent); err != nil {
-			return next, err
-		}
+		outgoing = append(outgoing, start, argsEvent, endEvent)
 	}
-
 	for _, part := range event.Content.Parts {
 		if part == nil || part.FunctionResponse == nil {
 			continue
 		}
+		textEvents := []aguievents.Event(nil)
+		next, textEvents = next.closeText()
+		outgoing = append(outgoing, textEvents...)
 		response := part.FunctionResponse
-		if err := next.closeText(emit); err != nil {
-			return next, err
-		}
 		responseID := next.toolCallID(response.Name, response.ID)
 		payload, err := json.Marshal(response.Response)
 		if err != nil || len(payload) == 0 || string(payload) == "null" {
@@ -127,37 +119,50 @@ func (s stream) consume(event *session.Event, emit func(aguievents.Event) error)
 		}
 		resultEvent := aguievents.NewToolCallResultEvent(next.config.runID+":tools", responseID, string(payload))
 		resultEvent.SubagentRunID = subagentID
-		if err := emit(resultEvent); err != nil {
-			return next, err
-		}
-		delete(next.state.toolIDs, response.Name)
+		outgoing = append(outgoing, resultEvent)
+		next = next.releaseToolCallID(response.Name)
 	}
-
-	return next, nil
+	return next, outgoing
 }
 
 // finish closes an active message and synthesizes the standard text lifecycle
 // when the model returned only a structured final answer.
-func (s stream) finish(content string, emit func(aguievents.Event) error) (stream, error) {
-	next := s
-	if err := next.finishSubagents(emit); err != nil {
-		return next, err
-	}
-	if err := next.closeText(emit); err != nil {
-		return next, err
-	}
+func (s stream) finish(content string) (stream, []aguievents.Event) {
+	next, outgoing := s.finishSubagents()
+	textEvents := []aguievents.Event(nil)
+	next, textEvents = next.closeText()
+	outgoing = append(outgoing, textEvents...)
 	if next.state.rootStreamedText {
-		return next, nil
+		return next, outgoing
 	}
 	content = strings.TrimSpace(content)
 	if content == "" {
-		return next, nil
+		return next, outgoing
 	}
-	if err := next.openText("", emit); err != nil {
-		return next, err
+	var openEvents []aguievents.Event
+	next, openEvents = next.openText("")
+	outgoing = append(outgoing, openEvents...)
+	if len(openEvents) == 0 {
+		return next, outgoing
 	}
-	if err := emit(aguievents.NewTextMessageContentEvent(next.state.textMessageID, content)); err != nil {
-		return next, err
+	outgoing = append(outgoing, aguievents.NewTextMessageContentEvent(next.state.textMessageID, content))
+	next, textEvents = next.closeText()
+	return next, append(outgoing, textEvents...)
+}
+
+// clone returns a state whose mutable collections do not alias the receiver.
+// subagentActivation values are immutable after creation, so their pointers can
+// be copied directly.
+func (s streamState) clone() streamState {
+	next := s
+	if s.subagents != nil {
+		next.subagents = append([]*subagentActivation(nil), s.subagents...)
 	}
-	return next, next.closeText(emit)
+	if s.toolIDs != nil {
+		next.toolIDs = make(map[string]string, len(s.toolIDs))
+		for toolName, id := range s.toolIDs {
+			next.toolIDs[toolName] = id
+		}
+	}
+	return next
 }

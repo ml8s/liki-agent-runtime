@@ -140,6 +140,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return h.writer.WriteEvent(r.Context(), w, event)
 	}
+	emitAll := func(events []aguievents.Event) error {
+		for _, event := range events {
+			if err := emit(event); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	if err := emit(aguievents.NewRunStartedEvent(threadID, runID)); err != nil {
 		return
 	}
@@ -161,21 +169,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancelRun()
 	startedAt := time.Now()
 	result, runErr := h.runtime.Run(runCtx, spec, func(event *session.Event) error {
-		var err error
-		streamer, err = streamer.consume(event, emit)
-		return err
+		next, outgoing := streamer.consume(event)
+		if err := emitAll(outgoing); err != nil {
+			return err
+		}
+		streamer = next
+		return nil
 	})
 	finishedAt := time.Now()
 	if runErr == nil {
-		streamer, runErr = streamer.finish(result.Text, emit)
+		next, outgoing := streamer.finish(result.Text)
+		runErr = emitAll(outgoing)
+		if runErr == nil {
+			streamer = next
+		}
 	}
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		message, code := publicError(runErr)
-		var err error
-		streamer, err = streamer.failSubagents(message, code, emit)
-		if err != nil {
+		next, outgoing := streamer.failSubagents(message, code)
+		if err := emitAll(outgoing); err != nil {
 			return
 		}
+		streamer = next
 	}
 	if runErr == nil {
 		// 协议契约：RUN_FINISHED 必须带成功 outcome（与中继网关一致）；
@@ -190,11 +205,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"output":     json.RawMessage(result.Output),
 			"answer":     result.Text,
 		}
-		var err error
-		streamer, err = streamer.emitRunFinished(finished, emit)
-		if err != nil {
+		next, outgoing := streamer.finishRun(finished)
+		if err := emitAll(outgoing); err != nil {
 			runErr = err
 		}
+		// RUN_FINISHED is terminal even if its SSE write fails; the
+		// protocol forbids RUN_ERROR after a terminal success event.
+		streamer = next
 	}
 	if runErr != nil && !errors.Is(runErr, context.Canceled) && !streamer.state.runFinished {
 		message, code := publicError(runErr)
