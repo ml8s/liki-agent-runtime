@@ -9,13 +9,14 @@ skill/project.
 | Concept | Meaning |
 |---|---|
 | AgentDeployment | External deployment artifact containing one or more Agent definitions |
-| AgentDefinition | One Agent's instruction, optional output schema, server-scoped tool allowlist, and per-Agent model settings with runtime-wide fallback |
+| AgentDefinition | One Agent entity within a deployment: instruction, optional output schema, server-scoped tool allowlist, and per-Agent model settings with runtime-wide fallback |
+| AgentReference | A delegation edge from one AgentDefinition to another by Agent name |
 | MCP server | A logical external tool dependency bound through environment references |
-| Run | One stateless execution identified by `RunID` and `ThreadID` |
-| Tool execution | One allowlisted MCP tool invocation |
-| LLM call | One auditable model invocation inside a run |
-| Audit event | Immutable evidence of a lifecycle fact |
-| Delegation | A root agent delegating a subtask to a sub-expert via a task tool; lifecycle audited separately |
+| RunExecution | One execution aggregate identified by `RunID`; `ThreadID` is caller-owned correlation, not execution identity |
+| ToolCall | One allowlisted MCP tool invocation and its lifecycle within a RunExecution |
+| LLMCall | One auditable model invocation and its lifecycle within a RunExecution |
+| Delegation | A parent Agent delegating a subtask to a sub-expert; a child lifecycle of RunExecution |
+| Audit event | An immutable domain fact containing lifecycle evidence |
 | ADK working session | The run-scoped ADK session (`run:<RunID>`); deleted at terminal state, never carries cross-run history |
 | Skills binding | The artifact-declared skills root plus the built-in skill tools (list/load/resource) |
 
@@ -31,13 +32,50 @@ skill/project.
    has an empty schema digest.
 7. Deployment, instruction, and schema digests enter audit evidence.
 
-## Aggregate roots
+## Aggregates and domain facts
 
-| Aggregate root | Invariants | Single implementation |
-|---|---|---|
-| Run (`RunID`) | Idempotent and exclusive while active; terminal evidence appended exactly once and in order (close in-flight → compensate → terminal event → release state) | `closeRunEvidence` (`run_evidence.go`) |
-| AgentDefinition (`Name`) | Acyclic delegation graph; explicit deny-by-default tool allowlists; one effective model value per Agent | `agentGraphBuilder` (`agent_graph.go`) |
-| AuditEvent (event ID) | Append-only; lifecycle events close with stable IDs | `audit` package + startup recovery |
+### AgentDeployment aggregate
+
+`AgentDeployment` is the aggregate root for the external deployment artifact.
+Its content identity is the deployment digest; `metadata.name` and
+`metadata.version` identify the artifact within the deployment language.
+
+`AgentDefinition` is an entity inside this aggregate. Its `Name` is unique only
+within one `AgentDeployment`; its behavior identity is the Agent definition
+digest. `AgentReference` is a value object representing a delegation edge.
+
+| Invariant | Single implementation |
+|---|---|
+| Agent names are unique | `deployment_validate.go` |
+| There is exactly one entrypoint and every Agent is reachable | `deployment_validate.go` |
+| The delegation graph is acyclic | `deployment_validate.go` |
+| Tool allowlists refer only to declared MCP servers | `deployment_validate.go` |
+| Tool access is explicit and deny-by-default | `ToolAllowlist` and ADK graph filtering |
+
+### RunExecution aggregate
+
+`RunExecution` is the aggregate root for one execution. `RunID` is its
+aggregate identity. `ThreadID` and `UserID` are caller-owned correlation data,
+not execution identity. LLM calls, tool calls, and delegations are child
+lifecycles of this aggregate.
+
+| Invariant | Single implementation |
+|---|---|
+| An active `RunID` is idempotent and exclusive | `runLifecycle` (`runtime_lifecycle.go`) |
+| Terminal evidence is appended exactly once and in order | `closeRunEvidence` (`run_evidence.go`) |
+| Closing order is close in-flight → compensate → terminal event → release state | `closeRunEvidence` (`run_evidence.go`) |
+
+### Audit facts
+
+An `AuditEvent` is an immutable domain fact, not a mutable aggregate. Its
+`EventID` provides append idempotency. The audit adapter and startup recovery
+own the append-only persistence invariants.
+
+| Invariant | Single implementation |
+|---|---|
+| Audit events are append-only | `internal/audit/sqlite` |
+| Lifecycle events close with stable IDs | audit event constructors |
+| Startup interruption recovery appends, never edits | `RecoverInterrupted` |
 
 ## Execution invariants
 
