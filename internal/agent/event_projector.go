@@ -20,6 +20,39 @@ type eventProjectionState struct {
 	partialText map[string]bool
 }
 
+func (s eventProjectionState) clone() eventProjectionState {
+	next := s
+	if s.partialText == nil {
+		return next
+	}
+	next.partialText = make(map[string]bool, len(s.partialText))
+	for author, partial := range s.partialText {
+		next.partialText[author] = partial
+	}
+	return next
+}
+
+func (s eventProjectionState) markPartial(author string) eventProjectionState {
+	if s.partialText[author] {
+		return s
+	}
+	next := s.clone()
+	if next.partialText == nil {
+		next.partialText = make(map[string]bool)
+	}
+	next.partialText[author] = true
+	return next
+}
+
+func (s eventProjectionState) clearPartial(author string) eventProjectionState {
+	if !s.partialText[author] {
+		return s
+	}
+	next := s.clone()
+	delete(next.partialText, author)
+	return next
+}
+
 // eventProjectorIndex is the immutable deployment lookup shared by every run.
 type eventProjectorIndex struct {
 	definitions map[string]*AgentDefinition
@@ -61,9 +94,9 @@ func (p eventProjector) Project(
 
 	var projected *session.Event
 	if event.Partial {
-		projected = next.projectPartial(event, definition, exposeModelText)
+		projected, next = next.projectPartial(event, definition, exposeModelText)
 	} else {
-		projected = next.projectFinal(event, definition, exposeModelText)
+		projected, next = next.projectFinal(event, definition, exposeModelText)
 	}
 	if projected == nil {
 		return nil, next, false
@@ -71,13 +104,13 @@ func (p eventProjector) Project(
 	return projected, next, true
 }
 
-func (s *eventProjectionState) projectPartial(
+func (s eventProjectionState) projectPartial(
 	event *session.Event,
 	definition *AgentDefinition,
 	exposeModelText bool,
-) *session.Event {
+) (*session.Event, eventProjectionState) {
 	if !exposeModelText {
-		return nil
+		return nil, s
 	}
 
 	kept := 0
@@ -87,13 +120,13 @@ func (s *eventProjectionState) projectPartial(
 		}
 	}
 	if kept == 0 {
-		return nil
+		return nil, s
 	}
 	if definition != nil {
-		s.partialText[definition.Name] = true
+		s = s.markPartial(definition.Name)
 	}
 	if kept == len(event.Content.Parts) {
-		return event
+		return event, s
 	}
 
 	text := make([]*genai.Part, 0, kept)
@@ -107,24 +140,24 @@ func (s *eventProjectionState) projectPartial(
 		Role:  event.Content.Role,
 		Parts: text,
 	}
-	return &projected
+	return &projected, s
 }
 
-func (s *eventProjectionState) projectFinal(
+func (s eventProjectionState) projectFinal(
 	event *session.Event,
 	definition *AgentDefinition,
 	exposeModelText bool,
-) *session.Event {
+) (*session.Event, eventProjectionState) {
 	if event.Content == nil {
 		// ADK can represent a terminal state transition without model content.
 		// Keep the event visible so protocol adapters can consume StateDelta,
 		// but never expose an absent model response as text.
 		if event.Actions.StateDelta == nil {
-			return nil
+			return nil, s
 		}
 		projected := *event
 		projected.Content = nil
-		return &projected
+		return &projected, s
 	}
 	if definition != nil && !ExposesModelText(definition) {
 		exposeModelText = false
@@ -155,10 +188,11 @@ func (s *eventProjectionState) projectFinal(
 		}
 	}
 	if kept == len(event.Content.Parts) {
+		next := s
 		if definition != nil {
-			delete(s.partialText, definition.Name)
+			next = s.clearPartial(definition.Name)
 		}
-		return event
+		return event, next
 	}
 
 	parts := make([]*genai.Part, 0, kept)
@@ -174,8 +208,9 @@ func (s *eventProjectionState) projectFinal(
 			}
 		}
 	}
+	next := s
 	if definition != nil {
-		delete(s.partialText, definition.Name)
+		next = s.clearPartial(definition.Name)
 	}
 
 	// Preserve events that carry only runtime state (for example structured
@@ -183,13 +218,13 @@ func (s *eventProjectionState) projectFinal(
 	if len(parts) == 0 && !hasToolFact && event.Actions.StateDelta != nil {
 		projected := *event
 		projected.Content = nil
-		return &projected
+		return &projected, next
 	}
 	if len(parts) == 0 {
-		return nil
+		return nil, next
 	}
 	if len(parts) == len(event.Content.Parts) {
-		return event
+		return event, next
 	}
 
 	projected := *event
@@ -197,7 +232,7 @@ func (s *eventProjectionState) projectFinal(
 		Role:  event.Content.Role,
 		Parts: parts,
 	}
-	return &projected
+	return &projected, next
 }
 
 func (p eventProjector) definitionFor(author string) (*AgentDefinition, bool) {

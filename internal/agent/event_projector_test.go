@@ -158,6 +158,43 @@ func TestEventProjectorSuppressesFinalTextDuplicateAfterStreaming(t *testing.T) 
 	}
 }
 
+func TestEventProjectorStateTransitionDoesNotMutatePreviousState(t *testing.T) {
+	projection := newEventProjectionState()
+	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
+	partial := &session.Event{
+		Author: "main",
+		LLMResponse: model.LLMResponse{
+			Partial: true,
+			Content: &genai.Content{Parts: []*genai.Part{{Text: "Hello "}}},
+		},
+	}
+
+	marked, markedNext, visible := projector.Project(projection, partial)
+	if !visible || marked == nil {
+		t.Fatalf("partial projected = %#v/%v, want visible text", marked, visible)
+	}
+	if !markedNext.partialText["main"] {
+		t.Fatal("next projection state did not mark partial text")
+	}
+	if len(projection.partialText) != 0 {
+		t.Fatalf("input projection state = %#v, want unchanged", projection.partialText)
+	}
+
+	final := &session.Event{
+		Author: "main",
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Parts: []*genai.Part{{Text: "Hello world"}}},
+		},
+	}
+	_, clearedNext, _ := projector.Project(markedNext, final)
+	if len(clearedNext.partialText) != 0 {
+		t.Fatalf("cleared projection state = %#v, want empty", clearedNext.partialText)
+	}
+	if len(markedNext.partialText) != 1 || !markedNext.partialText["main"] {
+		t.Fatalf("marked projection state = %#v, want unchanged", markedNext.partialText)
+	}
+}
+
 func TestEventProjectorKeepsToolFactWhenSuppressingFinalText(t *testing.T) {
 	projection := newEventProjectionState()
 	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
