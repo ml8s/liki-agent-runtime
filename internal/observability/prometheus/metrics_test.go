@@ -17,8 +17,14 @@ func TestMetricsExposeStandardRuntimeDimensions(t *testing.T) {
 	metrics.ObserveLLMCall("gpt-test", "completed", domain.LLMTokenUsage{
 		PromptTokens: 10, CompletionTokens: 2, ThoughtTokens: 3, TotalTokens: 15,
 	})
+	metrics.ObserveLLMCallLatency("gpt-test", "completed", 250*time.Millisecond)
 	metrics.ObserveToolCall("coordinator", "engine_tool_a", "succeeded", 25*time.Millisecond)
 	metrics.ObserveAgentDelegation("coordinator", "worker", "succeeded", 50*time.Millisecond)
+	metrics.ObserveAuditAppend("ok", time.Millisecond)
+	metrics.ObserveMCPCatalog("engine", "hit")
+	metrics.ObserveAuditAppendBatch(18)
+	metrics.ObserveAuditQueueDepth(0)
+	metrics.ObserveRunRejection("busy")
 	metrics.SetDependencyReady("engine_mcp", true)
 
 	response := httptest.NewRecorder()
@@ -29,11 +35,18 @@ func TestMetricsExposeStandardRuntimeDimensions(t *testing.T) {
 		"liki_agents_protocol_active_streams",
 		"liki_agents_llm_calls_total",
 		"liki_agents_llm_tokens_total",
+		"liki_agents_llm_call_duration_seconds",
 		"liki_agents_tool_calls_total",
 		"liki_agents_tool_duration_seconds",
 		"liki_agents_delegations_total",
 		"liki_agents_delegation_duration_seconds",
 		"liki_agents_dependency_up",
+		"liki_agents_audit_appends_total",
+		"liki_agents_audit_append_duration_seconds",
+		"liki_agents_mcp_catalog_requests_total",
+		"liki_agents_audit_batch_events",
+		"liki_agents_audit_queue_depth",
+		"liki_agents_run_rejections_total",
 	} {
 		if !strings.Contains(response.Body.String(), name) {
 			t.Fatalf("metrics body missing %q", name)

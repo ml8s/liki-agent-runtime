@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,10 @@ type runState struct {
 type OutputResult struct {
 	JSON json.RawMessage
 	Text string
+	// Document is the decoded, number-preserving form that JSON was
+	// canonicalized from. It is derived data for adapters that need the parsed
+	// value: JSON stays the canonical product and the wire contract.
+	Document any
 }
 
 type toolNameTracker struct {
@@ -129,7 +134,7 @@ func ParseStructuredOutput(value any, definition *AgentDefinition) (OutputResult
 	if text == "" {
 		return OutputResult{}, domain.NewError(domain.CodeStructuredOutputEmpty, "structured agent output has no answer text", nil)
 	}
-	return OutputResult{JSON: canonicalJSON(document), Text: text}, nil
+	return OutputResult{JSON: canonicalJSON(document), Text: text, Document: document}, nil
 }
 
 func jsonStringAtPointer(document any, pointer string) (string, error) {
@@ -164,7 +169,9 @@ func canonicalJSON(value any) json.RawMessage {
 }
 
 func decodeJSONDocument(raw []byte) (any, error) {
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	// bytes.NewReader keeps decoding zero-copy; wrapping the bytes in a
+	// string would duplicate the whole document before parsing it.
+	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var document any
 	if err := decoder.Decode(&document); err != nil {

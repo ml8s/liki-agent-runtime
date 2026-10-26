@@ -14,10 +14,12 @@ import (
 )
 
 type stubMetrics struct {
-	calls []string
+	calls   []string
+	catalog []string
 }
 
 func (m *stubMetrics) ObserveLLMCall(string, string, domain.LLMTokenUsage) {}
+func (m *stubMetrics) ObserveLLMCallLatency(string, string, time.Duration) {}
 
 func (m *stubMetrics) ObserveAgentDelegation(caller, target, status string, _ time.Duration) {
 	m.calls = append(m.calls, caller+"/"+target+"/"+status)
@@ -25,6 +27,14 @@ func (m *stubMetrics) ObserveAgentDelegation(caller, target, status string, _ ti
 
 func (m *stubMetrics) ObserveToolCall(agent, tool, status string, _ time.Duration) {
 	m.calls = append(m.calls, agent+"/"+tool+"/"+status)
+}
+
+func (m *stubMetrics) ObserveMCPCatalog(server, outcome string) {
+	m.catalog = append(m.catalog, server+"/"+outcome)
+}
+
+func (m *stubMetrics) ObserveRunRejection(reason string) {
+	m.calls = append(m.calls, "run_rejection/"+reason)
 }
 
 type fakeTool string

@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -22,9 +23,11 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// DB owns the SQLite connection used for audit persistence.
+// DB owns the SQLite connections used for audit persistence: a read pool and
+// one dedicated write connection owned by the single audit writer.
 type DB struct {
-	gorm *gorm.DB
+	gorm  *gorm.DB
+	write *gorm.DB
 }
 
 // Open opens the audit database, applies migrations, and configures SQLite for
@@ -38,8 +41,45 @@ func Open(path string) (*DB, error) {
 			return nil, fmt.Errorf("create sqlite directory: %w", err)
 		}
 	}
+	gormDB, err := openGormAudit(path)
+	if err != nil {
+		return nil, err
+	}
+	readDB, err := gormDB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get sqlite handle: %w", err)
+	}
+	if err := migrateAuditSchema(readDB); err != nil {
+		return nil, err
+	}
+
+	// An in-memory SQLite database lives per connection, so it must keep one
+	// shared handle; the audit writer then serializes on that single pool.
+	writeDB := gormDB
+	if path != ":memory:" {
+		writeDB, err = openGormAudit(path)
+		if err != nil {
+			return nil, errors.Join(err, readDB.Close())
+		}
+		writeSQLDB, writeErr := writeDB.DB()
+		if writeErr != nil {
+			return nil, errors.Join(fmt.Errorf("get sqlite write handle: %w", writeErr), readDB.Close())
+		}
+		// One write connection makes the writer the process's only append path
+		// and removes SQLITE_BUSY contention between our own connections.
+		writeSQLDB.SetMaxOpenConns(1)
+		writeSQLDB.SetMaxIdleConns(1)
+	}
+	return &DB{gorm: gormDB, write: writeDB}, nil
+}
+
+func openGormAudit(path string) (*gorm.DB, error) {
 	gormDB, err := gorm.Open(sqlite.Open(path), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Warn),
+		// Prepared statements remove per-append SQL planning from the audit
+		// hot path. Single-row appends need no wrapping transaction.
+		PrepareStmt:            true,
+		SkipDefaultTransaction: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -73,25 +113,38 @@ func Open(path string) (*DB, error) {
 	}
 	sqlDB.SetMaxOpenConns(10)
 	sqlDB.SetMaxIdleConns(5)
-	if err := migrateAuditSchema(sqlDB); err != nil {
-		return nil, err
-	}
-	db := &DB{gorm: gormDB}
-	return db, nil
+	return gormDB, nil
 }
 
-// GORM returns the underlying GORM handle for repository construction.
+// GORM returns the read-pool GORM handle for repository construction.
 func (db *DB) GORM() *gorm.DB {
 	return db.gorm
 }
 
-// Close releases the database connection.
+// writeGORM returns the dedicated single-connection write handle. It stays
+// package-private so every append flows through the audit writer.
+func (db *DB) writeGORM() *gorm.DB {
+	if db.write != nil {
+		return db.write
+	}
+	return db.gorm
+}
+
+// Close releases the database connections.
 func (db *DB) Close() error {
+	var writeErr error
+	if db.write != nil && db.write != db.gorm {
+		if writeSQLDB, err := db.write.DB(); err != nil {
+			writeErr = err
+		} else {
+			writeErr = writeSQLDB.Close()
+		}
+	}
 	sqlDB, err := db.gorm.DB()
 	if err != nil {
-		return err
+		return errors.Join(writeErr, err)
 	}
-	return sqlDB.Close()
+	return errors.Join(writeErr, sqlDB.Close())
 }
 
 // CheckHealth reports whether the audit database is reachable.

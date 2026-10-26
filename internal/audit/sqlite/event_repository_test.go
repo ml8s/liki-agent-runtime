@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -101,6 +103,65 @@ func TestAuditEventRepositoryAppendsImmutableEvents(t *testing.T) {
 	if err == nil {
 		t.Fatal("deleting an audit event unexpectedly succeeded")
 	}
+}
+
+func TestAuditEventRepositoryObservesAppendOutcomes(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "agent-audit.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("close sqlite: %v", err)
+		}
+	})
+	recorder := &recordingAppendMetrics{}
+	repository := NewAuditEventRepository(store.GORM(), WithMetrics(recorder))
+	ctx := context.Background()
+
+	occurred := time.Date(2026, 10, 26, 9, 0, 0, 0, time.UTC)
+	event := audit.Event{
+		ID:   "call_metrics:started",
+		Type: audit.EventLLMCallStarted, OccurredAt: occurred,
+		RootRunID: "run_metrics", RunID: "run_metrics", ThreadID: "thread_1",
+		UserID: "user_1", AgentName: "coordinator",
+		Model: "test-model", Provider: "test", Status: audit.StatusRunning,
+	}
+	if err := repository.Record(ctx, &event); err != nil {
+		t.Fatalf("Record(started) error = %v", err)
+	}
+	conflict := event
+	conflict.Type = audit.EventLLMCallFailed
+	conflict.Status = audit.StatusFailed
+	conflict.ErrorCode = domain.CodeLLMCallFailed
+	if err := repository.Record(ctx, &conflict); err == nil {
+		t.Fatal("Record(conflict) unexpectedly succeeded")
+	}
+	invalid := event
+	invalid.ID = ""
+	if err := repository.Record(ctx, &invalid); err == nil {
+		t.Fatal("Record(invalid) unexpectedly succeeded")
+	}
+
+	want := []string{audit.AppendStatusOK, audit.AppendStatusConflict, audit.AppendStatusInvalid}
+	if !reflect.DeepEqual(recorder.statuses, want) {
+		t.Fatalf("append statuses = %v, want %v", recorder.statuses, want)
+	}
+	for _, duration := range recorder.durations {
+		if duration < 0 {
+			t.Fatalf("negative append duration: %v", duration)
+		}
+	}
+}
+
+type recordingAppendMetrics struct {
+	statuses  []string
+	durations []time.Duration
+}
+
+func (m *recordingAppendMetrics) ObserveAuditAppend(status string, duration time.Duration) {
+	m.statuses = append(m.statuses, status)
+	m.durations = append(m.durations, duration)
 }
 
 func TestAuditEventRepositoryRejectsInvalidEvents(t *testing.T) {
@@ -434,5 +495,76 @@ func TestAuditEventRepositoryRecoveryFailsClosed(t *testing.T) {
 				t.Fatalf("event count after failed recovery = %d, want unchanged 1", count)
 			}
 		})
+	}
+}
+
+func TestAuditEventRepositoryRecoverySkipsEventsOutsideWindow(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "agent-audit.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("close sqlite: %v", err)
+		}
+	})
+	recorder := NewAuditEventRepository(store.GORM())
+	ctx := context.Background()
+
+	ancient := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	ancientOrphan := audit.Event{
+		ID:   "run_ancient:llm.call.started",
+		Type: audit.EventLLMCallStarted, OccurredAt: ancient,
+		RootRunID: "run_ancient", RunID: "run_ancient", ThreadID: "thread_1",
+		UserID: "user_1", AgentName: "coordinator",
+		Model: "test-model", Provider: "test", Status: audit.StatusRunning,
+	}
+	if err := recorder.Record(ctx, &ancientOrphan); err != nil {
+		t.Fatalf("Record(ancient) error = %v", err)
+	}
+
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	if err := recorder.RecoverInterrupted(ctx, now); err != nil {
+		t.Fatalf("RecoverInterrupted() error = %v", err)
+	}
+	var recovered int64
+	if err := store.GORM().Table("agent_audit_events").
+		Where("id = ?", "run_ancient:llm.call.failed").
+		Count(&recovered).Error; err != nil {
+		t.Fatalf("count recovered: %v", err)
+	}
+	if recovered != 0 {
+		t.Fatal("recovery closed an orphan far outside the recovery window")
+	}
+}
+
+func TestAuditEventIndexSetMatchesWritePathContract(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "agent-audit.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("close sqlite: %v", err)
+		}
+	})
+	var indexes []string
+	if err := store.GORM().
+		Raw("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'agent_audit_events' AND name NOT LIKE 'sqlite_autoindex%'").
+		Scan(&indexes).Error; err != nil {
+		t.Fatalf("read audit indexes: %v", err)
+	}
+	// run_id serves idempotency probes, type+occurred serves the recovery
+	// scan, trace_id serves incident correlation. Everything else was dropped
+	// to keep the insert path at three secondary B-trees; aggregate questions
+	// are answered by Prometheus metrics instead.
+	want := []string{
+		"idx_agent_audit_events_run_id",
+		"idx_agent_audit_events_trace_id",
+		"idx_agent_audit_events_type_occurred",
+	}
+	slices.Sort(indexes)
+	if !slices.Equal(indexes, want) {
+		t.Fatalf("audit indexes = %v, want %v", indexes, want)
 	}
 }

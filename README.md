@@ -121,21 +121,24 @@ alone permits local HTTP LLMs.
 ## Operations
 
 Use `make run` for the host and `make dev` for Compose; `make dev-down`
-removes the workload. The ops surface (`/readyz`, `/version`, `/metrics`)
-listens on `LIKI_AGENT_RUNTIME_OPS_ADDR` (default `:8085`) so protocol mutual
-TLS never gates healthchecks; `/metrics` requires the service token. Release
-images probe `/readyz` via the built-in `healthcheck` subcommand; the runtime
-is single-replica (see
+removes the workload. The ops surface (`/readyz`, `/version`, `/metrics`,
+`/debug/pprof/`) listens on `LIKI_AGENT_RUNTIME_OPS_ADDR` (default `:8085`) so
+protocol mutual TLS never gates healthchecks; `/metrics` and profiling require
+the service token. `/readyz` reuses one dependency-check round for 10 seconds
+and fails closed, so probes never amplify into outbound MCP discovery storms.
+Release images probe `/readyz` via the built-in `healthcheck` subcommand; the
+runtime is single-replica (see
 [`docs/STANDARDS.md`](docs/STANDARDS.md) for scaling).
 
 ## Observability
 
-Prometheus exposes protocol latency, active streams, model calls and tokens,
-tool calls and durations, delegation activity, and dependency readiness. Logs
-use `log/slog` with stable event names. Distributed tracing uses W3C context
-propagation and standard OTLP export; MCP and LLM outbound requests carry the
-same trace context. Tracing is disabled unless a standard OTLP endpoint is
-configured:
+Prometheus exposes protocol latency, active streams, model calls, tokens,
+model-call durations, tool calls and durations, delegation activity, audit
+append outcomes, durations, batch sizes and queue depth, MCP catalog cache
+outcomes, run rejections, and dependency readiness. Logs use `log/slog`
+with stable event names. Distributed tracing uses W3C context propagation and
+standard OTLP export; MCP and LLM outbound requests carry the same trace
+context. Tracing is disabled unless a standard OTLP endpoint is configured:
 
 ```text
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4318/v1/traces

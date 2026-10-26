@@ -122,6 +122,14 @@ MCP tools are consumed through MCP Streamable HTTP and filtered by the
 server-scoped AgentDefinition allowlist. Tool calls and responses become
 protocol facts and execution evidence; model assertions do not create tool
 provenance.
+Standard `tools/list` discovery is memoized per logical server for sixty
+seconds with single-flight refresh: without it, every agent flow (including
+every sub-agent invocation) repeats an outbound discovery round before its
+first model call. A failed refresh serves the last known catalog — declarations
+stay available — while every tool call still uses the live fast-fail transport,
+so a removed server-side tool fails its call rather than being hidden. The
+allowlist is applied after the memoized discovery, never bypassed by it
+(`liki_agents_mcp_catalog_requests_total` exposes hit/refresh/stale/error).
 ADK's built-in `transfer_to_agent` call is not an MCP tool. It remains visible
 on AG-UI as a tool event and is audited through Agent delegation lifecycle
 events rather than MCP tool provenance.
@@ -202,6 +210,11 @@ for the Liki product profile. A run never emits `RUN_ERROR` after
 The A2A Agent Card uses curated `AgentDefinition` descriptions, mode, tool
 allowlist tags, and deployment provenance. It never includes instructions,
 prompts, raw model output, or tool payloads.
+
+Structured output is decoded once per run. The runtime consumes the final
+event's state delta directly, and both protocol adapters reuse the decoded
+document alongside the canonical JSON bytes instead of re-parsing them; the
+canonical JSON on the wire is unchanged.
 
 ## Operations
 

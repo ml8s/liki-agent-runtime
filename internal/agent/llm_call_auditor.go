@@ -273,6 +273,11 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 			ThoughtTokens:    call.ThoughtTokens,
 			TotalTokens:      call.TotalTokens,
 		})
+		l.metrics.ObserveLLMCallLatency(
+			call.Model,
+			string(call.Status),
+			time.Duration(call.DurationMS)*time.Millisecond,
+		)
 	}
 	return response, responseErr
 }
@@ -351,6 +356,11 @@ func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMReque
 			ThoughtTokens:    call.ThoughtTokens,
 			TotalTokens:      call.TotalTokens,
 		})
+		l.metrics.ObserveLLMCallLatency(
+			call.Model,
+			string(call.Status),
+			time.Duration(call.DurationMS)*time.Millisecond,
+		)
 	}
 	return nil, requestErr
 }

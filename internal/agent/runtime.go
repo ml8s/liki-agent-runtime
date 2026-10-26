@@ -39,7 +39,9 @@ const (
 	// structuredOutputStateKeyPrefix matches llmagent.Config.OutputKey. ADK parses
 	// the model reply against OutputSchema, clears Event.Output before
 	// yielding it, and persists the parsed value into session state under
-	// this key. Session state is the framework mechanism for consuming it.
+	// this key. The final event's StateDelta carries the same value, so the
+	// runtime consumes the event first and reads session state only as a
+	// fallback.
 	structuredOutputStateKeyPrefix = "structured_analysis:"
 
 	// maxCompletedRunIDs bounds duplicate-run detection without turning the
@@ -61,26 +63,36 @@ type Runtime struct {
 	delegationAuditor *AgentReferenceAuditor
 	toolAuditor       *ToolExecutionAuditor
 	tracer            trace.Tracer
+	projectorIndex    eventProjectorIndex
 	runs              *runLifecycle
 	runSlots          chan struct{}
 }
 
 type runLifecycle struct {
-	mu        sync.Mutex
-	active    map[string]struct{}
-	completed map[string]struct{}
-	order     []string
+	mu         sync.Mutex
+	active     map[string]struct{}
+	completed  map[string]struct{}
+	order      []string
+	orderStart int
 }
 
 func (r *Runtime) acquireRun(ctx context.Context) (func(), error) {
 	if err := ctx.Err(); err != nil {
+		r.observeRunRejection("cancelled")
 		return nil, runtimeError(err)
 	}
 	select {
 	case r.runSlots <- struct{}{}:
 		return func() { <-r.runSlots }, nil
 	default:
+		r.observeRunRejection("busy")
 		return nil, domain.NewError(domain.CodeRuntimeBusy, "runtime is at its concurrent run limit", ctx.Err())
+	}
+}
+
+func (r *Runtime) observeRunRejection(reason string) {
+	if r.config.Metrics != nil {
+		r.config.Metrics.ObserveRunRejection(reason)
 	}
 }
 
@@ -110,9 +122,16 @@ func (l *runLifecycle) finish(runID string) {
 	delete(l.active, runID)
 	l.completed[runID] = struct{}{}
 	l.order = append(l.order, runID)
-	if len(l.order) > maxCompletedRunIDs {
-		delete(l.completed, l.order[0])
-		l.order = l.order[1:]
+	// Ring eviction keeps duplicate-run detection bounded without repeatedly
+	// reslicing the backing array, which would grow forever.
+	for len(l.order)-l.orderStart > maxCompletedRunIDs {
+		delete(l.completed, l.order[l.orderStart])
+		l.order[l.orderStart] = ""
+		l.orderStart++
+	}
+	if l.orderStart == len(l.order) {
+		l.order = l.order[:0]
+		l.orderStart = 0
 	}
 }
 
@@ -279,6 +298,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create ADK agent", err)
 	}
+	projectorIndex := newEventProjectorIndex(config.Deployment)
 	retryPlugin, err := retryandreflect.New(
 		retryandreflect.WithMaxRetries(2),
 		retryandreflect.WithErrorIfRetryExceeded(true),
@@ -310,6 +330,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		delegationAuditor: delegationAuditor,
 		toolAuditor:       toolAuditor,
 		tracer:            tracer,
+		projectorIndex:    projectorIndex,
 		definition:        config.Deployment,
 		entrypoint:        entrypoint,
 		runs:              newRunLifecycle(),
@@ -339,7 +360,9 @@ func newMCPToolsets(config Config) ([]tool.Toolset, error) {
 		if err != nil {
 			return nil, domain.NewError(domain.CodeMCPToolsUnavailable, fmt.Sprintf("create MCP toolset %q", definition.Name), err)
 		}
-		toolsets = append(toolsets, toolset)
+		// Memoize standard discovery per logical server; per-Agent allowlist
+		// filtering still runs downstream inside tool.FilterToolset.
+		toolsets = append(toolsets, newCachedToolset(definition.Name, toolset, mcpCatalogTTL, config.Now, config.Metrics))
 	}
 	return toolsets, nil
 }
@@ -611,10 +634,6 @@ func (r *Runtime) Run(
 	request RunRequest,
 	observe func(*session.Event) error,
 ) (result RunResult, runErr error) {
-	request.RunID = strings.TrimSpace(request.RunID)
-	request.ThreadID = strings.TrimSpace(request.ThreadID)
-	request.UserID = strings.TrimSpace(request.UserID)
-	request.Protocol = strings.TrimSpace(request.Protocol)
 	request = normalizeRunRequest(request)
 	if err := validateRunRequest(request); err != nil {
 		return RunResult{}, err
@@ -655,7 +674,7 @@ func (r *Runtime) Run(
 	state := &runState{
 		capturePlain: !r.entrypoint.Output.Structured(),
 	}
-	projector := newEventProjector(r.definition)
+	projector := newEventProjector(r.projectorIndex)
 	sessionID := runSessionID(request.RunID)
 	scope := &runScope{
 		runID:             domain.ID(request.RunID),
@@ -744,6 +763,12 @@ func (r *Runtime) Run(
 			return RunResult{}, runErr
 		}
 		state.consume(event)
+		if err := r.consumeStructuredEvent(state, event); err != nil {
+			runSpan.RecordError(err)
+			runSpan.SetStatus(codes.Error, runtimeError(err).Error())
+			runErr = err
+			return RunResult{}, runErr
+		}
 		// Task-mode sub-agents stop their event iterator on finish_task, so
 		// their AfterAgent callback never runs; complete the delegation from
 		// the synthesized task-tool function response instead.
@@ -792,6 +817,26 @@ func (r *Runtime) Run(
 		Output:     state.output.JSON,
 		Text:       state.output.Text,
 	}, nil
+}
+
+// consumeStructuredEvent reads the entrypoint's structured output directly
+// from the final event's StateDelta. ADK persists the same value into session
+// state, so consuming the event avoids a full session read-back after the
+// stream; loadStructuredAnalysis remains the defensive fallback for streams
+// that yielded no state delta. Repeated final events follow the session's
+// last-write-wins semantics because each delta overwrites the prior result.
+func (r *Runtime) consumeStructuredEvent(state *runState, event *session.Event) error {
+	if !r.entrypoint.Output.Structured() ||
+		event == nil ||
+		!event.IsFinalResponse() ||
+		event.Author != r.entrypoint.Name {
+		return nil
+	}
+	value, ok := event.Actions.StateDelta[StructuredOutputStateKey(r.entrypoint.Name)]
+	if !ok {
+		return nil
+	}
+	return state.consumeStructuredOutput(value, r.entrypoint)
 }
 
 func (r *Runtime) ensureDurableRunID(ctx context.Context, runID string) error {
@@ -848,9 +893,10 @@ func retryableAuditAppend(err error) bool {
 	return true
 }
 
-// loadStructuredAnalysis consumes the parsed model output from ADK session
-// state. Event.Output is deliberately cleared by ADK Runner before yielding,
-// so session state is the only framework-supported source.
+// loadStructuredAnalysis is the defensive fallback that consumes the parsed
+// model output from ADK session state when the event stream carried no state
+// delta. It reads the whole run-scoped session, so the event path above is
+// preferred.
 func (r *Runtime) loadStructuredAnalysis(ctx context.Context, request RunRequest, sessionID string, state *runState) error {
 	response, err := r.sessions.Get(ctx, &session.GetRequest{
 		AppName:   r.config.AppName,

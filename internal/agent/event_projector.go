@@ -9,20 +9,28 @@ import (
 // event format. It is the single place that decides whether partial model
 // output, finalized model output, and tool facts are visible to protocols.
 type eventProjector struct {
-	definitions map[string]*AgentDefinition
+	index eventProjectorIndex
+	// partialText is per-run mutable state; the index above is shared and
+	// read-only after runtime construction.
 	partialText map[string]bool
 }
 
-func newEventProjector(deployment *Deployment) eventProjector {
+// eventProjectorIndex is the immutable deployment lookup shared by every run.
+type eventProjectorIndex struct {
+	definitions map[string]*AgentDefinition
+}
+
+func newEventProjectorIndex(deployment *Deployment) eventProjectorIndex {
 	definitions := make(map[string]*AgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		definition := &deployment.Spec.Agents[index]
 		definitions[definition.Name] = definition
 	}
-	return eventProjector{
-		definitions: definitions,
-		partialText: make(map[string]bool),
-	}
+	return eventProjectorIndex{definitions: definitions}
+}
+
+func newEventProjector(index eventProjectorIndex) eventProjector {
+	return eventProjector{index: index, partialText: make(map[string]bool)}
 }
 
 // Project returns the observer-visible form of an ADK event.
@@ -148,7 +156,7 @@ func (p eventProjector) projectFinal(
 }
 
 func (p eventProjector) definitionFor(author string) (*AgentDefinition, bool) {
-	definition, ok := p.definitions[author]
+	definition, ok := p.index.definitions[author]
 	if !ok || definition == nil {
 		return nil, false
 	}

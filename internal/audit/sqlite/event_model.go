@@ -8,19 +8,21 @@ import (
 )
 
 type auditEventModel struct {
+	// Indexes are owned by the SQL migrations (00001 and 00004); struct tags
+	// intentionally carry no index hints so they cannot drift from the schema.
 	ID                    string    `gorm:"column:id;primaryKey"`
-	EventType             string    `gorm:"column:event_type;index"`
-	OccurredAt            time.Time `gorm:"column:occurred_at;index"`
-	RootRunID             string    `gorm:"column:root_run_id;index"`
-	RunID                 string    `gorm:"column:run_id;index"`
-	ParentRunID           string    `gorm:"column:parent_run_id;index"`
-	ThreadID              string    `gorm:"column:thread_id;index"`
+	EventType             string    `gorm:"column:event_type"`
+	OccurredAt            time.Time `gorm:"column:occurred_at"`
+	RootRunID             string    `gorm:"column:root_run_id"`
+	RunID                 string    `gorm:"column:run_id"`
+	ParentRunID           string    `gorm:"column:parent_run_id"`
+	ThreadID              string    `gorm:"column:thread_id"`
 	UserID                string    `gorm:"column:user_id"`
 	Protocol              string    `gorm:"column:protocol"`
 	TraceID               string    `gorm:"column:trace_id"`
 	SpanID                string    `gorm:"column:span_id"`
-	AgentName             string    `gorm:"column:agent_name;index"`
-	DefinitionName        string    `gorm:"column:definition_name;index"`
+	AgentName             string    `gorm:"column:agent_name"`
+	DefinitionName        string    `gorm:"column:definition_name"`
 	DefinitionVersion     string    `gorm:"column:definition_version"`
 	DefinitionDigest      string    `gorm:"column:definition_digest"`
 	AgentVersion          string    `gorm:"column:agent_version"`
@@ -28,10 +30,10 @@ type auditEventModel struct {
 	CallerAgent           string    `gorm:"column:caller_agent"`
 	TargetAgent           string    `gorm:"column:target_agent"`
 	DelegationDepth       int       `gorm:"column:delegation_depth"`
-	ToolCallID            string    `gorm:"column:tool_call_id;index"`
-	ToolName              string    `gorm:"column:tool_name;index"`
-	Model                 string    `gorm:"column:model;index"`
-	Provider              string    `gorm:"column:provider;index"`
+	ToolCallID            string    `gorm:"column:tool_call_id"`
+	ToolName              string    `gorm:"column:tool_name"`
+	Model                 string    `gorm:"column:model"`
+	Provider              string    `gorm:"column:provider"`
 	Status                string    `gorm:"column:status"`
 	DurationMS            int64     `gorm:"column:duration_ms"`
 	ErrorCode             string    `gorm:"column:error_code"`

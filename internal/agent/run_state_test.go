@@ -1,8 +1,11 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -38,6 +41,21 @@ func TestJSONStringAtPointerFollowsRFC6901(t *testing.T) {
 				t.Fatalf("jsonStringAtPointer() = %q, want %q", got, testCase.want)
 			}
 		})
+	}
+}
+
+func BenchmarkParseStructuredOutput(b *testing.B) {
+	entrypoint := NewTestDeployment(b).Spec.Agents[0]
+	value := `{"answer":"结构化结论文本，长度接近真实问答场景的最终答案。","confidence":0.87}`
+	b.ReportAllocs()
+	for index := 0; index < b.N; index++ {
+		result, err := ParseStructuredOutput(value, &entrypoint)
+		if err != nil {
+			b.Fatalf("ParseStructuredOutput() error = %v", err)
+		}
+		if result.JSON == nil || result.Document == nil {
+			b.Fatal("ParseStructuredOutput() lost the canonical or decoded form")
+		}
 	}
 }
 
@@ -133,5 +151,56 @@ func TestParseStructuredOutputRejections(t *testing.T) {
 func TestDecodeJSONDocumentRejectsTrailingValues(t *testing.T) {
 	if _, err := decodeJSONDocument([]byte(`{"a":1} trailing`)); err == nil {
 		t.Fatal("decodeJSONDocument() accepted a trailing JSON value")
+	}
+}
+
+func TestParseStructuredOutputRetainsDecodedDocument(t *testing.T) {
+	entrypoint := NewTestDeployment(t).Spec.Agents[0]
+	result, err := ParseStructuredOutput(
+		`{"answer":" 最终结论 ","confidence":0.5}`,
+		&entrypoint,
+	)
+	if err != nil {
+		t.Fatalf("ParseStructuredOutput() error = %v", err)
+	}
+	document, ok := result.Document.(map[string]any)
+	if !ok {
+		t.Fatalf("Document type = %T, want map[string]any", result.Document)
+	}
+	if number, ok := document["confidence"].(json.Number); !ok || number.String() != "0.5" {
+		t.Fatalf("confidence = %#v, want json.Number(\"0.5\")", document["confidence"])
+	}
+	// The retained document must be exactly what decoding the canonical JSON
+	// with UseNumber produces, so adapters can substitute it for a re-decode.
+	var decoded map[string]any
+	decoder := json.NewDecoder(strings.NewReader(string(result.JSON)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&decoded); err != nil {
+		t.Fatalf("decode canonical JSON: %v", err)
+	}
+	if fmt.Sprint(decoded["answer"]) != fmt.Sprint(document["answer"]) ||
+		fmt.Sprint(decoded["confidence"]) != fmt.Sprint(document["confidence"]) {
+		t.Fatalf("document %#v differs from decoded canonical form %#v", document, decoded)
+	}
+}
+
+func TestAcquireRunObservesRejectionReasons(t *testing.T) {
+	metrics := &stubMetrics{}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	runtime := &Runtime{
+		config:   Config{Metrics: metrics},
+		runSlots: make(chan struct{}, 1),
+	}
+	if _, err := runtime.acquireRun(cancelled); err == nil {
+		t.Fatal("acquireRun(canceled context) unexpectedly succeeded")
+	}
+	runtime.runSlots <- struct{}{}
+	if _, err := runtime.acquireRun(context.Background()); err == nil {
+		t.Fatal("acquireRun(full slots) unexpectedly succeeded")
+	}
+	want := []string{"run_rejection/cancelled", "run_rejection/busy"}
+	if !slices.Equal(metrics.calls, want) {
+		t.Fatalf("observed rejections = %v, want %v", metrics.calls, want)
 	}
 }

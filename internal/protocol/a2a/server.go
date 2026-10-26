@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -51,8 +52,58 @@ type Config struct {
 
 // Server is the official ADK/A2A executor and Agent Card provider.
 type Server struct {
-	endpoint  http.Handler
-	discovery http.Handler
+	endpoint   http.Handler
+	discovery  http.Handler
+	structured structuredMemo
+}
+
+// structuredMemo parses one final event's structured output once. The part
+// converter is invoked per content part, and every part of the same event
+// would otherwise repeat the identical decode/validate/canonicalize pipeline.
+// The single entry is keyed by event pointer and mutex-guarded because one
+// server serves concurrent tasks; interleaved events at worst recompute, never
+// return a stale mismatch.
+type structuredMemo struct {
+	mu     sync.Mutex
+	event  *session.Event
+	output agent.OutputResult
+	err    error
+	valid  bool
+
+	// parse is a test seam; production always uses agent.ParseStructuredOutput.
+	parse func(value any, definition *agent.AgentDefinition) (agent.OutputResult, error)
+}
+
+// structuredOutput returns the memoized parse when the event's state delta
+// selects the structured branch. applies reports whether the branch matches.
+func (s *Server) structuredOutput(
+	event *session.Event,
+	entrypoint *agent.AgentDefinition,
+) (output agent.OutputResult, applies bool, err error) {
+	if event == nil || entrypoint == nil ||
+		event.Author != entrypoint.Name || !event.IsFinalResponse() {
+		return agent.OutputResult{}, false, nil
+	}
+	value, ok := event.Actions.StateDelta[agent.StructuredOutputStateKey(entrypoint.Name)]
+	if !ok {
+		return agent.OutputResult{}, false, nil
+	}
+	s.structured.mu.Lock()
+	if s.structured.valid && s.structured.event == event {
+		output, err = s.structured.output, s.structured.err
+		s.structured.mu.Unlock()
+		return output, true, err
+	}
+	s.structured.mu.Unlock()
+
+	output, err = s.structured.parse(value, entrypoint)
+	s.structured.mu.Lock()
+	s.structured.event = event
+	s.structured.output = output
+	s.structured.err = err
+	s.structured.valid = true
+	s.structured.mu.Unlock()
+	return output, true, err
 }
 
 // New wires the ADK runtime directly into the official A2A server stack.
@@ -69,6 +120,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
+	server := &Server{structured: structuredMemo{parse: agent.ParseStructuredOutput}}
 	root := runtime.RootAgent()
 	deployment := runtime.Deployment()
 	entrypoint := runtime.Entrypoint()
@@ -104,7 +156,8 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 	executor := adka2a.NewExecutor(adka2a.ExecutorConfig{
 		RunnerConfig: runtime.RunnerConfig(),
 		GenAIPartConverter: func(_ context.Context, event *session.Event, part *genai.Part) (*a2a.Part, error) {
-			entrypoint := runtime.Entrypoint()
+			// The entrypoint is immutable after runtime construction; capture it
+			// once instead of deep-cloning the definition for every streamed part.
 			// Model-text visibility is resolved per event author against the
 			// deployment, mirroring the AG-UI projector. A structured expert
 			// delegated under a plain entrypoint must not leak raw JSON.
@@ -112,7 +165,17 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 				definition, ok := deployment.Agent(author)
 				return ok && agent.ExposesModelText(definition)
 			}
-			return agentPart(event, part, exposesText, entrypoint)
+			structured, applies, err := server.structuredOutput(event, entrypoint)
+			if applies && err != nil {
+				return nil, err
+			}
+			var structuredPointer *agent.OutputResult
+			if !applies {
+				structuredPointer = nil
+			} else {
+				structuredPointer = &structured
+			}
+			return agentPart(event, part, exposesText, entrypoint, structuredPointer)
 		},
 		BeforeExecuteCallback: func(ctx context.Context, request *a2asrv.ExecutorContext) (context.Context, error) {
 			caller := ""
@@ -166,7 +229,9 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 
 	discovery := a2asrv.NewStaticAgentCardHandler(&card)
 	endpoint := a2asrv.NewJSONRPCHandler(requestHandler)
-	return &Server{endpoint: endpoint, discovery: discovery}, nil
+	server.endpoint = endpoint
+	server.discovery = discovery
+	return server, nil
 }
 
 func cancelExecution(ctx context.Context) {
@@ -231,6 +296,7 @@ func agentPart(
 	part *genai.Part,
 	exposesText func(author string) bool,
 	entrypoint *agent.AgentDefinition,
+	structured *agent.OutputResult,
 ) (*a2a.Part, error) {
 	if part == nil {
 		return nil, nil
@@ -255,15 +321,29 @@ func agentPart(
 	if event != nil && entrypoint != nil && event.Author == entrypoint.Name && event.IsFinalResponse() {
 		value, ok := event.Actions.StateDelta[agent.StructuredOutputStateKey(entrypoint.Name)]
 		if ok {
-			output, err := agent.ParseStructuredOutput(value, entrypoint)
-			if err != nil {
-				return nil, err
+			var output agent.OutputResult
+			if structured != nil {
+				// The server already parsed this event once for a prior part.
+				output = *structured
+			} else {
+				parsed, err := agent.ParseStructuredOutput(value, entrypoint)
+				if err != nil {
+					return nil, err
+				}
+				output = parsed
 			}
 			var data map[string]any
-			decoder := json.NewDecoder(strings.NewReader(string(output.JSON)))
-			decoder.UseNumber()
-			if err := decoder.Decode(&data); err != nil {
-				return nil, fmt.Errorf("decode structured A2A data: %w", err)
+			if document, ok := output.Document.(map[string]any); ok {
+				// The retained document is exactly what decoding the canonical
+				// JSON with UseNumber would produce; reuse it without a second
+				// decode of the same bytes.
+				data = document
+			} else {
+				decoder := json.NewDecoder(strings.NewReader(string(output.JSON)))
+				decoder.UseNumber()
+				if err := decoder.Decode(&data); err != nil {
+					return nil, fmt.Errorf("decode structured A2A data: %w", err)
+				}
 			}
 			dataPart := a2a.NewDataPart(data)
 			dataPart.MediaType = "application/json"

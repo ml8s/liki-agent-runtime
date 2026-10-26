@@ -109,11 +109,21 @@ func run() (err error) {
 			err = fmt.Errorf("close audit database: %w", closeErr)
 		}
 	}()
+	metricsCollector := prometheus.New()
+	auditRecorder, err := sqlite.NewAuditRecorder(store, sqlite.WithRecorderMetrics(metricsCollector))
+	if err != nil {
+		return fmt.Errorf("init audit recorder: %w", err)
+	}
+	// Draining precedes the store close deferred above (defers run LIFO).
+	defer func() {
+		if closeErr := auditRecorder.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("drain audit recorder: %w", closeErr)
+		}
+	}()
 	deployment, err := agentruntime.LoadAgentDeployment(cfg.DeploymentFile)
 	if err != nil {
 		return err
 	}
-	metricsCollector := prometheus.New()
 	runtime, err := agentruntime.NewRuntime(agentruntime.Config{
 		AppName:           "liki-agent-runtime",
 		Model:             cfg.LLMModel,
@@ -121,7 +131,7 @@ func run() (err error) {
 		ModelAPIKey:       cfg.LLMAPIKey,
 		ModelTimeout:      cfg.LLMTimeout,
 		Temperature:       cfg.LLMTemperature,
-		AuditRecorder:     sqlite.NewAuditEventRepository(store.GORM()),
+		AuditRecorder:     auditRecorder,
 		Metrics:           metricsCollector,
 		TracerProvider:    tracerProvider.Provider(),
 		Provider:          cfg.LLMProvider,

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,15 @@ type healthy struct{}
 
 func (healthy) CheckHealth(context.Context) platform.DependencyHealth {
 	return platform.DependencyHealth{Name: "test", OK: true}
+}
+
+type countingChecker struct {
+	count atomic.Int32
+}
+
+func (c *countingChecker) CheckHealth(context.Context) platform.DependencyHealth {
+	c.count.Add(1)
+	return platform.DependencyHealth{Name: "counted", OK: true}
 }
 
 func newServer(t *testing.T, token string) *transport.Server {
@@ -393,6 +403,66 @@ func TestReadinessHasIndependentBudget(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed >= 2*time.Second {
 		t.Fatalf("readiness elapsed = %v, want less than the 2s healthcheck client timeout", elapsed)
+	}
+}
+
+func TestReadinessReusesFreshDependencyResults(t *testing.T) {
+	checker := &countingChecker{}
+	handler := mustNewServer(t, transport.Services{
+		AgentCard:    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A:          http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		AGUI:         http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		HealthChecks: []platform.HealthChecker{checker},
+	})
+	for attempt := 0; attempt < 3; attempt++ {
+		response := httptest.NewRecorder()
+		handler.OpsHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("readiness attempt %d status = %d", attempt, response.Code)
+		}
+	}
+	if got := checker.count.Load(); got != 1 {
+		t.Fatalf("dependency checks within TTL = %d, want 1", got)
+	}
+}
+
+func TestReadinessCacheCanBeDisabled(t *testing.T) {
+	checker := &countingChecker{}
+	handler := mustNewServer(t, transport.Services{
+		AgentCard:         http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A:               http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		AGUI:              http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		HealthChecks:      []platform.HealthChecker{checker},
+		ReadinessCacheTTL: -1,
+	})
+	for attempt := 0; attempt < 2; attempt++ {
+		response := httptest.NewRecorder()
+		handler.OpsHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("readiness attempt %d status = %d", attempt, response.Code)
+		}
+	}
+	if got := checker.count.Load(); got != 2 {
+		t.Fatalf("dependency checks with cache disabled = %d, want 2", got)
+	}
+}
+
+func TestPprofRequiresServiceToken(t *testing.T) {
+	handler := newServer(t, "secret")
+	ops := handler.OpsHandler()
+
+	unauthenticated := httptest.NewRecorder()
+	ops.ServeHTTP(unauthenticated, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
+	if unauthenticated.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated pprof status = %d, want %d", unauthenticated.Code, http.StatusUnauthorized)
+	}
+
+	authenticated := httptest.NewRequest(http.MethodGet, "/debug/pprof/heap?debug=1", nil)
+	authenticated.Header.Set("Authorization", "Bearer secret")
+	response := httptest.NewRecorder()
+	ops.ServeHTTP(response, authenticated)
+	if response.Code != http.StatusOK {
+		t.Fatalf("authenticated heap profile status = %d, want %d", response.Code, http.StatusOK)
 	}
 }
 

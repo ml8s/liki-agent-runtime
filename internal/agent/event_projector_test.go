@@ -20,7 +20,7 @@ func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 			Tools:       ToolAllowlist{Allow: map[string][]string{}},
 		}}},
 	}
-	projector := newEventProjector(deployment)
+	projector := newEventProjector(newEventProjectorIndex(deployment))
 	event := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -51,7 +51,7 @@ func TestEventProjectorHidesStructuredPayload(t *testing.T) {
 			Tools: ToolAllowlist{Allow: map[string][]string{}},
 		}}},
 	}
-	projector := newEventProjector(deployment)
+	projector := newEventProjector(newEventProjectorIndex(deployment))
 	event := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -67,7 +67,7 @@ func TestEventProjectorHidesStructuredPayload(t *testing.T) {
 }
 
 func TestEventProjectorPreservesStateOnlyFinalEvent(t *testing.T) {
-	projector := newEventProjector(plainTextDeployment())
+	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
 	event := &session.Event{
 		Author: "main",
 		Actions: session.EventActions{
@@ -82,7 +82,7 @@ func TestEventProjectorPreservesStateOnlyFinalEvent(t *testing.T) {
 }
 
 func TestEventProjectorSuppressesFinalTextDuplicateAfterStreaming(t *testing.T) {
-	projector := newEventProjector(plainTextDeployment())
+	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
 	partial := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -107,7 +107,7 @@ func TestEventProjectorSuppressesFinalTextDuplicateAfterStreaming(t *testing.T) 
 }
 
 func TestEventProjectorKeepsToolFactWhenSuppressingFinalText(t *testing.T) {
-	projector := newEventProjector(plainTextDeployment())
+	projector := newEventProjector(newEventProjectorIndex(plainTextDeployment()))
 	partial := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -195,7 +195,7 @@ func TestExposesModelText(t *testing.T) {
 func TestEventProjectorExposeDecisionMatchesRule(t *testing.T) {
 	for _, deployment := range []*Deployment{plainTextDeployment(), structuredTextDeployment()} {
 		entrypoint := deployment.Spec.Agents[0]
-		projector := newEventProjector(deployment)
+		projector := newEventProjector(newEventProjectorIndex(deployment))
 		definition, expose := projector.definitionFor(entrypoint.Name)
 		if definition == nil {
 			t.Fatalf("definitionFor(%q) returned nil for structured=%v", entrypoint.Name, entrypoint.Output.Structured())

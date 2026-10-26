@@ -14,44 +14,107 @@ import (
 
 // AuditEventRepository persists immutable audit events.
 type AuditEventRepository struct {
-	db *gorm.DB
+	db      *gorm.DB
+	metrics audit.AppendMetrics
+}
+
+// recoveryWindow bounds the startup orphan scan. Every successful startup
+// closes all orphans, so at the next startup an unclosed lifecycle can only
+// have been created since the previous recovery; the week of margin absorbs
+// clock skew and restored databases while keeping the scan index-bounded.
+const recoveryWindow = 7 * 24 * time.Hour
+
+// RepositoryOption customizes an audit repository.
+type RepositoryOption func(*AuditEventRepository)
+
+// WithMetrics observes every append outcome and its persistence latency.
+func WithMetrics(metrics audit.AppendMetrics) RepositoryOption {
+	return func(repository *AuditEventRepository) {
+		repository.metrics = metrics
+	}
 }
 
 // NewAuditEventRepository builds an audit repository over a database handle.
-func NewAuditEventRepository(db *gorm.DB) *AuditEventRepository {
-	return &AuditEventRepository{db: db}
+func NewAuditEventRepository(db *gorm.DB, options ...RepositoryOption) *AuditEventRepository {
+	repository := &AuditEventRepository{db: db}
+	for _, option := range options {
+		option(repository)
+	}
+	return repository
 }
 
 // Record appends one validated audit event, treating a retry of an identical
 // event as idempotent.
 func (r *AuditEventRepository) Record(ctx context.Context, event *audit.Event) error {
+	started := time.Now()
+	status, err := r.record(ctx, event)
+	r.observeAuditAppend(status, time.Since(started))
+	return err
+}
+
+func (r *AuditEventRepository) record(ctx context.Context, event *audit.Event) (string, error) {
 	if event == nil {
-		return audit.NewError(audit.CodeAuditAppendFailed, "audit event is required", domain.ErrInvalidInput)
+		return audit.AppendStatusInvalid, audit.NewError(
+			audit.CodeAuditAppendFailed,
+			"audit event is required",
+			domain.ErrInvalidInput,
+		)
 	}
 	if err := event.Validate(); err != nil {
-		return err
+		return audit.AppendStatusInvalid, err
 	}
 	return r.append(ctx, r.db, event)
 }
 
-func (r *AuditEventRepository) append(ctx context.Context, db *gorm.DB, event *audit.Event) error {
+func (r *AuditEventRepository) observeAuditAppend(status string, duration time.Duration) {
+	if r.metrics != nil {
+		r.metrics.ObserveAuditAppend(status, duration)
+	}
+}
+
+// appendEvent inserts one audit event on the supplied handle or transaction
+// and reports the stable append outcome. A UNIQUE failure aborts only this
+// statement in SQLite, so a caller may continue the surrounding transaction
+// with other events after a conflict.
+func appendEvent(ctx context.Context, db *gorm.DB, event *audit.Event) (string, error) {
 	model, err := newAuditEventModel(event)
 	if err != nil {
-		return err
+		return audit.AppendStatusError, err
 	}
 	if err := db.WithContext(ctx).Create(&model).Error; err != nil {
+		if isBusyAppendError(err) {
+			return audit.AppendStatusBusy, audit.NewError(audit.CodeAuditAppendFailed, "append audit event", err)
+		}
 		var existing auditEventModel
 		findErr := db.WithContext(ctx).Where("id = ?", event.ID).First(&existing).Error
 		if findErr == nil && existing == model {
 			// A retry after a committed-but-unacknowledged append is idempotent.
-			return nil
+			return audit.AppendStatusOK, nil
 		}
 		if findErr == nil {
-			return audit.NewError(audit.CodeAuditEventConflict, "audit event id already exists", err)
+			return audit.AppendStatusConflict, audit.NewError(audit.CodeAuditEventConflict, "audit event id already exists", err)
 		}
-		return audit.NewError(audit.CodeAuditAppendFailed, "append audit event", err)
+		if isBusyAppendError(findErr) {
+			return audit.AppendStatusBusy, audit.NewError(audit.CodeAuditAppendFailed, "append audit event", err)
+		}
+		return audit.AppendStatusError, audit.NewError(audit.CodeAuditAppendFailed, "append audit event", err)
 	}
-	return nil
+	return audit.AppendStatusOK, nil
+}
+
+func (r *AuditEventRepository) append(ctx context.Context, db *gorm.DB, event *audit.Event) (string, error) {
+	return appendEvent(ctx, db, event)
+}
+
+// isBusyAppendError recognizes SQLite writer contention through the driver's
+// stable error text. It stays inside the adapter so callers only see the
+// coded audit error and the metric status.
+func isBusyAppendError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "SQLITE_BUSY") || strings.Contains(message, "database is locked")
 }
 
 // RecoverInterrupted appends terminal failure evidence for every started audit
@@ -59,6 +122,10 @@ func (r *AuditEventRepository) append(ctx context.Context, db *gorm.DB, event *a
 // accepts traffic and relies on the stable event-ID rule; malformed legacy
 // IDs fail closed instead of being silently transformed.
 func (r *AuditEventRepository) RecoverInterrupted(ctx context.Context, now time.Time) error {
+	return r.recoverInterrupted(ctx, r.db, now)
+}
+
+func (r *AuditEventRepository) recoverInterrupted(ctx context.Context, db *gorm.DB, now time.Time) error {
 	if now.IsZero() {
 		return audit.NewError(audit.CodeAuditAppendFailed, "recovery timestamp is required", nil)
 	}
@@ -77,6 +144,7 @@ func (r *AuditEventRepository) RecoverInterrupted(ctx context.Context, now time.
 	// primary-key index and return only true orphans instead of loading history.
 	orphanFilter := `
 event_type IN ?
+AND agent_audit_events.occurred_at >= ?
 AND NOT EXISTS (
 	SELECT 1
 	FROM agent_audit_events AS completed
@@ -90,10 +158,10 @@ AND NOT EXISTS (
 	  AND failed.event_type = replace(agent_audit_events.event_type, '.started', '.failed')
 )`
 
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var interrupted []auditEventModel
 		if err := tx.WithContext(ctx).
-			Where(orphanFilter, startedNames).
+			Where(orphanFilter, startedNames, now.Add(-recoveryWindow)).
 			Order("occurred_at ASC, id ASC").
 			Find(&interrupted).Error; err != nil {
 			return audit.NewError(audit.CodeAuditAppendFailed, "find interrupted audit events", err)
@@ -115,7 +183,7 @@ AND NOT EXISTS (
 			if err != nil {
 				return err
 			}
-			if err := r.append(ctx, tx, event); err != nil {
+			if _, err := r.append(ctx, tx, event); err != nil {
 				return fmt.Errorf("recover %q: %w", original.ID, err)
 			}
 		}
@@ -181,13 +249,13 @@ func recoveryEvent(original auditEventModel, terminalType, id string, now time.T
 
 // RunExists reports whether any audit evidence exists for the run id.
 func (r *AuditEventRepository) RunExists(ctx context.Context, runID domain.ID) (bool, error) {
-	var count int64
+	// The run_id index answers an existence probe with one bounded lookup; an
+	// aggregate COUNT would keep scanning matching rows instead.
+	var exists int
 	if err := r.db.WithContext(ctx).
-		Model(&auditEventModel{}).
-		Where("run_id = ?", string(runID)).
-		Limit(1).
-		Count(&count).Error; err != nil {
+		Raw("SELECT 1 FROM agent_audit_events WHERE run_id = ? LIMIT 1", string(runID)).
+		Scan(&exists).Error; err != nil {
 		return false, audit.NewError(audit.CodeAuditAppendFailed, "check run existence", err)
 	}
-	return count > 0, nil
+	return exists == 1, nil
 }

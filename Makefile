@@ -28,15 +28,17 @@ GOPROXY ?= https://goproxy.cn,direct
 LDFLAGS ?= -s -w -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.Version=$(VERSION) -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.Commit=$(COMMIT) -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.BuildTime=$(BUILD_TIME)
 
 TEST_PACKAGES ?= ./...
+BENCH_PACKAGES ?= ./internal/audit/sqlite/... ./internal/agent/...
 COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-coverage-report build run dev dev-down validate gate image smoke
+.PHONY: help fmt fmt-check vet lint-engine lint-readme test test-coverage check check-actions test-coverage-report bench build run dev dev-down validate gate image smoke
 help:
 	@echo "make check    - static checks: docs, formatting, lint, vet, and artifact"
 	@echo "make lint-readme - lint and test developer documentation"
 	@echo "make test     - run isolated tests (no deployed Engine dependency)"
+	@echo "make bench    - run focused performance benchmarks"
 	@echo "make test-coverage - run tests and enforce the coverage floor"
 	@echo "make gate     - run the full pre-push source gate"
 	@echo "make smoke    - smoke the local liki-agent-runtime image"
@@ -73,6 +75,9 @@ test-coverage: test ## Run tests and enforce the coverage floor
 
 test-coverage-report: test-coverage ## Run tests, enforce coverage, and emit the HTML report
 	$(GO) tool cover -html=$(COVER_PROFILE) -o coverage.html
+
+bench: ## Run focused performance benchmarks with allocation stats
+	$(GO) test -run '^$$' -bench . -benchmem -count=1 $(BENCH_PACKAGES)
 
 check: lint-readme fmt-check lint-engine vet validate check-actions
 

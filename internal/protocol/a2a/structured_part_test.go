@@ -1,6 +1,7 @@
 package a2a
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -10,6 +11,124 @@ import (
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
+
+func TestStructuredMemoParsesOncePerEvent(t *testing.T) {
+	entrypoint := structuredEntrypoint(t)
+	event := &session.Event{
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"raw payload"}`}}},
+		},
+		Actions: session.EventActions{StateDelta: map[string]any{
+			agent.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": " 最终结论 "},
+		}},
+	}
+	event.Author = entrypoint.Name
+	parseCount := 0
+	server := &Server{structured: structuredMemo{
+		parse: func(value any, definition *agent.AgentDefinition) (agent.OutputResult, error) {
+			parseCount++
+			return agent.ParseStructuredOutput(value, definition)
+		},
+	}}
+
+	for part := 0; part < 3; part++ {
+		output, applies, err := server.structuredOutput(event, entrypoint)
+		if !applies || err != nil {
+			t.Fatalf("part %d structuredOutput() = applies=%v err=%v", part, applies, err)
+		}
+		dataPart, err := agentPart(event, &genai.Part{Text: `{"answer":"raw payload"}`}, exposeNone(), entrypoint, &output)
+		if err != nil {
+			t.Fatalf("part %d agentPart() error = %v", part, err)
+		}
+		data, ok := dataPart.Content.(a2a.Data)
+		if !ok {
+			t.Fatalf("part %d content = %#v, want structured data", part, dataPart.Content)
+		}
+		payload, payloadOK := data.Value.(map[string]any)
+		if !payloadOK || fmt.Sprint(payload["answer"]) != " 最终结论 " {
+			t.Fatalf("part %d data = %#v", part, data.Value)
+		}
+	}
+	if parseCount != 1 {
+		t.Fatalf("structured parses for 3 parts = %d, want 1", parseCount)
+	}
+
+	// A different final event must recompute instead of reusing the entry.
+	event2 := &session.Event{
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"next"}`}}},
+		},
+		Actions: session.EventActions{StateDelta: map[string]any{
+			agent.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": " 第二次结论 "},
+		}},
+	}
+	event2.Author = entrypoint.Name
+	if _, applies, err := server.structuredOutput(event2, entrypoint); !applies || err != nil {
+		t.Fatalf("second event structuredOutput() = applies=%v err=%v", applies, err)
+	}
+	if parseCount != 2 {
+		t.Fatalf("structured parses after new event = %d, want 2", parseCount)
+	}
+}
+
+func TestStructuredMemoMemoizesParseErrors(t *testing.T) {
+	entrypoint := structuredEntrypoint(t)
+	event := &session.Event{
+		Actions: session.EventActions{StateDelta: map[string]any{
+			agent.StructuredOutputStateKey(entrypoint.Name): "not-json",
+		}},
+	}
+	event.Author = entrypoint.Name
+	parseCount := 0
+	server := &Server{structured: structuredMemo{
+		parse: func(value any, definition *agent.AgentDefinition) (agent.OutputResult, error) {
+			parseCount++
+			return agent.ParseStructuredOutput(value, definition)
+		},
+	}}
+	for attempt := 0; attempt < 2; attempt++ {
+		if _, applies, err := server.structuredOutput(event, entrypoint); !applies || err == nil {
+			t.Fatalf("attempt %d structuredOutput() = applies=%v err=%v, want parse error", attempt, applies, err)
+		}
+	}
+	if parseCount != 1 {
+		t.Fatalf("failed structured parses = %d, want 1", parseCount)
+	}
+	if _, applies, _ := server.structuredOutput(nil, entrypoint); applies {
+		t.Fatal("nil event unexpectedly applied the structured branch")
+	}
+}
+
+func TestAgentPartPreparsedResultMatchesInternalParse(t *testing.T) {
+	entrypoint := structuredEntrypoint(t)
+	event := &session.Event{
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"raw payload"}`}}},
+		},
+		Actions: session.EventActions{StateDelta: map[string]any{
+			agent.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": " 最终结论 "},
+		}},
+	}
+	event.Author = entrypoint.Name
+
+	internalPart, err := agentPart(event, &genai.Part{Text: `{"answer":"raw payload"}`}, exposeNone(), entrypoint, nil)
+	if err != nil {
+		t.Fatalf("internal-parse agentPart() error = %v", err)
+	}
+	parsed, err := agent.ParseStructuredOutput(
+		event.Actions.StateDelta[agent.StructuredOutputStateKey(entrypoint.Name)], entrypoint,
+	)
+	if err != nil {
+		t.Fatalf("ParseStructuredOutput() error = %v", err)
+	}
+	reusedPart, err := agentPart(event, &genai.Part{Text: `{"answer":"raw payload"}`}, exposeNone(), entrypoint, &parsed)
+	if err != nil {
+		t.Fatalf("preparsed agentPart() error = %v", err)
+	}
+	if fmt.Sprint(internalPart) != fmt.Sprint(reusedPart) {
+		t.Fatalf("preparsed part %#v differs from internal-parse part %#v", reusedPart, internalPart)
+	}
+}
 
 // exposeAll treats every author as plain-text visible; exposeNone hides every
 // author's model text. Both stand in for a deployment-derived resolver.
@@ -44,7 +163,7 @@ func TestAgentPartPassesPlainTextThroughFrameworkMapping(t *testing.T) {
 			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "plain answer"}}},
 		},
 	}
-	part, err := agentPart(event, &genai.Part{Text: "plain answer"}, exposeAll(), nil)
+	part, err := agentPart(event, &genai.Part{Text: "plain answer"}, exposeAll(), nil, nil)
 	if err != nil {
 		t.Fatalf("agentPart() error = %v", err)
 	}
@@ -61,7 +180,7 @@ func TestAgentPartDropsPartialPayloadText(t *testing.T) {
 			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"par`}}},
 		},
 	}
-	part, err := agentPart(event, &genai.Part{Text: `{"answer":"par`}, exposeNone(), structuredEntrypoint(t))
+	part, err := agentPart(event, &genai.Part{Text: `{"answer":"par`}, exposeNone(), structuredEntrypoint(t), nil)
 	if err != nil {
 		t.Fatalf("agentPart() error = %v", err)
 	}
@@ -81,7 +200,7 @@ func TestAgentPartSubstitutesDeclaredPointer(t *testing.T) {
 	}
 	event.Author = "main"
 	entrypoint := structuredEntrypoint(t)
-	part, err := agentPart(event, &genai.Part{Text: `{"answer":"raw payload"}`}, exposeNone(), entrypoint)
+	part, err := agentPart(event, &genai.Part{Text: `{"answer":"raw payload"}`}, exposeNone(), entrypoint, nil)
 	if err != nil {
 		t.Fatalf("agentPart() error = %v", err)
 	}
@@ -109,7 +228,7 @@ func TestAgentPartKeepsToolCallFacts(t *testing.T) {
 			}},
 		},
 	}
-	part, err := agentPart(event, &genai.Part{FunctionCall: &genai.FunctionCall{ID: "call_1", Name: "test_tool"}}, exposeNone(), structuredEntrypoint(t))
+	part, err := agentPart(event, &genai.Part{FunctionCall: &genai.FunctionCall{ID: "call_1", Name: "test_tool"}}, exposeNone(), structuredEntrypoint(t), nil)
 	if err != nil {
 		t.Fatalf("agentPart() error = %v", err)
 	}
@@ -128,7 +247,7 @@ func TestAgentPartIgnoresNonEntrypointStructuredOutput(t *testing.T) {
 			agent.StructuredOutputStateKey("worker"): map[string]any{"answer": "worker answer"},
 		}},
 	}
-	part, err := agentPart(event, &genai.Part{Text: `{"answer":"worker payload"}`}, exposeNone(), structuredEntrypoint(t))
+	part, err := agentPart(event, &genai.Part{Text: `{"answer":"worker payload"}`}, exposeNone(), structuredEntrypoint(t), nil)
 	if err != nil {
 		t.Fatalf("agentPart() error = %v", err)
 	}
@@ -147,7 +266,7 @@ func TestAgentPartSuppressesStructuredAuthorRawPayload(t *testing.T) {
 			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"internal","secret":true}`}}},
 		},
 	}
-	part, err := agentPart(event, &genai.Part{Text: `{"answer":"internal","secret":true}`}, resolver, structuredEntrypoint(t))
+	part, err := agentPart(event, &genai.Part{Text: `{"answer":"internal","secret":true}`}, resolver, structuredEntrypoint(t), nil)
 	if err != nil {
 		t.Fatalf("agentPart() error = %v", err)
 	}
@@ -167,7 +286,7 @@ func TestAgentPartStreamsPlainAuthorText(t *testing.T) {
 			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "orchestrator note"}}},
 		},
 	}
-	part, err := agentPart(event, &genai.Part{Text: "orchestrator note"}, resolver, structuredEntrypoint(t))
+	part, err := agentPart(event, &genai.Part{Text: "orchestrator note"}, resolver, structuredEntrypoint(t), nil)
 	if err != nil {
 		t.Fatalf("agentPart() error = %v", err)
 	}
@@ -185,7 +304,7 @@ func TestAgentPartHidesUnknownAuthorText(t *testing.T) {
 			Content: &genai.Content{Role: "user", Parts: []*genai.Part{{Text: "client echo"}}},
 		},
 	}
-	part, err := agentPart(event, &genai.Part{Text: "client echo"}, exposeByDeployment(visibilityDeployment()), structuredEntrypoint(t))
+	part, err := agentPart(event, &genai.Part{Text: "client echo"}, exposeByDeployment(visibilityDeployment()), structuredEntrypoint(t), nil)
 	if err != nil {
 		t.Fatalf("agentPart() error = %v", err)
 	}

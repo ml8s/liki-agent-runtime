@@ -108,7 +108,7 @@ func TestEventProjectorFiltersObserverFacts(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			projector := newEventProjector(NewTestDeployment(t))
+			projector := newEventProjector(newEventProjectorIndex(NewTestDeployment(t)))
 			visible, visibleOK := projector.Project(testCase.event)
 			if testCase.wantNil {
 				if visibleOK {
