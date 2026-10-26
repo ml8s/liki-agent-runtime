@@ -195,8 +195,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if runErr == nil {
-		// 协议契约：RUN_FINISHED 必须带成功 outcome（与中继网关一致）；
-		// 缺失 outcome 会被 AG-UI 客户端判成非成功结果（result 为 undefined）。
+		// Protocol contract: RUN_FINISHED must carry a success outcome
+		// (matching the relay gateway); a missing outcome causes AG-UI
+		// clients to treat the result as non-successful (result undefined).
 		finished := aguievents.NewRunFinishedEventWithOptions(
 			threadID,
 			runID,

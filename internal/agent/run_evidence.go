@@ -1,7 +1,8 @@
 package agent
 
-// Run 的终态证据事务：本文件是"终态证据恰好一次且定序"这一聚合不变量的
-// 唯一实现。Run 的 deferred 终结器与 EndAuditRun 共用 closeRunEvidence。
+// Run terminal evidence transaction: this file is the single implementation
+// of the aggregate invariant "terminal evidence appended exactly once, in
+// order". Run's deferred finalizer and EndAuditRun share closeRunEvidence.
 
 import (
 	"context"
@@ -9,14 +10,16 @@ import (
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 )
 
-// closeRunEvidence 执行 run 的终态证据事务定序：
-//  1. 关闭 in-flight 模型调用（失败时对账一次）；
-//  2. 补偿未决委派与工具审计；
-//  3. 以因果错误（优先）追加终态事件。
+// closeRunEvidence executes the run terminal-evidence transaction in order:
+//  1. Close in-flight model calls (reconcile once on failure);
+//  2. Compensate pending delegation and tool audits;
+//  3. Append the terminal event with the causal error (preferred).
 //
-// 因果与补偿错误编码为终态事件的失败原因；返回值仅表示终态事件是否成功
-// 追加——失败时调用方据自身契约决定重试或交给启动恢复，且在此之前不得
-// 释放任何进程状态。Run 与 EndAuditRun 共用此唯一实现。
+// Causal and compensation errors are encoded as the terminal event's failure
+// reason. The return value only indicates whether the terminal event was
+// durably appended — on failure the caller decides whether to retry or hand
+// over to startup recovery, and must not release any process state before
+// then. Run and EndAuditRun share this single implementation.
 func (r *Runtime) closeRunEvidence(ctx context.Context, scope *runExecution, cause error) error {
 	ctx = context.WithoutCancel(ctx)
 	if ledgerErr := r.callAuditor.closeActive(scope, runtimeError(cause)); ledgerErr != nil {

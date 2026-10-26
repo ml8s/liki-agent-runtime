@@ -62,11 +62,6 @@ func (r *Runtime) Run(
 	)
 	defer runSpan.End()
 	startedAt := r.config.Now()
-	state := execution.RunState{
-		CapturePlain: !r.entrypoint.Output.Structured(),
-	}
-	projector := execution.NewEventProjector(r.projectorIndex)
-	projection := execution.NewEventProjectionState()
 	sessionID := runSessionID(request.RunID)
 	scope := &runExecution{
 		identity: execution.RunIdentity{
@@ -87,7 +82,8 @@ func (r *Runtime) Run(
 		startedAt:         startedAt,
 		activeCalls:       make(map[string]llmCallRuntime),
 	}
-	// 聚合用量在所有退出路径回填（含失败与取消）。
+	// Aggregate usage is filled in on every exit path (including failure
+	// and cancellation).
 	defer func() { result.Usage = scope.usage() }()
 	if !r.callAuditor.begin(sessionID, scope) {
 		runErr = domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
@@ -108,13 +104,15 @@ func (r *Runtime) Run(
 	}
 	defer func() {
 		auditCtx := context.WithoutCancel(ctx)
-		// 终态证据事务（唯一实现见 run_evidence.go）：终态事件先于任何
-		// 进程状态释放。
+		// Terminal evidence transaction (single implementation in
+		// run_evidence.go): the terminal event precedes any process-state
+		// release.
 		if err := r.closeRunEvidence(auditCtx, scope, runErr); err != nil && runErr == nil {
 			runErr = err
 		}
-		// 终态事件已尝试落盘；此后释放进程状态。清理失败属运维噪音，
-		// 不改变已持久化的执行结果。
+		// Terminal evidence has been attempted; process state is released
+		// after this point. Cleanup failures are operational noise and do not
+		// change the durably recorded execution outcome.
 		r.callAuditor.forget(sessionID)
 		if deleteErr := r.sessions.Delete(auditCtx, &session.DeleteRequest{
 			AppName:   r.config.AppName,
@@ -140,11 +138,34 @@ func (r *Runtime) Run(
 			"model", r.entrypoint.EffectiveModel(r.config.Model),
 		)...)
 
-	if err := r.seedConversationHistory(ctx, request, sessionID); err != nil {
-		runSpan.RecordError(err)
-		runSpan.SetStatus(codes.Error, runtimeError(err).Error())
-		runErr = err
+	state, streamErr := r.seedAndStreamEvents(ctx, request, sessionID, scope, observe, runSpan)
+	if streamErr != nil {
+		runErr = streamErr
 		return execution.RunResult{}, runErr
+	}
+	result, finalizeErr := r.finalizeRunResult(ctx, request, sessionID, state, runSpan)
+	if finalizeErr != nil {
+		runErr = finalizeErr
+		return execution.RunResult{}, runErr
+	}
+	return result, nil
+}
+
+// seedAndStreamEvents seeds conversation history into the run-scoped session,
+// then iterates ADK events and advances the run state. Each error is already
+// recorded on the run span and logged before being returned.
+func (r *Runtime) seedAndStreamEvents(
+	ctx context.Context,
+	request execution.RunRequest,
+	sessionID string,
+	scope *runExecution,
+	observe func(*session.Event) error,
+	span trace.Span,
+) (execution.RunState, error) {
+	if err := r.seedConversationHistory(ctx, request, sessionID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, runtimeError(err).Error())
+		return execution.RunState{}, err
 	}
 
 	events := r.runner.Run(
@@ -154,34 +175,38 @@ func (r *Runtime) Run(
 		execution.BuildUserContent(request),
 		agent.RunConfig{StreamingMode: agent.StreamingModeSSE},
 	)
+
+	state := execution.RunState{
+		CapturePlain: !r.entrypoint.Output.Structured(),
+	}
+	projector := execution.NewEventProjector(r.projectorIndex)
+	projection := execution.NewEventProjectionState()
+
 	for event, err := range events {
 		if err != nil {
-			runSpan.RecordError(err)
-			runSpan.SetStatus(codes.Error, runtimeError(err).Error())
+			span.RecordError(err)
+			span.SetStatus(codes.Error, runtimeError(err).Error())
 			r.config.Logger.WarnContext(ctx, "agent_run_failed",
 				append(traceLogFields(ctx),
 					"run_id", request.RunID, "error", runtimeError(err).Error(),
 				)...)
-			runErr = runtimeError(err)
-			return execution.RunResult{}, runErr
+			return state, runtimeError(err)
 		}
 		state = state.Consume(event)
 		var structuredErr error
 		state, structuredErr = r.consumeStructuredEvent(state, event)
 		if structuredErr != nil {
-			runSpan.RecordError(structuredErr)
-			runSpan.SetStatus(codes.Error, runtimeError(structuredErr).Error())
-			runErr = structuredErr
-			return execution.RunResult{}, runErr
+			span.RecordError(structuredErr)
+			span.SetStatus(codes.Error, runtimeError(structuredErr).Error())
+			return state, structuredErr
 		}
 		// Task-mode sub-agents stop their event iterator on finish_task, so
 		// their AfterAgent callback never runs; complete the delegation from
 		// the synthesized task-tool function response instead.
 		if delegationErr := r.delegationAuditor.CompleteByToolResponse(ctx, scope, event); delegationErr != nil {
-			runSpan.RecordError(delegationErr)
-			runSpan.SetStatus(codes.Error, runtimeError(delegationErr).Error())
-			runErr = runtimeError(delegationErr)
-			return execution.RunResult{}, runErr
+			span.RecordError(delegationErr)
+			span.SetStatus(codes.Error, runtimeError(delegationErr).Error())
+			return state, runtimeError(delegationErr)
 		}
 		if observe != nil {
 			var visible *session.Event
@@ -189,31 +214,42 @@ func (r *Runtime) Run(
 			visible, projection, visibleOK = projector.Project(projection, event)
 			if visibleOK {
 				if err := observe(visible); err != nil {
-					runSpan.RecordError(err)
-					runSpan.SetStatus(codes.Error, runtimeError(err).Error())
-					runErr = runtimeError(err)
-					return execution.RunResult{}, runErr
+					span.RecordError(err)
+					span.SetStatus(codes.Error, runtimeError(err).Error())
+					return state, runtimeError(err)
 				}
 			}
 		}
 	}
+	return state, nil
+}
+
+// finalizeRunResult applies structured-output fallback, rejects an empty
+// answer, and assembles the final result. On success it marks the span and
+// logs the completion event.
+func (r *Runtime) finalizeRunResult(
+	ctx context.Context,
+	request execution.RunRequest,
+	sessionID string,
+	state execution.RunState,
+	span trace.Span,
+) (execution.RunResult, error) {
 	if r.entrypoint.Output.Structured() && state.Output.JSON == nil {
 		var loadErr error
 		state, loadErr = r.loadStructuredAnalysis(ctx, request, sessionID, state)
 		if loadErr != nil {
-			runSpan.RecordError(loadErr)
-			runSpan.SetStatus(codes.Error, runtimeError(loadErr).Error())
-			runErr = loadErr
-			return execution.RunResult{}, runErr
+			span.RecordError(loadErr)
+			span.SetStatus(codes.Error, runtimeError(loadErr).Error())
+			return execution.RunResult{}, loadErr
 		}
 	}
 
 	if strings.TrimSpace(state.Output.Text) == "" {
 		r.config.Logger.Warn("agent_run_empty_response", "run_id", request.RunID)
-		runErr = domain.NewError(domain.CodeRuntimeEmptyResponse, "ADK runtime returned no answer text", nil)
-		return execution.RunResult{}, runErr
+		return execution.RunResult{}, domain.NewError(domain.CodeRuntimeEmptyResponse, "ADK runtime returned no answer text", nil)
 	}
-	runSpan.SetStatus(codes.Ok, "")
+
+	span.SetStatus(codes.Ok, "")
 	r.config.Logger.InfoContext(ctx, "agent_run_completed",
 		append(traceLogFields(ctx),
 			"run_id", request.RunID,

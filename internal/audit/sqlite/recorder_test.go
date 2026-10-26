@@ -412,3 +412,98 @@ func TestAuditRecorderBatchInsertMatchesDirectPath(t *testing.T) {
 		t.Fatalf("column count differs: direct=%d batch=%d", len(rows[0]), len(rows[1]))
 	}
 }
+
+func TestAuditStoreCheckHealth(t *testing.T) {
+	store, recorder := newRecorderStore(t)
+	ctx := context.Background()
+	if err := recorder.Record(ctx, ptrEvent(recorderEvent("run_health", false))); err != nil {
+		t.Fatalf("Record() error = %v", err)
+	}
+	health := store.CheckHealth(ctx)
+	if !health.OK {
+		t.Fatalf("CheckHealth() = %+v, want OK", health)
+	}
+	if health.Name != "sqlite" {
+		t.Fatalf("CheckHealth().Name = %q, want sqlite", health.Name)
+	}
+
+	if err := recorder.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("store.Close() error = %v", err)
+	}
+	health = store.CheckHealth(ctx)
+	if health.OK {
+		t.Fatal("CheckHealth() after close = OK, want failure")
+	}
+}
+
+func TestAuditRecorderRecordAfterCloseFails(t *testing.T) {
+	store, recorder := newRecorderStore(t)
+	if err := recorder.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	event := recorderEvent("run_after_close", false)
+	if err := recorder.Record(context.Background(), &event); err == nil {
+		t.Fatal("Record() after Close() accepted an event")
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("store.Close() error = %v", err)
+	}
+}
+
+func TestAuditRecorderDoubleCloseIsNoop(t *testing.T) {
+	store, recorder := newRecorderStore(t)
+	if err := recorder.Close(); err != nil {
+		t.Fatalf("first Close() error = %v", err)
+	}
+	if err := recorder.Close(); err != nil {
+		t.Fatalf("second Close() error = %v, want nil", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("store.Close() error = %v", err)
+	}
+}
+
+func TestAuditStoreInMemoryMode(t *testing.T) {
+	store, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open(:memory:) error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	// In-memory mode shares one handle between read and write paths.
+	if store.writeGORM() != store.GORM() {
+		t.Fatal("in-memory writeGORM() != GORM(); want shared handle")
+	}
+
+	recorder, err := NewAuditRecorder(store)
+	if err != nil {
+		t.Fatalf("NewAuditRecorder() error = %v", err)
+	}
+	ctx := context.Background()
+	started := recorderEvent("run_memory", false)
+	if err := recorder.Record(ctx, &started); err != nil {
+		t.Fatalf("Record() error = %v", err)
+	}
+	completed := recorderEvent("run_memory", true)
+	if err := recorder.Record(ctx, &completed); err != nil {
+		t.Fatalf("Record() error = %v", err)
+	}
+	if err := recorder.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	var count int64
+	if err := store.GORM().Table("agent_audit_events").Count(&count).Error; err != nil {
+		t.Fatalf("count audit events: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("in-memory event count = %d, want 2", count)
+	}
+}
+
+func ptrEvent(event audit.Event) *audit.Event {
+	return &event
+}

@@ -2,9 +2,11 @@ package agent
 
 import
 
-// Agent 依赖图（定义聚合）的构建：按 AgentDefinition 依赖序构建 ADK
-// Agent 图。记忆化避免重复构建，building 集合检测委派环；白名单未覆盖
-// 的 MCP 服务器不进入对应 Agent 的工具集（deny-by-default）。
+// Builds the Agent dependency graph (from the definition aggregate) in
+// AgentDefinition dependency order as an ADK Agent graph. Memoization avoids
+// duplicate construction; the building set detects delegation cycles. MCP
+// servers not covered by an Agent's allowlist never enter that Agent's
+// toolset (deny-by-default).
 agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 import (
@@ -19,7 +21,8 @@ import (
 	"google.golang.org/adk/v2/tool"
 )
 
-// agentGraphDeps 聚合图构建所需的协作件（由 NewRuntime 装配）。
+// agentGraphDeps bundles the collaborators required by graph construction
+// (assembled by NewRuntime).
 type agentGraphDeps struct {
 	mcpToolsets       []tool.Toolset
 	modelName         string
@@ -31,7 +34,8 @@ type agentGraphDeps struct {
 	toolAuditor       *ToolExecutionAuditor
 }
 
-// agentGraphBuilder 构建以入口定义为根的 Agent 依赖图。
+// agentGraphBuilder constructs the Agent dependency graph rooted at the
+// entrypoint definition.
 type agentGraphBuilder struct {
 	deployment     *agentdeployment.AgentDeployment
 	entrypointName string
@@ -50,7 +54,8 @@ func newAgentGraphBuilder(deployment *agentdeployment.AgentDeployment, entrypoin
 	}
 }
 
-// build 依依赖序构建一个 Agent 及其全部子代理（记忆化）。
+// build constructs one Agent and its full sub-agent tree in dependency
+// order (memoized).
 func (b *agentGraphBuilder) build(definition *agentdeployment.ResolvedAgentDefinition) (agent.Agent, error) {
 	if built, ok := b.built[definition.Name]; ok {
 		return built, nil

@@ -153,10 +153,11 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 		return nil
 	}
 
-	// 终态证据事务（与 Run 共用唯一实现，见 run_evidence.go）：关闭
-	// in-flight → 补偿 → 终态事件。追加失败时直接返回——作用域保留，
-	// 执行方清理回调负责重试；在此之前不释放任何进程状态。因果与补偿
-	// 错误已编码为终态事件的失败原因。
+	// Terminal evidence transaction (shared with Run; see run_evidence.go):
+	// close in-flight → compensate → terminal event. On append failure this
+	// returns without releasing scope or state; the executor's cleanup
+	// callback owns the retry. Causal and compensation errors are already
+	// encoded as the terminal event's failure reason.
 	if err := r.closeRunEvidence(ctx, scope, runErr); err != nil {
 		return err
 	}
@@ -220,14 +221,16 @@ func errorFields(cause error) (code, message string) {
 	return domain.CodeRuntimeFailed, runtimeErr.Error()
 }
 
-// runSessionID 返回 Run 的 run-scoped ADK 会话标识：会话即运行，
-// 终态删除，不承载跨 Run 的持久历史（持久历史归调用方所有）。
+// runSessionID returns the run-scoped ADK session identity for a run:
+// one session per run, deleted at terminal state, never carrying cross-run
+// history (durable history belongs to the caller).
 func runSessionID(runID string) string {
 	return "run:" + runID
 }
 
-// normalizeRunRequest 去除标识符、协议与用户消息的首尾空白。Run 入口的
-// 所有下游（审计、会话、模型输入）都消费规范化后的值。
+// normalizeRunRequest trims leading/trailing whitespace from identifiers,
+// protocol, and user message. Every downstream consumer (audit, session,
+// model input) receives the normalized values.
 func normalizeRunRequest(request execution.RunRequest) execution.RunRequest {
 	request.RunID = strings.TrimSpace(request.RunID)
 	request.ThreadID = strings.TrimSpace(request.ThreadID)
@@ -237,8 +240,9 @@ func normalizeRunRequest(request execution.RunRequest) execution.RunRequest {
 	return request
 }
 
-// validateRunRequest 校验一次执行的入参不变量：三类标识符必须存在且为
-// 有界可打印字符，用户消息不得为空，会话历史不得超限。
+// validateRunRequest enforces the run input invariants: all three
+// identifiers must be present and bounded printable, the user message must
+// not be empty, and history must not exceed its limit.
 func validateRunRequest(request execution.RunRequest) error {
 	if request.UserMessage == "" {
 		return domain.NewError(domain.CodeUserMessageRequired, "user message is required", domain.ErrInvalidInput)

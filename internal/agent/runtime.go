@@ -62,8 +62,9 @@ type Runtime struct {
 
 // NewRuntime builds the runtime from a validated deployment and its
 // dependencies. It fails closed on any invalid or missing dependency.
-// normalizeRuntimeConfig 补全依赖零值默认并校验必填与一致性约束，返回
-// 可直接用于构建的副本。零值兜底必须与 platform/config 的 Load 默认一致。
+// normalizeRuntimeConfig fills zero-value defaults, validates required and
+// consistency constraints, and returns a build-ready copy. Zero-value
+// fallbacks must match platform/config Load defaults.
 func normalizeRuntimeConfig(config Config) (Config, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
@@ -121,8 +122,9 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 	return config, nil
 }
 
-// recoverInterruptedAudits 启动恢复：进程中断遗留的未闭合审计生命周期以
-// 合成 runtime_interrupted 终态闭合（append-only），先于接收流量。
+// recoverInterruptedAudits closes audit lifecycles left open by a process
+// interruption with synthetic runtime_interrupted terminal failures
+// (append-only), before the runtime accepts traffic.
 func recoverInterruptedAudits(config Config) error {
 	if recoverer, ok := config.AuditRecorder.(audit.InterruptionRecoverer); ok {
 		recoveryCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

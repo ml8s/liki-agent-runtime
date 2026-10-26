@@ -71,7 +71,8 @@ func New(services Services) (*Server, error) {
 	api.Handle("POST /a2a", server.authorized(server.bodyLimit(server.services.A2A), false))
 	api.Handle("POST /ag-ui", server.authorized(server.bodyLimit(server.services.AGUI), true))
 
-	// 运维面独立监听：协议面的 mTLS 不波及健康检查与指标抓取。
+	// Dedicated ops listener: protocol-level mTLS never gates healthchecks
+	// or metric scrapers.
 	ops := http.NewServeMux()
 	ops.HandleFunc("GET /readyz", server.ready)
 	ops.HandleFunc("GET /version", server.version)

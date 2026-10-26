@@ -5,6 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"google.golang.org/adk/v2/model"
+	"google.golang.org/adk/v2/session"
+	"google.golang.org/genai"
+
 	deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 )
 
@@ -44,9 +48,163 @@ func loadedTestDeployment(t testing.TB) *deployment.AgentDeployment {
 			t.Fatal(err)
 		}
 	}
-	deployment, err := deployment.LoadAgentDeployment(filepath.Join(root, "agent-deployment.json"))
+	loaded, err := deployment.LoadAgentDeployment(filepath.Join(root, "agent-deployment.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return deployment
+	return loaded
+}
+
+func textEvent(author, text string, partial, final bool) *session.Event {
+	event := &session.Event{
+		Author: author,
+		LLMResponse: model.LLMResponse{
+			Partial: partial,
+			Content: &genai.Content{Parts: []*genai.Part{{Text: text}}},
+		},
+	}
+	if final {
+		event.TurnComplete = true
+	}
+	return event
+}
+
+func responsePart(name, callID string) *genai.Part {
+	return &genai.Part{
+		FunctionResponse: &genai.FunctionResponse{
+			ID: callID, Name: name, Response: map[string]any{},
+		},
+	}
+}
+
+func functionResponseEvent(author, name, callID string) *session.Event {
+	part := responsePart(name, callID)
+	return &session.Event{
+		Author: author,
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Parts: []*genai.Part{part}},
+		},
+	}
+}
+
+func TestNewRunState(t *testing.T) {
+	state := NewRunState(true)
+	if !state.CapturePlain {
+		t.Fatal("NewRunState(true).CapturePlain = false")
+	}
+	if state.Output.Text != "" || state.Output.JSON != nil {
+		t.Fatalf("initial output = %#v, want zero", state.Output)
+	}
+}
+
+func TestRunStateConsumeCapturesPlainFinalText(t *testing.T) {
+	state := NewRunState(true)
+
+	if next := state.Consume(nil); next.Output.Text != "" {
+		t.Fatalf("nil event output = %q, want empty", next.Output.Text)
+	}
+
+	partial := state.Consume(textEvent("main", "partial", true, false))
+	if partial.Output.Text != "" {
+		t.Fatalf("partial output = %q, want empty", partial.Output.Text)
+	}
+
+	final := partial.Consume(textEvent("main", "answer", false, true))
+	if final.Output.Text != "answer" {
+		t.Fatalf("final output = %q, want answer", final.Output.Text)
+	}
+
+	last := final.Consume(textEvent("main", "latest", false, true))
+	if last.Output.Text != "latest" {
+		t.Fatalf("second final output = %q, want latest", last.Output.Text)
+	}
+}
+
+func TestRunStateConsumeSkipsThoughtAndEmptyParts(t *testing.T) {
+	state := NewRunState(true)
+	event := &session.Event{
+		Author: "main",
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Parts: []*genai.Part{
+				{Text: "thought", Thought: true},
+				{Text: "   "},
+			}},
+		},
+	}
+	next := state.Consume(event)
+	if next.Output.Text != "" {
+		t.Fatalf("thought/whitespace output = %q, want empty", next.Output.Text)
+	}
+}
+
+func TestRunStateConsumeNoCapturePlain(t *testing.T) {
+	state := NewRunState(false)
+	next := state.Consume(textEvent("main", "answer", false, true))
+	if next.Output.Text != "" {
+		t.Fatalf("CapturePlain=false output = %q, want empty", next.Output.Text)
+	}
+}
+
+func TestRunStateConsumeNonFinalNoContent(t *testing.T) {
+	state := NewRunState(true)
+	next := state.Consume(&session.Event{
+		Author:      "main",
+		LLMResponse: model.LLMResponse{Partial: true},
+	})
+	if next.Output.Text != "" {
+		t.Fatalf("nil content output = %q, want empty", next.Output.Text)
+	}
+}
+
+func TestToolNameTrackerDedup(t *testing.T) {
+	var tracker ToolNameTracker
+	if names := tracker.Names(); names != nil {
+		t.Fatalf("empty Names() = %v, want nil", names)
+	}
+
+	tracker = tracker.Consume(functionResponseEvent("main", "tool_a", "1"))
+	tracker = tracker.Consume(functionResponseEvent("main", "tool_b", "2"))
+	tracker = tracker.Consume(functionResponseEvent("main", "tool_a", "3"))
+
+	names := tracker.Names()
+	if len(names) != 2 || names[0] != "tool_a" || names[1] != "tool_b" {
+		t.Fatalf("Names() = %v, want [tool_a tool_b]", names)
+	}
+
+	names[0] = "mutated"
+	if tracker.Names()[0] != "tool_a" {
+		t.Fatal("Names() returned a non-defensive copy")
+	}
+}
+
+func TestToolNameTrackerSkipsNonResponseParts(t *testing.T) {
+	var tracker ToolNameTracker
+	tracker = tracker.Consume(nil)
+	tracker = tracker.Consume(&session.Event{
+		Author: "main",
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Parts: []*genai.Part{
+				{Text: "text"},
+				{FunctionCall: &genai.FunctionCall{ID: "1", Name: "tool"}},
+			}},
+		},
+	})
+	if names := tracker.Names(); names != nil {
+		t.Fatalf("Names() = %v, want nil", names)
+	}
+}
+
+func TestRunStateTools(t *testing.T) {
+	state := NewRunState(true)
+	if tools := state.Tools(); tools != nil {
+		t.Fatalf("initial Tools() = %v, want nil", tools)
+	}
+
+	state = state.Consume(functionResponseEvent("main", "tool_a", "1"))
+	state = state.Consume(functionResponseEvent("main", "tool_b", "2"))
+
+	tools := state.Tools()
+	if len(tools) != 2 || tools[0] != "tool_a" || tools[1] != "tool_b" {
+		t.Fatalf("Tools() = %v, want [tool_a tool_b]", tools)
+	}
 }

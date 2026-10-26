@@ -82,8 +82,9 @@ func (l *authFailureLimiter) pruneLocked(now time.Time) {
 func (s *Server) authorized(next http.Handler, requireIdentity bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		source := requestSource(r.RemoteAddr)
-		// mTLS 通道（客户端证书已验证）以证书为通道凭证；明文监听器（过渡期
-		// 中继）仍要求服务 token。
+		// An mTLS channel (client certificate already verified) uses the
+		// certificate as the channel credential; a plaintext listener
+		// (transitional relay) still requires the service token.
 		if s.services.InternalToken != "" && !mutualTLSVerified(r) {
 			const prefix = "Bearer "
 			header := r.Header.Get("Authorization")
@@ -126,9 +127,9 @@ func requestSource(remoteAddr string) string {
 }
 
 func verifiedIdentity(r *http.Request) identity.Identity {
-	// 通道决定受信头（契约 C4）：
-	//   mTLS（边缘 forward_auth 注入）→ Remote-User；
-	//   明文（带 token 的中继调用方）→ X-Liki-User-ID。
+	// The channel determines the trusted identity header (contract C4):
+	//   mTLS (edge forward_auth injection) → Remote-User;
+	//   plaintext (token-bearing relay caller) → X-Liki-User-ID.
 	mtls := mutualTLSVerified(r)
 	header := "X-Liki-User-ID"
 	if mtls {

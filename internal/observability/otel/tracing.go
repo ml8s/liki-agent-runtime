@@ -103,7 +103,10 @@ func (p *TracerProvider) Shutdown(ctx context.Context) error {
 // Provider returns the standard tracer provider, or a no-op when tracing is
 // disabled.
 func (p *TracerProvider) Provider() trace.TracerProvider {
-	if p == nil || p.provider == nil {
+	if p == nil {
+		return nil
+	}
+	if p.provider == nil {
 		return p.noop
 	}
 	return p.provider
