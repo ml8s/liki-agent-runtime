@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"log/slog"
 	"net/http"
@@ -27,7 +29,7 @@ type Config struct {
 	// MaxOutputTokens bounds every model response; 0 leaves the provider
 	// default unbounded.
 	MaxOutputTokens int
-	AgentDeployment *AgentDeployment
+	AgentDeployment *agentdeployment.AgentDeployment
 
 	MCPTimeout time.Duration
 

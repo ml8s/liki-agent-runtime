@@ -1,5 +1,7 @@
 package a2a
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"fmt"
 	"testing"
@@ -25,7 +27,7 @@ func TestStructuredMemoParsesOncePerEvent(t *testing.T) {
 	event.Author = entrypoint.Name
 	parseCount := 0
 	server := &Server{structured: structuredMemo{
-		parse: func(value any, definition *agent.ResolvedAgentDefinition) (agent.OutputResult, error) {
+		parse: func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (agent.OutputResult, error) {
 			parseCount++
 			return agent.ParseStructuredOutput(value, definition)
 		},
@@ -81,7 +83,7 @@ func TestStructuredMemoMemoizesParseErrors(t *testing.T) {
 	event.Author = entrypoint.Name
 	parseCount := 0
 	server := &Server{structured: structuredMemo{
-		parse: func(value any, definition *agent.ResolvedAgentDefinition) (agent.OutputResult, error) {
+		parse: func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (agent.OutputResult, error) {
 			parseCount++
 			return agent.ParseStructuredOutput(value, definition)
 		},
@@ -173,21 +175,21 @@ func exposeNone() func(string) bool { return func(string) bool { return false } 
 
 // exposeByDeployment resolves model-text visibility per author from the
 // deployment, mirroring the resolver built by a2a.New.
-func exposeByDeployment(deployment *agent.AgentDeployment) func(string) bool {
+func exposeByDeployment(deployment *deploymentpkg.AgentDeployment) func(string) bool {
 	return func(author string) bool {
 		definition, ok := deployment.Agent(author)
-		return ok && agent.ExposesModelText(&definition.AgentDefinition)
+		return ok && deploymentpkg.ExposesModelText(&definition.AgentDefinition)
 	}
 }
 
 // visibilityDeployment models a plain-text entrypoint delegating to a
 // structured expert, the topology that previously leaked raw model JSON.
-func visibilityDeployment() *agent.AgentDeployment {
-	return &agent.AgentDeployment{
-		Metadata: agent.DeploymentMetadata{Name: "t", Version: "1.0.0"},
-		Spec: agent.DeploymentSpec{Agents: []agent.ResolvedAgentDefinition{
-			{AgentDefinition: agent.AgentDefinition{Name: "main"}},
-			{AgentDefinition: agent.AgentDefinition{Name: "worker", Output: agent.OutputDefinition{TextPointer: "/answer"}}},
+func visibilityDeployment() *deploymentpkg.AgentDeployment {
+	return &deploymentpkg.AgentDeployment{
+		Metadata: deploymentpkg.DeploymentMetadata{Name: "t", Version: "1.0.0"},
+		Spec: deploymentpkg.DeploymentSpec{Agents: []deploymentpkg.ResolvedAgentDefinition{
+			{AgentDefinition: deploymentpkg.AgentDefinition{Name: "main"}},
+			{AgentDefinition: deploymentpkg.AgentDefinition{Name: "worker", Output: deploymentpkg.OutputDefinition{TextPointer: "/answer"}}},
 		}},
 	}
 }
@@ -348,7 +350,7 @@ func TestAgentPartHidesUnknownAuthorText(t *testing.T) {
 	}
 }
 
-func structuredEntrypoint(t *testing.T) *agent.ResolvedAgentDefinition {
+func structuredEntrypoint(t *testing.T) *deploymentpkg.ResolvedAgentDefinition {
 	t.Helper()
 	entrypoint, err := testagent.AgentDeployment(t).EntrypointDefinition()
 	if err != nil {

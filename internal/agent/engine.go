@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"crypto/tls"
@@ -40,7 +42,7 @@ func (r *Runtime) MCPHealthChecks() []platform.HealthChecker {
 
 type mcpServerHealthChecker struct {
 	runtime    *Runtime
-	definition MCPServerDefinition
+	definition agentdeployment.MCPServerDefinition
 }
 
 func (c *mcpServerHealthChecker) CheckHealth(ctx context.Context) platform.DependencyHealth {
@@ -59,7 +61,7 @@ func checkMCPDependencyHealth(
 	ctx context.Context,
 	config Config,
 	server resolvedMCPServer,
-	requiredTools []ToolReference,
+	requiredTools []agentdeployment.ToolReference,
 ) (err error) {
 	if _, overridden := config.mcpTransportOverrides[server.definition.Name]; !overridden {
 		if err := validateMCPEndpoint(server); err != nil {
@@ -126,18 +128,18 @@ func checkMCPDependencyHealth(
 	return nil
 }
 
-func (r *Runtime) deploymentMCPServers() []MCPServerDefinition {
+func (r *Runtime) deploymentMCPServers() []agentdeployment.MCPServerDefinition {
 	if r.config.AgentDeployment == nil {
 		return nil
 	}
 	return r.config.AgentDeployment.Spec.MCPServers
 }
 
-func deploymentToolReferences(deployment *AgentDeployment, server string) []ToolReference {
+func deploymentToolReferences(deployment *agentdeployment.AgentDeployment, server string) []agentdeployment.ToolReference {
 	if deployment == nil {
 		return nil
 	}
-	references := make([]ToolReference, 0)
+	references := make([]agentdeployment.ToolReference, 0)
 	for _, definition := range deployment.Spec.Agents {
 		for _, reference := range definition.Tools.References() {
 			if reference.Server == server {

@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"fmt"
@@ -45,7 +47,7 @@ type ToolExecutionAuditor struct {
 	now      func() time.Time
 	provider string
 
-	agents map[string]*ResolvedAgentDefinition
+	agents map[string]*agentdeployment.ResolvedAgentDefinition
 	scope  func(sessionID string) (*runExecution, bool)
 
 	mu      sync.Mutex
@@ -57,10 +59,9 @@ func newToolExecutionAuditor(
 	metrics Metrics,
 	now func() time.Time,
 	provider string,
-	deployment *AgentDeployment,
-	scope func(sessionID string) (*runExecution, bool),
+	deployment *agentdeployment.AgentDeployment, scope func(sessionID string) (*runExecution, bool),
 ) *ToolExecutionAuditor {
-	agents := make(map[string]*ResolvedAgentDefinition, len(deployment.Spec.Agents))
+	agents := make(map[string]*agentdeployment.ResolvedAgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		definition := &deployment.Spec.Agents[index]
 		agents[definition.Name] = definition
@@ -91,14 +92,14 @@ func (a *ToolExecutionAuditor) isFrameworkDelegationTool(agentName, toolName str
 		return false
 	}
 	if toolName == adkFinishTaskToolName {
-		return definition.Mode == AgentModeTask
+		return definition.Mode == agentdeployment.AgentModeTask
 	}
 	for _, reference := range definition.SubAgents {
 		if reference.Name != toolName {
 			continue
 		}
 		target, ok := a.agents[reference.Name]
-		return ok && (target.Mode == AgentModeTask || target.Mode == AgentModeSingleTurn)
+		return ok && (target.Mode == agentdeployment.AgentModeTask || target.Mode == agentdeployment.AgentModeSingleTurn)
 	}
 	return false
 }

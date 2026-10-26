@@ -7,7 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/agent"
+	agent "github.com/ml8s/liki-agent-runtime/internal/agent"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
@@ -42,12 +43,12 @@ func (r *recordingAuditEvents) eventsOfType(eventType audit.EventType) []audit.E
 func newAuditRuntime(t *testing.T) (*agent.Runtime, *recordingAuditEvents) {
 	t.Helper()
 	events := &recordingAuditEvents{}
-	deployment := agent.NewTestDeployment(t)
+	agentDeployment := agent.NewTestDeployment(t)
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		AgentDeployment:  deployment,
+		AgentDeployment:  agentDeployment,
 		StructuredOutput: "json_schema",
 		Provider:         "test-provider",
 		AuditRecorder:    events,
@@ -85,12 +86,12 @@ func newAuditRuntimeWith(t *testing.T, recorder audit.Recorder, maxConcurrent in
 
 func newAuditRuntimeWithClock(t *testing.T, recorder audit.Recorder, maxConcurrent int, now func() time.Time) *agent.Runtime {
 	t.Helper()
-	deployment := agent.NewTestDeployment(t)
+	agentDeployment := agent.NewTestDeployment(t)
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:             "test-model",
 		ModelAPIKey:       "test-key",
-		AgentDeployment:   deployment,
+		AgentDeployment:   agentDeployment,
 		StructuredOutput:  "json_schema",
 		Provider:          "test-provider",
 		AuditRecorder:     recorder,

@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"fmt"
@@ -10,10 +12,6 @@ import (
 	"google.golang.org/adk/v2/tool/skilltoolset"
 	"google.golang.org/adk/v2/tool/skilltoolset/skill"
 )
-
-// skillToolsetServer is the virtual (non-MCP) server name used in
-// tools.allow for the skilltoolset builtin tools.
-const skillToolsetServer = "skilltoolset"
 
 var skillToolsetToolNames = []string{"list_skills", "load_skill", "load_skill_resource"}
 
@@ -38,7 +36,7 @@ func validateSkillToolsetAllow(tools []string) error {
 // skillBinding resolves the effective skills binding for an agent as a copy
 // of the deployment value: the artifact owns the root, and callers can adjust
 // the copy without mutating the shared definition.
-func skillBinding(definition *AgentDefinition) *SkillsBinding {
+func skillBinding(definition *agentdeployment.AgentDefinition) *agentdeployment.SkillsBinding {
 	if definition.Skills == nil {
 		return nil
 	}
@@ -50,7 +48,7 @@ func skillBinding(definition *AgentDefinition) *SkillsBinding {
 // source lists immediate subdirectories as skills (ADK layout rule); the
 // preload wrapper reads all frontmatters eagerly so invalid frontmatter
 // (including name/directory mismatch) fails at build time, not per request.
-func newSkillToolset(binding *SkillsBinding) (tool.Toolset, error) {
+func newSkillToolset(binding *agentdeployment.SkillsBinding) (tool.Toolset, error) {
 	if binding == nil {
 		return nil, fmt.Errorf("skills binding is required")
 	}

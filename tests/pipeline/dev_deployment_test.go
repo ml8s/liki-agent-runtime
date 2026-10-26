@@ -3,19 +3,19 @@ package pipeline_test
 import (
 	"testing"
 
-	agentruntime "github.com/ml8s/liki-agent-runtime/internal/agent"
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 )
 
 // DevelopmentAgentDeploymentRegistersComplementaryMCPTools keeps the local
 // fixture wired to both deterministic Engine facts and Counsel judgments.
 func TestDevelopmentAgentDeploymentRegistersComplementaryMCPTools(t *testing.T) {
-	deployment, err := agentruntime.LoadAgentDeployment("../../dev/agent-deployment/deployment.json")
+	artifact, err := deploymentpkg.LoadAgentDeployment("../../dev/agent-deployment/deployment.json")
 	if err != nil {
 		t.Fatalf("LoadAgentDeployment() error = %v", err)
 	}
 
-	servers := make(map[string]agentruntime.MCPServerDefinition, len(deployment.Spec.MCPServers))
-	for _, server := range deployment.Spec.MCPServers {
+	servers := make(map[string]deploymentpkg.MCPServerDefinition, len(artifact.Spec.MCPServers))
+	for _, server := range artifact.Spec.MCPServers {
 		servers[server.Name] = server
 	}
 	// Endpoint and token variables share the LIKI_MCP_<NAME> prefix so a
@@ -29,7 +29,7 @@ func TestDevelopmentAgentDeploymentRegistersComplementaryMCPTools(t *testing.T) 
 		t.Fatalf("Counsel MCP declaration = %+v", counsel)
 	}
 
-	entrypoint, err := deployment.EntrypointDefinition()
+	entrypoint, err := artifact.EntrypointDefinition()
 	if err != nil {
 		t.Fatalf("EntrypointDefinition() error = %v", err)
 	}

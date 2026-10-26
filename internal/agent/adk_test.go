@@ -1,5 +1,7 @@
 package agent
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"encoding/json"
 	"reflect"
@@ -28,17 +30,17 @@ func TestAgentDefinitionCompilesToStandardADKConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	declaration := AgentDefinition{
+	declaration := deploymentpkg.AgentDefinition{
 		Name:        "worker",
 		Description: "generic worker",
-		Mode:        AgentModeTask,
-		Output: OutputDefinition{
-			Schema:      FileReference{Path: "output.schema.json"},
+		Mode:        deploymentpkg.AgentModeTask,
+		Output: deploymentpkg.OutputDefinition{
+			Schema:      deploymentpkg.FileReference{Path: "output.schema.json"},
 			TextPointer: "/answer",
 		},
-		Tools: ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+		Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
 	}
-	definition, err := NewRuntimeAgentDefinition(ResolvedAgentDefinition{
+	definition, err := NewRuntimeAgentDefinition(deploymentpkg.ResolvedAgentDefinition{
 		AgentDefinition: declaration,
 		InstructionText: "generic instruction",
 		OutputSchema:    outputSchema,
@@ -91,7 +93,7 @@ func TestAgentDefinitionCompilesToStandardADKConfig(t *testing.T) {
 
 func TestADKConfigCarriesMaxOutputTokens(t *testing.T) {
 	t.Parallel()
-	definition := RuntimeAgentDefinition{Definition: ResolvedAgentDefinition{AgentDefinition: AgentDefinition{Name: "worker"}}}
+	definition := RuntimeAgentDefinition{Definition: deploymentpkg.ResolvedAgentDefinition{AgentDefinition: deploymentpkg.AgentDefinition{Name: "worker"}}}
 	bounded := definition.ADKConfig(ADKAgentRuntime{
 		Temperature:     0.2,
 		MaxOutputTokens: 2048,

@@ -16,6 +16,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
 	"github.com/ml8s/liki-agent-runtime/internal/agent"
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 	"github.com/ml8s/liki-agent-runtime/internal/protocol/a2a"
 	"github.com/ml8s/liki-agent-runtime/internal/testagent"
 )
@@ -51,7 +52,7 @@ func testRuntime(t *testing.T) (*agent.Runtime, *testAuditRecorder) {
 	return testRuntimeWithDeployment(t, testagent.AgentDeployment(t))
 }
 
-func testRuntimeWithDeployment(t *testing.T, deployment *agent.AgentDeployment) (*agent.Runtime, *testAuditRecorder) {
+func testRuntimeWithDeployment(t *testing.T, deployment *deploymentpkg.AgentDeployment) (*agent.Runtime, *testAuditRecorder) {
 	t.Helper()
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -140,13 +141,13 @@ func TestAgentCardDeclaresStandardJSONRPCBinding(t *testing.T) {
 func TestAgentCardDescribesSubAgentsWithoutInstructions(t *testing.T) {
 	deployment := testagent.AgentDeployment(t)
 	deployment.Spec.Agents[0].Name = "coordinator"
-	deployment.Spec.Agents[0].SubAgents = []agent.AgentReference{{Name: "worker"}}
+	deployment.Spec.Agents[0].SubAgents = []deploymentpkg.AgentReference{{Name: "worker"}}
 	worker := deployment.Spec.Agents[0]
 	worker.Name = "worker"
 	worker.Description = "generic worker"
-	worker.Mode = agent.AgentModeTask
+	worker.Mode = deploymentpkg.AgentModeTask
 	worker.SubAgents = nil
-	worker.Tools = agent.ToolAllowlist{Allow: map[string][]string{
+	worker.Tools = deploymentpkg.ToolAllowlist{Allow: map[string][]string{
 		"test":         {"test_tool"},
 		"skilltoolset": {"list_skills", "load_skill", "load_skill_resource"},
 	}}
@@ -202,7 +203,7 @@ func newA2AServer(t *testing.T, publicURL *url.URL) (*a2a.Server, *testAuditReco
 func newA2AServerWithDeployment(
 	t *testing.T,
 	publicURL *url.URL,
-	deployment *agent.AgentDeployment,
+	deployment *deploymentpkg.AgentDeployment,
 ) (*a2a.Server, *testAuditRecorder, error) {
 	t.Helper()
 	runtime, recorder := testRuntimeWithDeployment(t, deployment)

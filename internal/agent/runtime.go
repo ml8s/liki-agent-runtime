@@ -3,6 +3,8 @@
 // second execution path.
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"fmt"
@@ -49,8 +51,8 @@ const (
 // dependencies, and the durable audit hooks that protocol adapters drive.
 type Runtime struct {
 	config            Config
-	definition        *AgentDeployment
-	entrypoint        *ResolvedAgentDefinition
+	definition        *agentdeployment.AgentDeployment
+	entrypoint        *agentdeployment.ResolvedAgentDefinition
 	root              agent.Agent
 	sessions          session.Service
 	runner            *runner.Runner
@@ -302,12 +304,12 @@ func newMCPToolsets(config Config) ([]tool.Toolset, error) {
 }
 
 type resolvedMCPServer struct {
-	definition MCPServerDefinition
+	definition agentdeployment.MCPServerDefinition
 	Endpoint   string
 	Token      string
 }
 
-func resolveMCPServer(definition MCPServerDefinition) (resolvedMCPServer, error) {
+func resolveMCPServer(definition agentdeployment.MCPServerDefinition) (resolvedMCPServer, error) {
 	endpoint, ok := os.LookupEnv(definition.EndpointEnv)
 	if !ok || strings.TrimSpace(endpoint) == "" {
 		return resolvedMCPServer{}, domain.NewError(

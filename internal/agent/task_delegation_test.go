@@ -1,5 +1,7 @@
 package agent
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"fmt"
@@ -18,22 +20,22 @@ import (
 // taskDelegationDeployment builds the standard ADK agent-as-tool shape: a
 // plain-text chat coordinator with one task-mode sub-agent. It is the same
 // shape the natal expert uses for bazi/ziwei.
-func taskDelegationDeployment(t *testing.T) *AgentDeployment {
+func taskDelegationDeployment(t *testing.T) *deploymentpkg.AgentDeployment {
 	t.Helper()
-	deployment := plainTestDeployment(t)
-	root := &deployment.Spec.Agents[0]
+	agentDeployment := plainTestDeployment(t)
+	root := &agentDeployment.Spec.Agents[0]
 	root.Name = "coordinator"
-	root.SubAgents = []AgentReference{{Name: "worker"}}
+	root.SubAgents = []deploymentpkg.AgentReference{{Name: "worker"}}
 	worker := *root
 	worker.Name = "worker"
 	worker.Description = "generic task worker"
-	worker.Mode = AgentModeTask
+	worker.Mode = deploymentpkg.AgentModeTask
 	worker.SubAgents = nil
-	deployment.Spec.Agents = append(deployment.Spec.Agents, worker)
-	if err := deployment.validate(); err != nil {
-		t.Fatalf("validate task delegation deployment: %v", err)
+	agentDeployment.Spec.Agents = append(agentDeployment.Spec.Agents, worker)
+	if err := agentDeployment.Validate(); err != nil {
+		t.Fatalf("validate task delegation agentDeployment: %v", err)
 	}
-	return deployment
+	return agentDeployment
 }
 
 // taskDelegationLLM scripts one model invocation per turn: coordinator
@@ -67,9 +69,9 @@ func functionResponseOf(events []*session.Event, name string) map[string]any {
 }
 
 func TestRuntimeRunsTaskDelegationEndToEnd(t *testing.T) {
-	deployment := taskDelegationDeployment(t)
+	agentDeployment := taskDelegationDeployment(t)
 	events := &recordingAudit{}
-	runtime := newTestRuntime(t, deployment, events, taskDelegationLLM())
+	runtime := newTestRuntime(t, agentDeployment, events, taskDelegationLLM())
 
 	var observed []*session.Event
 	result, err := runtime.Run(context.Background(), RunRequest{
@@ -137,24 +139,24 @@ func TestRuntimeRunsTaskDelegationEndToEnd(t *testing.T) {
 
 // twoTaskDelegationDeployment builds the natal shape at its smallest: one chat
 // coordinator with TWO task-mode sub-agents (bazi/ziwei).
-func twoTaskDelegationDeployment(t *testing.T) *AgentDeployment {
+func twoTaskDelegationDeployment(t *testing.T) *deploymentpkg.AgentDeployment {
 	t.Helper()
-	deployment := plainTestDeployment(t)
-	root := &deployment.Spec.Agents[0]
+	agentDeployment := plainTestDeployment(t)
+	root := &agentDeployment.Spec.Agents[0]
 	root.Name = "coordinator"
-	root.SubAgents = []AgentReference{{Name: "worker_a"}, {Name: "worker_b"}}
+	root.SubAgents = []deploymentpkg.AgentReference{{Name: "worker_a"}, {Name: "worker_b"}}
 	for _, name := range []string{"worker_a", "worker_b"} {
 		worker := *root
 		worker.Name = name
 		worker.Description = "generic task worker " + name
-		worker.Mode = AgentModeTask
+		worker.Mode = deploymentpkg.AgentModeTask
 		worker.SubAgents = nil
-		deployment.Spec.Agents = append(deployment.Spec.Agents, worker)
+		agentDeployment.Spec.Agents = append(agentDeployment.Spec.Agents, worker)
 	}
-	if err := deployment.validate(); err != nil {
-		t.Fatalf("validate two-task delegation deployment: %v", err)
+	if err := agentDeployment.Validate(); err != nil {
+		t.Fatalf("validate two-task delegation agentDeployment: %v", err)
 	}
-	return deployment
+	return agentDeployment
 }
 
 // markerKeyedLLM routes responses by request-content markers instead of call
@@ -257,7 +259,7 @@ func functionCallResponse(calls ...*genai.Part) *model.LLMResponse {
 // model response, both sub-agents run, both results return, and the run
 // completes with consistent audit evidence (run with -race).
 func TestRuntimeRunsTwoTaskDelegationsInOneTurn(t *testing.T) {
-	deployment := twoTaskDelegationDeployment(t)
+	agentDeployment := twoTaskDelegationDeployment(t)
 	events := &recordingAudit{}
 	llm := &markerKeyedLLM{
 		markers: []markerResponse{
@@ -278,7 +280,7 @@ func TestRuntimeRunsTwoTaskDelegationsInOneTurn(t *testing.T) {
 			&genai.Part{FunctionCall: &genai.FunctionCall{ID: "fc_worker_b", Name: "worker_b", Args: map[string]any{"request": "task b"}}},
 		),
 	}
-	runtime := newTestRuntime(t, deployment, events, llm)
+	runtime := newTestRuntime(t, agentDeployment, events, llm)
 
 	var observed []*session.Event
 	result, err := runtime.Run(context.Background(), RunRequest{

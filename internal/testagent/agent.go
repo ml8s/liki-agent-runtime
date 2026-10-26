@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ml8s/liki-agent-runtime/internal/agent"
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 )
 
 // AgentDeployment loads a generic structured AgentDeployment for adapter tests.
-func AgentDeployment(t *testing.T) *agent.AgentDeployment {
+func AgentDeployment(t *testing.T) *deploymentpkg.AgentDeployment {
 	t.Helper()
 	t.Setenv("TEST_MCP_ENDPOINT", "in-memory://test")
 	root := t.TempDir()
@@ -57,9 +57,9 @@ func AgentDeployment(t *testing.T) *agent.AgentDeployment {
 			t.Fatal(err)
 		}
 	}
-	deployment, err := agent.LoadAgentDeployment(filepath.Join(root, "agent-deployment.json"))
+	artifact, err := deploymentpkg.LoadAgentDeployment(filepath.Join(root, "agent-deployment.json"))
 	if err != nil {
 		t.Fatalf("LoadAgentDeployment() error = %v", err)
 	}
-	return deployment
+	return artifact
 }

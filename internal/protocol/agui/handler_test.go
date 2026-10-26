@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ml8s/liki-agent-runtime/internal/agent"
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 	"github.com/ml8s/liki-agent-runtime/internal/notify"
 	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
 	"github.com/ml8s/liki-agent-runtime/internal/protocol/agui"
@@ -29,12 +31,13 @@ func (r *recordingAuditEvents) Record(_ context.Context, _ *audit.Event) error {
 
 func newRuntime(t *testing.T) *agent.Runtime {
 	t.Helper()
-	deployment := testagent.AgentDeployment(t)
+	agentDeployment := testagent.AgentDeployment(t)
+	t.Logf("endpoint=%q", os.Getenv("TEST_MCP_ENDPOINT"))
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		AgentDeployment:  deployment,
+		AgentDeployment:  agentDeployment,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 		AuditRecorder:    &recordingAuditEvents{},
 	})
@@ -99,8 +102,8 @@ type scriptedRuntime struct {
 	err    error
 }
 
-func (r *scriptedRuntime) Entrypoint() *agent.AgentDefinition {
-	return &agent.AgentDefinition{Name: "main"}
+func (r *scriptedRuntime) Entrypoint() *agentdeployment.AgentDefinition {
+	return &agentdeployment.AgentDefinition{Name: "main"}
 }
 
 func (r *scriptedRuntime) Run(_ context.Context, _ agent.RunRequest, observe func(*session.Event) error) (agent.RunResult, error) {
@@ -557,8 +560,8 @@ func TestAGUIAdvancesStateBeforeSSEWriteFailure(t *testing.T) {
 	}
 }
 
-func (r *capturingRuntime) Entrypoint() *agent.AgentDefinition {
-	return &agent.AgentDefinition{Name: "main"}
+func (r *capturingRuntime) Entrypoint() *agentdeployment.AgentDefinition {
+	return &agentdeployment.AgentDefinition{Name: "main"}
 }
 
 func (r *capturingRuntime) Run(_ context.Context, request agent.RunRequest, _ func(*session.Event) error) (agent.RunResult, error) {

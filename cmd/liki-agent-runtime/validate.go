@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	agentruntime "github.com/ml8s/liki-agent-runtime/internal/agent"
+	deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 )
 
 func validate(args []string) error {
@@ -25,7 +25,7 @@ func validate(args []string) error {
 		return fmt.Errorf("deployment path is required")
 	}
 
-	deployment, err := agentruntime.LoadAgentDeployment(*path)
+	deployment, err := deployment.LoadAgentDeployment(*path)
 	if err != nil {
 		return err
 	}

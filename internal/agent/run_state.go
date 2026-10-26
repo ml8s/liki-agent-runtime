@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"encoding/json"
 	"strings"
@@ -107,7 +109,7 @@ func (s runState) consume(event *session.Event) runState {
 
 func (s runState) consumeStructuredOutput(
 	value any,
-	definition *ResolvedAgentDefinition,
+	definition *agentdeployment.ResolvedAgentDefinition,
 ) (runState, error) {
 	result, err := ParseStructuredOutput(value, definition)
 	if err != nil {

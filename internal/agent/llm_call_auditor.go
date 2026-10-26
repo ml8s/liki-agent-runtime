@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"sync"
@@ -16,11 +18,11 @@ type llmCallAuditor struct {
 	metrics  Metrics
 	now      func() time.Time
 	provider string
-	agents   map[string]*ResolvedAgentDefinition
+	agents   map[string]*agentdeployment.ResolvedAgentDefinition
 	scopes   map[string]*runExecution
 }
 
-func newLLMCallAuditor(recorder audit.Recorder, metrics Metrics, provider string, deployment *AgentDeployment, now func() time.Time) *llmCallAuditor {
+func newLLMCallAuditor(recorder audit.Recorder, metrics Metrics, provider string, deployment *agentdeployment.AgentDeployment, now func() time.Time) *llmCallAuditor {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
@@ -29,7 +31,7 @@ func newLLMCallAuditor(recorder audit.Recorder, metrics Metrics, provider string
 		metrics:  metrics,
 		provider: provider,
 		now:      now,
-		agents:   make(map[string]*ResolvedAgentDefinition, len(deployment.Spec.Agents)),
+		agents:   make(map[string]*agentdeployment.ResolvedAgentDefinition, len(deployment.Spec.Agents)),
 		scopes:   make(map[string]*runExecution),
 	}
 	for index := range deployment.Spec.Agents {

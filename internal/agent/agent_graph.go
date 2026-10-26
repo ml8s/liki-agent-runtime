@@ -1,8 +1,11 @@
 package agent
 
+import
+
 // Agent 依赖图（定义聚合）的构建：按 AgentDefinition 依赖序构建 ADK
 // Agent 图。记忆化避免重复构建，building 集合检测委派环；白名单未覆盖
 // 的 MCP 服务器不进入对应 Agent 的工具集（deny-by-default）。
+agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 import (
 	"fmt"
@@ -28,14 +31,14 @@ type agentGraphDeps struct {
 
 // agentGraphBuilder 构建以入口定义为根的 Agent 依赖图。
 type agentGraphBuilder struct {
-	deployment     *AgentDeployment
+	deployment     *agentdeployment.AgentDeployment
 	entrypointName string
 	deps           agentGraphDeps
 	built          map[string]agent.Agent
 	building       map[string]struct{}
 }
 
-func newAgentGraphBuilder(deployment *AgentDeployment, entrypointName string, deps agentGraphDeps) *agentGraphBuilder {
+func newAgentGraphBuilder(deployment *agentdeployment.AgentDeployment, entrypointName string, deps agentGraphDeps) *agentGraphBuilder {
 	return &agentGraphBuilder{
 		deployment:     deployment,
 		entrypointName: entrypointName,
@@ -46,7 +49,7 @@ func newAgentGraphBuilder(deployment *AgentDeployment, entrypointName string, de
 }
 
 // build 依依赖序构建一个 Agent 及其全部子代理（记忆化）。
-func (b *agentGraphBuilder) build(definition *ResolvedAgentDefinition) (agent.Agent, error) {
+func (b *agentGraphBuilder) build(definition *agentdeployment.ResolvedAgentDefinition) (agent.Agent, error) {
 	if built, ok := b.built[definition.Name]; ok {
 		return built, nil
 	}

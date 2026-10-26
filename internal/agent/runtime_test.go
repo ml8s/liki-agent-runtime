@@ -7,6 +7,7 @@ import (
 	"time"
 
 	agent "github.com/ml8s/liki-agent-runtime/internal/agent"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/session"
@@ -64,14 +65,14 @@ func TestNewRuntimeValidatesDeployment(t *testing.T) {
 }
 
 func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
-	deployment := agent.NewTestDeployment(t)
+	agentDeployment := agent.NewTestDeployment(t)
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 
 	failing := &interruptingAuditRecorder{err: errors.New("audit recovery unavailable")}
 	_, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		AgentDeployment:  deployment,
+		AgentDeployment:  agentDeployment,
 		AuditRecorder:    failing,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 	})
@@ -87,7 +88,7 @@ func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		AgentDeployment:  deployment,
+		AgentDeployment:  agentDeployment,
 		AuditRecorder:    recovered,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 	})
@@ -105,26 +106,26 @@ func TestRuntimeExposesImmutableDeploymentViews(t *testing.T) {
 	entrypoint.Name = "mutated"
 	entrypoint.Tools.Allow["test"] = []string{"unauthorized"}
 	mutatedDeployment := runtime.AgentDeployment()
-	mutatedDeployment.Metadata.Name = "mutated-deployment"
+	mutatedDeployment.Metadata.Name = "mutated-agentDeployment"
 
 	unchangedEntrypoint := runtime.Entrypoint()
 	unchangedDeployment := runtime.AgentDeployment()
 	if unchangedEntrypoint.Name == "mutated" ||
 		len(unchangedEntrypoint.Tools.Allow["test"]) != 1 ||
 		unchangedEntrypoint.Tools.Allow["test"][0] != "test_tool" ||
-		unchangedDeployment.Metadata.Name == "mutated-deployment" {
+		unchangedDeployment.Metadata.Name == "mutated-agentDeployment" {
 		t.Fatalf("runtime view reflected protocol mutation: %+v", unchangedEntrypoint)
 	}
 }
 
 func TestNewRuntimeUsesInjectedOfficialSessionService(t *testing.T) {
-	deployment := agent.NewTestDeployment(t)
+	agentDeployment := agent.NewTestDeployment(t)
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	injected := session.InMemoryService()
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		AgentDeployment:  deployment,
+		AgentDeployment:  agentDeployment,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 		AuditRecorder:    nopAuditRecorder{},
 		SessionService:   injected,
@@ -138,11 +139,11 @@ func TestNewRuntimeUsesInjectedOfficialSessionService(t *testing.T) {
 }
 
 func TestNewRuntimeRequiresMCPEndpointEnvironment(t *testing.T) {
-	deployment := agent.NewTestDeployment(t)
+	agentDeployment := agent.NewTestDeployment(t)
 	t.Setenv("TEST_MCP_ENDPOINT", "")
 	_, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
-		AgentDeployment:  deployment,
+		AgentDeployment:  agentDeployment,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 		AuditRecorder:    nopAuditRecorder{},
 	})

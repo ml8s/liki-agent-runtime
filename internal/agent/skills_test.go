@@ -1,5 +1,7 @@
 package agent
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"os"
 	"path/filepath"
@@ -35,13 +37,13 @@ func TestValidateSkillToolsetAllow(t *testing.T) {
 	}
 }
 
-func minimalSkillAgent() *AgentDefinition {
-	return &AgentDefinition{
+func minimalSkillAgent() *deploymentpkg.AgentDefinition {
+	return &deploymentpkg.AgentDefinition{
 		Name:        "main",
 		Version:     "1.0.0",
 		Description: "test agent",
-		Mode:        AgentModeChat,
-		Instruction: FileReference{Path: "instruction.md"},
+		Mode:        deploymentpkg.AgentModeChat,
+		Instruction: deploymentpkg.FileReference{Path: "instruction.md"},
 	}
 }
 
@@ -51,68 +53,68 @@ func TestAgentSkillsBindingValidation(t *testing.T) {
 	}
 	cases := []struct {
 		name    string
-		mutate  func(*AgentDefinition)
+		mutate  func(*deploymentpkg.AgentDefinition)
 		wantErr string
 	}{
 		{
 			"valid frontmatter default",
-			func(a *AgentDefinition) {
-				a.Skills = &SkillsBinding{Root: "/skills"}
+			func(a *deploymentpkg.AgentDefinition) {
+				a.Skills = &deploymentpkg.SkillsBinding{Root: "/skills"}
 				a.Tools.Allow = fullAllow
 			},
 			"",
 		},
 		{
 			"valid explicit complete preload",
-			func(a *AgentDefinition) {
-				a.Skills = &SkillsBinding{Root: "/skills", Preload: "complete"}
+			func(a *deploymentpkg.AgentDefinition) {
+				a.Skills = &deploymentpkg.SkillsBinding{Root: "/skills", Preload: "complete"}
 				a.Tools.Allow = fullAllow
 			},
 			"",
 		},
 		{
 			"empty root",
-			func(a *AgentDefinition) {
-				a.Skills = &SkillsBinding{Root: "  "}
+			func(a *deploymentpkg.AgentDefinition) {
+				a.Skills = &deploymentpkg.SkillsBinding{Root: "  "}
 				a.Tools.Allow = fullAllow
 			},
 			"skills.root is required",
 		},
 		{
 			"relative root",
-			func(a *AgentDefinition) {
-				a.Skills = &SkillsBinding{Root: "skills"}
+			func(a *deploymentpkg.AgentDefinition) {
+				a.Skills = &deploymentpkg.SkillsBinding{Root: "skills"}
 				a.Tools.Allow = fullAllow
 			},
 			"must be an absolute path",
 		},
 		{
 			"invalid preload",
-			func(a *AgentDefinition) {
-				a.Skills = &SkillsBinding{Root: "/skills", Preload: "lazy"}
+			func(a *deploymentpkg.AgentDefinition) {
+				a.Skills = &deploymentpkg.SkillsBinding{Root: "/skills", Preload: "lazy"}
 				a.Tools.Allow = fullAllow
 			},
 			"must be one of frontmatter, complete",
 		},
 		{
 			"skills without allow triple",
-			func(a *AgentDefinition) {
-				a.Skills = &SkillsBinding{Root: "/skills"}
+			func(a *deploymentpkg.AgentDefinition) {
+				a.Skills = &deploymentpkg.SkillsBinding{Root: "/skills"}
 				a.Tools.Allow = map[string][]string{"test": {"test_tool"}}
 			},
 			"skills binding requires tools.allow[skilltoolset]",
 		},
 		{
 			"allow triple without skills",
-			func(a *AgentDefinition) {
+			func(a *deploymentpkg.AgentDefinition) {
 				a.Tools.Allow = fullAllow
 			},
 			"tools.allow[skilltoolset] requires a skills binding",
 		},
 		{
 			"partial allow triple",
-			func(a *AgentDefinition) {
-				a.Skills = &SkillsBinding{Root: "/skills"}
+			func(a *deploymentpkg.AgentDefinition) {
+				a.Skills = &deploymentpkg.SkillsBinding{Root: "/skills"}
 				a.Tools.Allow = map[string][]string{"skilltoolset": {"list_skills"}}
 			},
 			"missing builtin tool",
@@ -122,7 +124,7 @@ func TestAgentSkillsBindingValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			def := minimalSkillAgent()
 			tc.mutate(def)
-			err := def.validate(map[string]struct{}{})
+			err := def.ValidateAgent(map[string]struct{}{})
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("error = %v, want nil", err)
@@ -140,7 +142,7 @@ func TestNewSkillToolset(t *testing.T) {
 	t.Run("valid tree frontmatter preload", func(t *testing.T) {
 		root := t.TempDir()
 		writeMinimalSkillTree(t, root)
-		ts, err := newSkillToolset(&SkillsBinding{Root: root})
+		ts, err := newSkillToolset(&deploymentpkg.SkillsBinding{Root: root})
 		if err != nil {
 			t.Fatalf("error = %v", err)
 		}
@@ -151,7 +153,7 @@ func TestNewSkillToolset(t *testing.T) {
 	t.Run("valid tree complete preload", func(t *testing.T) {
 		root := t.TempDir()
 		writeMinimalSkillTree(t, root)
-		ts, err := newSkillToolset(&SkillsBinding{Root: root, Preload: "complete"})
+		ts, err := newSkillToolset(&deploymentpkg.SkillsBinding{Root: root, Preload: "complete"})
 		if err != nil {
 			t.Fatalf("error = %v", err)
 		}
@@ -160,7 +162,7 @@ func TestNewSkillToolset(t *testing.T) {
 		}
 	})
 	t.Run("missing root fails fast", func(t *testing.T) {
-		_, err := newSkillToolset(&SkillsBinding{Root: filepath.Join(t.TempDir(), "absent")})
+		_, err := newSkillToolset(&deploymentpkg.SkillsBinding{Root: filepath.Join(t.TempDir(), "absent")})
 		if err == nil || !strings.Contains(err.Error(), "preload skills from") {
 			t.Fatalf("error = %v, want preload failure", err)
 		}
@@ -175,7 +177,7 @@ func TestNewSkillToolset(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(skill), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		_, err := newSkillToolset(&SkillsBinding{Root: root})
+		_, err := newSkillToolset(&deploymentpkg.SkillsBinding{Root: root})
 		if err == nil || !strings.Contains(err.Error(), "preload skills from") {
 			t.Fatalf("error = %v, want preload failure", err)
 		}
@@ -189,17 +191,17 @@ func TestNewSkillToolset(t *testing.T) {
 
 func TestSkillBindingCopiesDefinition(t *testing.T) {
 	definition := minimalSkillAgent()
-	definition.Skills = &SkillsBinding{Root: "/skills", Preload: "complete"}
+	definition.Skills = &deploymentpkg.SkillsBinding{Root: "/skills", Preload: "complete"}
 
 	binding := skillBinding(definition)
 	if binding == nil || binding.Root != "/skills" || binding.Preload != "complete" {
 		t.Fatalf("binding = %+v, want root /skills preload complete", binding)
 	}
 	// The copy is caller-owned: adjusting it must not mutate the shared
-	// deployment definition.
+	// agentDeployment definition.
 	binding.Root = "/changed"
 	if definition.Skills.Root != "/skills" {
-		t.Fatalf("deployment definition mutated: root = %q", definition.Skills.Root)
+		t.Fatalf("agentDeployment definition mutated: root = %q", definition.Skills.Root)
 	}
 	if got := skillBinding(minimalSkillAgent()); got != nil {
 		t.Fatalf("binding without skills = %+v, want nil", got)
@@ -207,7 +209,7 @@ func TestSkillBindingCopiesDefinition(t *testing.T) {
 }
 
 // TestDevDeploymentSkillsPinsContainerPath loads the canonical dev fixture
-// the same way the dev compose stack does: the deployment pins the container
+// the same way the dev compose stack does: the agentDeployment pins the container
 // path /skills and the dev compose stack mounts the repository fixture at
 // exactly that path. Host-side runs without the mount fail fast by design.
 func TestDevDeploymentSkillsPinsContainerPath(t *testing.T) {
@@ -216,13 +218,15 @@ func TestDevDeploymentSkillsPinsContainerPath(t *testing.T) {
 		t.Fatal("runtime.Caller failed")
 	}
 	devRoot := filepath.Join(filepath.Dir(file), "..", "..", "dev", "agent-deployment")
-	deployment, err := LoadAgentDeployment(filepath.Join(devRoot, "deployment.json"))
+	path := filepath.Join(devRoot, "deployment.json")
+	t.Logf("deployment path=%q", path)
+	agentDeployment, err := deploymentpkg.LoadAgentDeployment(path)
 	if err != nil {
-		t.Fatalf("load dev deployment: %v", err)
+		t.Fatalf("load dev agentDeployment: %v", err)
 	}
-	definition, ok := deployment.Agent("main")
+	definition, ok := agentDeployment.Agent("main")
 	if !ok {
-		t.Fatal("dev deployment has no agent main")
+		t.Fatal("dev agentDeployment has no agent main")
 	}
 	if definition.Skills == nil || definition.Skills.Root != "/skills" {
 		t.Fatalf("dev fixture skills = %+v, want root /skills", definition.Skills)

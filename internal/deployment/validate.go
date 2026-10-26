@@ -1,4 +1,4 @@
-package agent
+package deployment
 
 import (
 	"errors"
@@ -16,6 +16,12 @@ import (
 // artifact without changing immutable files.
 func (d *AgentDeployment) Validate() error {
 	return d.validate()
+}
+
+// ValidateAgent rechecks one Agent's deployment-local invariants against the
+// aggregate's declared MCP servers.
+func (a *AgentDefinition) ValidateAgent(mcpServers map[string]struct{}) error {
+	return a.validate(mcpServers)
 }
 
 func (d *AgentDeployment) validate() error {
@@ -194,11 +200,11 @@ func (a *AgentDefinition) validate(mcpServers map[string]struct{}) error {
 		default:
 			return fmt.Errorf("skills.preload %q must be one of frontmatter, complete", a.Skills.Preload)
 		}
-		if err := validateSkillToolsetAllow(a.Tools.Allow[skillToolsetServer]); err != nil {
-			return fmt.Errorf("skills binding requires tools.allow[%s]: %w", skillToolsetServer, err)
+		if err := ValidateSkillToolsetAllow(a.Tools.Allow[SkillToolsetServer]); err != nil {
+			return fmt.Errorf("skills binding requires tools.allow[%s]: %w", SkillToolsetServer, err)
 		}
-	} else if _, has := a.Tools.Allow[skillToolsetServer]; has {
-		return fmt.Errorf("tools.allow[%s] requires a skills binding", skillToolsetServer)
+	} else if _, has := a.Tools.Allow[SkillToolsetServer]; has {
+		return fmt.Errorf("tools.allow[%s] requires a skills binding", SkillToolsetServer)
 	}
 	if a.Output.Structured() {
 		if strings.TrimSpace(a.Output.Schema.Path) == "" {
@@ -225,8 +231,8 @@ func (a *AgentDefinition) validate(mcpServers map[string]struct{}) error {
 	seen := make(map[ToolReference]struct{})
 	seenNames := make(map[string]string)
 	for server, tools := range a.Tools.Allow {
-		if server == skillToolsetServer {
-			if err := validateSkillToolsetAllow(tools); err != nil {
+		if server == SkillToolsetServer {
+			if err := ValidateSkillToolsetAllow(tools); err != nil {
 				return fmt.Errorf("tools.allow[%s]: %w", server, err)
 			}
 		} else if _, exists := mcpServers[server]; !exists {

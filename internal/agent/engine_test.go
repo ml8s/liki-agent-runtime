@@ -1,5 +1,7 @@
 package agent
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"strings"
@@ -122,11 +124,11 @@ func newHealthTestRuntime(t *testing.T, options *mcp.ServerOptions, toolName str
 		mcpTransportOverrides: map[string]mcp.Transport{
 			"test": clientTransport,
 		},
-		AgentDeployment: &AgentDeployment{Spec: DeploymentSpec{
-			MCPServers: []MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-			Agents: resolvedAgentDefinitions([]AgentDefinition{{
+		AgentDeployment: &deploymentpkg.AgentDeployment{Spec: deploymentpkg.DeploymentSpec{
+			MCPServers: []deploymentpkg.MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
+			Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
 				Name:  "test-agent",
-				Tools: ToolAllowlist{Allow: map[string][]string{"test": {toolName}}},
+				Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {toolName}}},
 			}}),
 		}},
 	}}
@@ -143,7 +145,7 @@ func checkMCPHealth(t *testing.T, runtime *Runtime) platform.DependencyHealth {
 
 func TestCheckHealthRejectsMissingAllowedTool(t *testing.T) {
 	_, runtime := newHealthTestRuntime(t, &mcp.ServerOptions{}, "available_tool")
-	runtime.config.AgentDeployment.Spec.Agents[0].Tools = ToolAllowlist{Allow: map[string][]string{"test": {"missing_tool"}}}
+	runtime.config.AgentDeployment.Spec.Agents[0].Tools = deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"missing_tool"}}}
 	health := checkMCPHealth(t, runtime)
 	if health.OK {
 		t.Fatal("CheckHealth() accepted a server missing an allowlisted tool")
@@ -152,11 +154,11 @@ func TestCheckHealthRejectsMissingAllowedTool(t *testing.T) {
 
 func TestCheckHealthValidatesEveryAgentAllowlist(t *testing.T) {
 	_, runtime := newHealthTestRuntime(t, &mcp.ServerOptions{}, "available_tool")
-	runtime.config.AgentDeployment = &AgentDeployment{Spec: DeploymentSpec{
-		MCPServers: []MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-		Agents: resolvedAgentDefinitions([]AgentDefinition{
-			{Name: "entrypoint", Tools: ToolAllowlist{Allow: map[string][]string{"test": {"available_tool"}}}},
-			{Name: "worker", Tools: ToolAllowlist{Allow: map[string][]string{"test": {"missing_tool"}}}},
+	runtime.config.AgentDeployment = &deploymentpkg.AgentDeployment{Spec: deploymentpkg.DeploymentSpec{
+		MCPServers: []deploymentpkg.MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
+		Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{
+			{Name: "entrypoint", Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"available_tool"}}}},
+			{Name: "worker", Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"missing_tool"}}}},
 		}),
 	}}
 	health := checkMCPHealth(t, runtime)

@@ -1,15 +1,13 @@
 package agent
 
-// Δ2 契约钉子：终态证据事务中补偿失败（拒收）时，因果错误编码进
-// run.failed 终态事件并成功持久化，EndAuditRun 返回 nil——残差不再作为
-// 返回值触发无意义的执行方重试。证据（失败原因）在事件内，不在返回值。
-
 import (
 	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
+
+	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 )
@@ -57,33 +55,33 @@ func TestCloseRunEvidenceEncodesCompensationFailureAndPersistsTerminal(t *testin
 	events := &scriptedAuditEvents{failFor: map[audit.EventType]bool{
 		audit.EventDelegationFailed: true, // 补偿事件被拒收（模拟持久化故障）
 	}}
-	deployment := NewTestDeployment(t)
+	agentDeployment := NewTestDeployment(t)
 	// 双代理拓扑：coordinator 经 task 工具委派 worker（与 assembly E2E 同构）。
-	deployment.Spec.Agents[0].Name = "coordinator"
-	deployment.Spec.Agents[0].SubAgents = []AgentReference{{Name: "worker"}}
-	deployment.Spec.Agents = append(deployment.Spec.Agents, ResolvedAgentDefinition{
-		AgentDefinition: AgentDefinition{
+	agentDeployment.Spec.Agents[0].Name = "coordinator"
+	agentDeployment.Spec.Agents[0].SubAgents = []agentdeployment.AgentReference{{Name: "worker"}}
+	agentDeployment.Spec.Agents = append(agentDeployment.Spec.Agents, agentdeployment.ResolvedAgentDefinition{
+		AgentDefinition: agentdeployment.AgentDefinition{
 			Name:        "worker",
 			Version:     "1.0.0",
 			Description: "generic worker",
-			Mode:        AgentModeTask,
-			SubAgents:   []AgentReference{},
-			Instruction: deployment.Spec.Agents[0].Instruction,
-			Output:      deployment.Spec.Agents[0].Output,
-			Tools:       ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+			Mode:        agentdeployment.AgentModeTask,
+			SubAgents:   []agentdeployment.AgentReference{},
+			Instruction: agentDeployment.Spec.Agents[0].Instruction,
+			Output:      agentDeployment.Spec.Agents[0].Output,
+			Tools:       agentdeployment.ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
 		},
-		OutputSchema:    deployment.Spec.Agents[0].OutputSchema,
-		ResolvedOutput:  deployment.Spec.Agents[0].ResolvedOutput,
-		RawOutputSchema: deployment.Spec.Agents[0].RawOutputSchema,
+		OutputSchema:    agentDeployment.Spec.Agents[0].OutputSchema,
+		ResolvedOutput:  agentDeployment.Spec.Agents[0].ResolvedOutput,
+		RawOutputSchema: agentDeployment.Spec.Agents[0].RawOutputSchema,
 	})
-	if err := deployment.validate(); err != nil {
-		t.Fatalf("validate deployment: %v", err)
+	if err := agentDeployment.Validate(); err != nil {
+		t.Fatalf("validate agentDeployment: %v", err)
 	}
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	runtime, err := NewRuntime(Config{
 		Model:           "test-model",
 		ModelAPIKey:     "test-key",
-		AgentDeployment: deployment,
+		AgentDeployment: agentDeployment,
 		Provider:        "test-provider",
 		AuditRecorder:   events,
 	})

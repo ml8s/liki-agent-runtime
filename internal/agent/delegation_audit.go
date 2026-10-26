@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"fmt"
@@ -43,7 +45,7 @@ type DelegationAuditor struct {
 	metrics    Metrics
 	now        func() time.Time
 	entrypoint string
-	agents     map[string]*ResolvedAgentDefinition
+	agents     map[string]*agentdeployment.ResolvedAgentDefinition
 	scope      func(sessionID string) (*runExecution, bool)
 
 	mu      sync.Mutex
@@ -54,11 +56,10 @@ func newDelegationAuditor(
 	recorder audit.Recorder,
 	metrics Metrics,
 	now func() time.Time,
-	deployment *AgentDeployment,
-	entrypoint string,
+	deployment *agentdeployment.AgentDeployment, entrypoint string,
 	scope func(sessionID string) (*runExecution, bool),
 ) *DelegationAuditor {
-	agents := make(map[string]*ResolvedAgentDefinition, len(deployment.Spec.Agents))
+	agents := make(map[string]*agentdeployment.ResolvedAgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		definition := &deployment.Spec.Agents[index]
 		agents[definition.Name] = definition

@@ -1,5 +1,7 @@
 package agent
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"encoding/json"
@@ -23,7 +25,7 @@ import (
 	"google.golang.org/genai"
 )
 
-func buildTestDeployment(t testing.TB) (*AgentDeployment, error) {
+func buildTestDeployment(t testing.TB) (*deploymentpkg.AgentDeployment, error) {
 	t.Helper()
 	root := t.TempDir()
 	files := map[string]string{
@@ -68,18 +70,18 @@ func buildTestDeployment(t testing.TB) (*AgentDeployment, error) {
 			return nil, err
 		}
 	}
-	return LoadAgentDeployment(filepath.Join(root, "agent-deployment.json"))
+	return deploymentpkg.LoadAgentDeployment(filepath.Join(root, "agent-deployment.json"))
 }
 
-func testDeployment(t testing.TB) (*AgentDeployment, error) {
+func testDeployment(t testing.TB) (*deploymentpkg.AgentDeployment, error) {
 	t.Helper()
 	return buildTestDeployment(t)
 }
 
 func TestRunStateRejectsInvalidStructuredOutput(t *testing.T) {
 	state := &runState{}
-	deployment := plainTestDeployment(t)
-	entrypoint, err := deployment.EntrypointDefinition()
+	agentDeployment := plainTestDeployment(t)
+	entrypoint, err := agentDeployment.EntrypointDefinition()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,14 +281,13 @@ func (r *recordingAudit) eventsOfType(eventType audit.EventType) []audit.Event {
 
 // newTestRuntime wires a fake model and an in-memory MCP server. This avoids
 // network dependencies while retaining ADK's real runner and toolset behavior.
-func newTestRuntime(t testing.TB, deployment *AgentDeployment, events *recordingAudit, llm model.LLM) *Runtime {
-	return newTestRuntimeWithLimit(t, deployment, events, llm, 0)
+func newTestRuntime(t testing.TB, agentDeployment *deploymentpkg.AgentDeployment, events *recordingAudit, llm model.LLM) *Runtime {
+	return newTestRuntimeWithLimit(t, agentDeployment, events, llm, 0)
 }
 
 func newTestRuntimeWithLimit(
 	t testing.TB,
-	deployment *AgentDeployment,
-	events *recordingAudit,
+	agentDeployment *deploymentpkg.AgentDeployment, events *recordingAudit,
 	llm model.LLM,
 	maxRuns int,
 ) *Runtime {
@@ -306,7 +307,7 @@ func newTestRuntimeWithLimit(
 	t.Cleanup(func() { _ = serverSession.Close() })
 	runtime, err := NewRuntime(Config{
 		Model:             "fake-model",
-		AgentDeployment:   deployment,
+		AgentDeployment:   agentDeployment,
 		AuditRecorder:     events,
 		MaxConcurrentRuns: maxRuns,
 		modelOverride:     llm,
@@ -320,23 +321,23 @@ func newTestRuntimeWithLimit(
 	return runtime
 }
 
-func plainTestDeployment(t testing.TB) *AgentDeployment {
+func plainTestDeployment(t testing.TB) *deploymentpkg.AgentDeployment {
 	t.Helper()
-	deployment := NewTestDeployment(t)
-	for index := range deployment.Spec.Agents {
-		deployment.Spec.Agents[index].Output = OutputDefinition{}
-		deployment.Spec.Agents[index].OutputSchema = nil
-		deployment.Spec.Agents[index].ResolvedOutput = nil
-		deployment.Spec.Agents[index].SchemaDigest = ""
+	agentDeployment := NewTestDeployment(t)
+	for index := range agentDeployment.Spec.Agents {
+		agentDeployment.Spec.Agents[index].Output = deploymentpkg.OutputDefinition{}
+		agentDeployment.Spec.Agents[index].OutputSchema = nil
+		agentDeployment.Spec.Agents[index].ResolvedOutput = nil
+		agentDeployment.Spec.Agents[index].SchemaDigest = ""
 	}
-	if err := deployment.validate(); err != nil {
-		t.Fatalf("validate plain deployment: %v", err)
+	if err := agentDeployment.Validate(); err != nil {
+		t.Fatalf("validate plain agentDeployment: %v", err)
 	}
-	return deployment
+	return agentDeployment
 }
 
-// The deployment is the single source of truth for whether structured output
-// is used. An explicit mode with a plain-text deployment carries no
+// The agentDeployment is the single source of truth for whether structured output
+// is used. An explicit mode with a plain-text agentDeployment carries no
 // information and fails closed instead of being silently ignored.
 func TestNewRuntimeRejectsRedundantStructuredOutputMode(t *testing.T) {
 	_, err := NewRuntime(Config{
@@ -446,10 +447,10 @@ func TestRuntimeRunDeletesRunScopedSession(t *testing.T) {
 }
 
 func TestRunAuditUsesEntrypointModelOverride(t *testing.T) {
-	deployment := NewTestDeployment(t)
-	deployment.Spec.Agents[0].Model = "artifact-model"
+	agentDeployment := NewTestDeployment(t)
+	agentDeployment.Spec.Agents[0].Model = "artifact-model"
 	events := &recordingAudit{}
-	runtime := newTestRuntime(t, deployment, events, &fakeLLM{responses: []*model.LLMResponse{{
+	runtime := newTestRuntime(t, agentDeployment, events, &fakeLLM{responses: []*model.LLMResponse{{
 		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"ok"}`}}},
 	}}})
 
@@ -473,12 +474,12 @@ func (s *failingDeleteSessionService) Delete(context.Context, *session.DeleteReq
 }
 
 func TestExternalSessionCleanupFailureDoesNotFlipSuccessfulRun(t *testing.T) {
-	deployment := NewTestDeployment(t)
+	agentDeployment := NewTestDeployment(t)
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	events := &recordingAudit{}
 	runtime, err := NewRuntime(Config{
 		Model:             "fake-model",
-		AgentDeployment:   deployment,
+		AgentDeployment:   agentDeployment,
 		AuditRecorder:     events,
 		MaxConcurrentRuns: 1,
 		modelOverride: &fakeLLM{responses: []*model.LLMResponse{{
@@ -663,14 +664,14 @@ func TestRuntimeRunProducesStructuredAnswerWithoutPayloadLeak(t *testing.T) {
 // validated session-state value (RunResult.Text) while A2A reads the event
 // StateDelta, and both must finalize through ParseStructuredOutput.
 func TestStructuredAnswerConsistentAcrossProtocolSources(t *testing.T) {
-	deployment := NewTestDeployment(t)
-	entrypoint, err := deployment.EntrypointDefinition()
+	agentDeployment := NewTestDeployment(t)
+	entrypoint, err := agentDeployment.EntrypointDefinition()
 	if err != nil {
 		t.Fatal(err)
 	}
 	payload := `{"answer":"一致结论","confidence":0.88}`
 	events := &recordingAudit{}
-	runtime := newTestRuntime(t, deployment, events, &fakeLLM{responses: []*model.LLMResponse{{
+	runtime := newTestRuntime(t, agentDeployment, events, &fakeLLM{responses: []*model.LLMResponse{{
 		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: payload}}},
 	}}})
 
@@ -779,48 +780,48 @@ func TestRuntimeRunLLMError(t *testing.T) {
 	}
 }
 
-// NewTestDeployment exposes the generic test deployment to external adapter
+// NewTestDeployment exposes the generic test agentDeployment to external adapter
 // tests compiled into the same test binary.
-func NewTestDeployment(t testing.TB) *AgentDeployment {
+func NewTestDeployment(t testing.TB) *deploymentpkg.AgentDeployment {
 	t.Setenv("TEST_MCP_ENDPOINT", "in-memory://test")
-	deployment, err := testDeployment(t)
+	agentDeployment, err := testDeployment(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return deployment
+	return agentDeployment
 }
 
 func TestRuntimeBuildsStandardADKAgentGraph(t *testing.T) {
-	deployment := NewTestDeployment(t)
-	// Convert the generic single-agent test deployment into a two-Agent tree.
-	deployment.Spec.Agents[0].Name = "coordinator"
-	deployment.Spec.Agents[0].SubAgents = []AgentReference{{Name: "worker"}}
-	deployment.Spec.Agents = append(deployment.Spec.Agents, ResolvedAgentDefinition{
-		AgentDefinition: AgentDefinition{
+	agentDeployment := NewTestDeployment(t)
+	// Convert the generic single-agent test agentDeployment into a two-Agent tree.
+	agentDeployment.Spec.Agents[0].Name = "coordinator"
+	agentDeployment.Spec.Agents[0].SubAgents = []deploymentpkg.AgentReference{{Name: "worker"}}
+	agentDeployment.Spec.Agents = append(agentDeployment.Spec.Agents, deploymentpkg.ResolvedAgentDefinition{
+		AgentDefinition: deploymentpkg.AgentDefinition{
 			Name:        "worker",
 			Version:     "1.0.0",
 			Description: "generic worker agent",
-			Mode:        AgentModeTask,
-			Instruction: deployment.Spec.Agents[0].Instruction,
-			Output:      deployment.Spec.Agents[0].Output,
-			Tools:       ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+			Mode:        deploymentpkg.AgentModeTask,
+			Instruction: agentDeployment.Spec.Agents[0].Instruction,
+			Output:      agentDeployment.Spec.Agents[0].Output,
+			Tools:       deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
 		},
-		OutputSchema:    deployment.Spec.Agents[0].OutputSchema,
-		ResolvedOutput:  deployment.Spec.Agents[0].ResolvedOutput,
-		RawOutputSchema: deployment.Spec.Agents[0].RawOutputSchema,
+		OutputSchema:    agentDeployment.Spec.Agents[0].OutputSchema,
+		ResolvedOutput:  agentDeployment.Spec.Agents[0].ResolvedOutput,
+		RawOutputSchema: agentDeployment.Spec.Agents[0].RawOutputSchema,
 	})
-	if err := deployment.validate(); err != nil {
-		t.Fatalf("validate multi-agent deployment: %v", err)
+	if err := agentDeployment.Validate(); err != nil {
+		t.Fatalf("validate multi-agent agentDeployment: %v", err)
 	}
-	for index := range deployment.Spec.Agents {
-		agent := &deployment.Spec.Agents[index]
-		if err := agent.validate(map[string]struct{}{"test": {}}); err != nil {
+	for index := range agentDeployment.Spec.Agents {
+		agent := &agentDeployment.Spec.Agents[index]
+		if err := agent.ValidateAgent(map[string]struct{}{"test": {}}); err != nil {
 			t.Fatalf("validate agent %q: %v", agent.Name, err)
 		}
 	}
 
 	events := &recordingAudit{}
-	runtime := newTestRuntime(t, deployment, events, &fakeLLM{responses: []*model.LLMResponse{{
+	runtime := newTestRuntime(t, agentDeployment, events, &fakeLLM{responses: []*model.LLMResponse{{
 		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: `{"answer":"ok"}`}}},
 	}}})
 	if runtime.entrypoint.Name != "coordinator" {

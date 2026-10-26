@@ -45,10 +45,10 @@ func (t fakeTool) IsLongRunning() bool { return false }
 
 func newToolAuditor(t *testing.T) (*ToolExecutionAuditor, *recordingAudit, *stubMetrics, *fakeAgentContext) {
 	t.Helper()
-	deployment := NewTestDeployment(t)
+	agentDeployment := NewTestDeployment(t)
 	events := &recordingAudit{}
 	metrics := &stubMetrics{}
-	ledger := newLLMCallAuditor(events, metrics, "test-provider", deployment, func() time.Time {
+	ledger := newLLMCallAuditor(events, metrics, "test-provider", agentDeployment, func() time.Time {
 		return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	})
 	auditor := newToolExecutionAuditor(
@@ -56,7 +56,7 @@ func newToolAuditor(t *testing.T) (*ToolExecutionAuditor, *recordingAudit, *stub
 		metrics,
 		func() time.Time { return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC) },
 		"test-provider",
-		deployment,
+		agentDeployment,
 		ledger.scope,
 	)
 	ledger.begin("session_1", newTestScope())
@@ -227,14 +227,14 @@ func (r *failOnceAudit) Record(ctx context.Context, event *audit.Event) error {
 
 func TestToolAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 	events := &failOnceAudit{eventType: audit.EventToolCallCompleted}
-	deployment := NewTestDeployment(t)
-	ledger := newLLMCallAuditor(events, nil, "test-provider", deployment, fixedLedgerNow)
+	agentDeployment := NewTestDeployment(t)
+	ledger := newLLMCallAuditor(events, nil, "test-provider", agentDeployment, fixedLedgerNow)
 	auditor := newToolExecutionAuditor(
 		events,
 		nil,
 		fixedLedgerNow,
 		"test-provider",
-		deployment,
+		agentDeployment,
 		ledger.scope,
 	)
 	scope := newTestScope()
@@ -270,10 +270,10 @@ func TestToolAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 // EndAuditRun's cleanup retry can still emit terminal evidence.
 func TestToolAuditorFailPendingRetainsRecordForRetry(t *testing.T) {
 	recorder := &failOnceStubAudit{eventType: audit.EventToolCallFailed}
-	deployment := NewTestDeployment(t)
+	agentDeployment := NewTestDeployment(t)
 	metrics := &stubMetrics{}
-	ledger := newLLMCallAuditor(recorder, metrics, "test-provider", deployment, fixedLedgerNow)
-	auditor := newToolExecutionAuditor(recorder, nil, fixedLedgerNow, "test-provider", deployment, ledger.scope)
+	ledger := newLLMCallAuditor(recorder, metrics, "test-provider", agentDeployment, fixedLedgerNow)
+	auditor := newToolExecutionAuditor(recorder, nil, fixedLedgerNow, "test-provider", agentDeployment, ledger.scope)
 	ledger.begin("session_retry", newTestScope())
 	ctx := &fakeAgentContext{
 		sessionID:      "session_retry",

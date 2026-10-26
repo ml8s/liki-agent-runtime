@@ -1,4 +1,4 @@
-package agent
+package deployment
 
 import (
 	"crypto/sha256"

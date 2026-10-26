@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"errors"
@@ -334,7 +336,7 @@ func (r *Runtime) loadStructuredAnalysis(
 }
 
 // Entrypoint exposes the selected AgentDefinition to protocol adapters.
-func (r *Runtime) Entrypoint() *AgentDefinition {
+func (r *Runtime) Entrypoint() *agentdeployment.AgentDefinition {
 	clone := cloneAgentDefinition(&r.entrypoint.AgentDefinition)
 	return &clone
 }
@@ -342,31 +344,31 @@ func (r *Runtime) Entrypoint() *AgentDefinition {
 // ResolvedEntrypoint exposes the loaded runtime-neutral state required by
 // structured-output protocol mappings. Instructions remain internal to callers
 // that only render discovery metadata.
-func (r *Runtime) ResolvedEntrypoint() *ResolvedAgentDefinition {
+func (r *Runtime) ResolvedEntrypoint() *agentdeployment.ResolvedAgentDefinition {
 	return r.entrypoint
 }
 
 // AgentDeployment exposes non-secret deployment metadata for standard protocol
 // discovery. Instructions and schemas remain internal to the runtime.
-func (r *Runtime) AgentDeployment() *AgentDeployment {
+func (r *Runtime) AgentDeployment() *agentdeployment.AgentDeployment {
 	deployment := *r.definition
-	deployment.Spec.MCPServers = append([]MCPServerDefinition(nil), r.definition.Spec.MCPServers...)
-	deployment.Spec.Agents = make([]ResolvedAgentDefinition, len(r.definition.Spec.Agents))
+	deployment.Spec.MCPServers = append([]agentdeployment.MCPServerDefinition(nil), r.definition.Spec.MCPServers...)
+	deployment.Spec.Agents = make([]agentdeployment.ResolvedAgentDefinition, len(r.definition.Spec.Agents))
 	for index := range r.definition.Spec.Agents {
 		deployment.Spec.Agents[index] = cloneResolvedAgentDefinition(&r.definition.Spec.Agents[index])
 	}
 	return &deployment
 }
 
-func cloneResolvedAgentDefinition(definition *ResolvedAgentDefinition) ResolvedAgentDefinition {
+func cloneResolvedAgentDefinition(definition *agentdeployment.ResolvedAgentDefinition) agentdeployment.ResolvedAgentDefinition {
 	clone := *definition
 	clone.AgentDefinition = cloneAgentDefinition(&definition.AgentDefinition)
 	return clone
 }
 
-func cloneAgentDefinition(definition *AgentDefinition) AgentDefinition {
+func cloneAgentDefinition(definition *agentdeployment.AgentDefinition) agentdeployment.AgentDefinition {
 	clone := *definition
-	clone.SubAgents = append([]AgentReference(nil), definition.SubAgents...)
+	clone.SubAgents = append([]agentdeployment.AgentReference(nil), definition.SubAgents...)
 	clone.Tools.Allow = make(map[string][]string, len(definition.Tools.Allow))
 	for server, tools := range definition.Tools.Allow {
 		clone.Tools.Allow[server] = append([]string(nil), tools...)

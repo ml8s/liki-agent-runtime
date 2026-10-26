@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 	aguievents "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	aguitypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	aguisse "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/encoding/sse"
@@ -58,7 +60,7 @@ type Handler struct {
 // runtime is the single ADK runtime dependency consumed by this protocol adapter.
 type runtime interface {
 	Run(ctx context.Context, request agent.RunRequest, observe func(*session.Event) error) (agent.RunResult, error)
-	Entrypoint() *agent.AgentDefinition
+	Entrypoint() *agentdeployment.AgentDefinition
 }
 
 // New creates the standard AG-UI HTTP handler.

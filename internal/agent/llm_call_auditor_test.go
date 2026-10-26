@@ -1,5 +1,7 @@
 package agent
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"errors"
@@ -347,7 +349,7 @@ func TestLedgerInterruptedRunFailsActiveCalls(t *testing.T) {
 		t.Fatalf("last event = %+v, want failed", last)
 	}
 	if last.DefinitionName == "" || last.DefinitionDigest == "" {
-		t.Fatalf("interrupted LLM audit lacks deployment provenance: %+v", last)
+		t.Fatalf("interrupted LLM audit lacks agentDeployment provenance: %+v", last)
 	}
 }
 
@@ -425,17 +427,17 @@ func TestLedgerConcurrentCallbacksDoNotRace(t *testing.T) {
 }
 
 func TestLedgerUsesInvokingAgentPromptProvenance(t *testing.T) {
-	deployment := NewTestDeployment(t)
-	root := deployment.Spec.Agents[0]
-	root.SubAgents = []AgentReference{{Name: "worker"}}
+	agentDeployment := NewTestDeployment(t)
+	root := agentDeployment.Spec.Agents[0]
+	root.SubAgents = []deploymentpkg.AgentReference{{Name: "worker"}}
 	worker := root
 	worker.Name = "worker"
 	worker.InstructionDigest = "sha256:worker-instruction"
 	worker.SubAgents = nil
-	deployment.Spec.Agents = append(deployment.Spec.Agents, worker)
+	agentDeployment.Spec.Agents = append(agentDeployment.Spec.Agents, worker)
 
 	events := &stubAuditRecorder{}
-	callAuditor := newLLMCallAuditor(events, nil, "test-provider", deployment, fixedLedgerNow)
+	callAuditor := newLLMCallAuditor(events, nil, "test-provider", agentDeployment, fixedLedgerNow)
 	scope := newTestScope()
 	callAuditor.begin("session_worker", scope)
 	ctx := &fakeAgentContext{
@@ -450,7 +452,7 @@ func TestLedgerUsesInvokingAgentPromptProvenance(t *testing.T) {
 	if len(started) != 1 {
 		t.Fatalf("started events = %d, want 1", len(started))
 	}
-	expectedDigest := deployment.Spec.Agents[len(deployment.Spec.Agents)-1].Digest
+	expectedDigest := agentDeployment.Spec.Agents[len(agentDeployment.Spec.Agents)-1].Digest
 	if started[0].AgentName != "worker" || started[0].AgentDefinitionDigest != expectedDigest {
 		t.Fatalf("worker provenance = %#v", started[0])
 	}
@@ -458,7 +460,7 @@ func TestLedgerUsesInvokingAgentPromptProvenance(t *testing.T) {
 		t.Fatalf("prompt_version = %#v, want worker instruction digest", got)
 	}
 	if started[0].DefinitionName == "" || started[0].DefinitionDigest == "" {
-		t.Fatalf("LLM audit lacks deployment provenance: %#v", started[0])
+		t.Fatalf("LLM audit lacks agentDeployment provenance: %#v", started[0])
 	}
 }
 

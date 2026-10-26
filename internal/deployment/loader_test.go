@@ -1,4 +1,4 @@
-package agent
+package deployment
 
 import (
 	"fmt"
@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/google/jsonschema-go/jsonschema"
 )
 
 const (
@@ -90,9 +88,8 @@ func TestLoadAgentDeployment(t *testing.T) {
 	if entrypoint.InstructionDigest == "" || entrypoint.SchemaDigest == "" {
 		t.Fatalf("artifact digests = %q/%q", entrypoint.InstructionDigest, entrypoint.SchemaDigest)
 	}
-	runtimeView := mustRuntimeAgentDefinition(t, *entrypoint)
-	if len(runtimeView.GenaiOutputSchema.Properties) != 1 {
-		t.Fatalf("output properties = %+v", runtimeView.GenaiOutputSchema.Properties)
+	if len(entrypoint.OutputSchema.Properties) != 1 {
+		t.Fatalf("output properties = %+v", entrypoint.OutputSchema.Properties)
 	}
 	if len(deployment.Spec.MCPServers) != 1 || deployment.Spec.MCPServers[0].Name != "test" {
 		t.Fatalf("MCP servers = %+v", deployment.Spec.MCPServers)
@@ -299,7 +296,7 @@ func TestAgentOutputIsOptional(t *testing.T) {
 	if entrypoint.Output.Structured() {
 		t.Fatal("agent output was structured without an output declaration")
 	}
-	if entrypoint.OutputSchema != nil || entrypoint.ResolvedOutput != nil || mustRuntimeAgentDefinition(t, *entrypoint).GenaiOutputSchema != nil {
+	if entrypoint.OutputSchema != nil || entrypoint.ResolvedOutput != nil || entrypoint.RawOutputSchema != nil {
 		t.Fatal("plain agent resolved an output schema")
 	}
 	if entrypoint.SchemaDigest != "" {
@@ -398,7 +395,7 @@ func TestLoadAgentDeploymentValidatesGraph(t *testing.T) {
 // AgentDeployment.Validate method directly: an unchanged deployment passes, and
 // mutating the graph to a duplicate agent fails validation.
 func TestDeploymentValidateRechecksInMemoryMutation(t *testing.T) {
-	deployment := NewTestDeployment(t)
+	deployment := writeDeployment(t, t.TempDir(), validManifest())
 	if err := deployment.Validate(); err != nil {
 		t.Fatalf("valid deployment rejected: %v", err)
 	}
@@ -409,27 +406,6 @@ func TestDeploymentValidateRechecksInMemoryMutation(t *testing.T) {
 	}})
 	if err := deployment.Validate(); err == nil {
 		t.Fatal("duplicate agent name accepted by Validate")
-	}
-}
-
-func TestConvertJSONSchemaToGenaiRejections(t *testing.T) {
-	testCases := []struct {
-		name    string
-		build   func() *jsonschema.Schema
-		wantErr string
-	}{
-		{name: "allOf composition", build: func() *jsonschema.Schema { return &jsonschema.Schema{AllOf: []*jsonschema.Schema{{Type: "string"}}} }, wantErr: "unsupported schema composition"},
-		{name: "type array", build: func() *jsonschema.Schema { return &jsonschema.Schema{Types: []string{"string", "null"}} }, wantErr: "schema type arrays are unsupported"},
-		{name: "unknown type", build: func() *jsonschema.Schema { return &jsonschema.Schema{Type: "bogus"} }, wantErr: `unsupported schema type "bogus"`},
-		{name: "non-string enum", build: func() *jsonschema.Schema { return &jsonschema.Schema{Enum: []any{1}} }, wantErr: "only string enums are supported"},
-	}
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			_, err := convertJSONSchemaToGenai(testCase.build())
-			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
-				t.Fatalf("convertJSONSchemaToGenai() error = %v, want %q", err, testCase.wantErr)
-			}
-		})
 	}
 }
 

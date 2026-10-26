@@ -1,5 +1,7 @@
 package agent
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"strings"
@@ -16,33 +18,33 @@ import (
 
 func newDelegationAuditorForTest(t *testing.T, branch string) (*DelegationAuditor, *recordingAudit, *stubMetrics, *fakeAgentContext) {
 	t.Helper()
-	deployment := NewTestDeployment(t)
-	deployment.Spec.Agents[0].Name = "coordinator"
-	deployment.Spec.Agents[0].SubAgents = []AgentReference{{Name: "worker"}}
-	deployment.Spec.Agents = append(deployment.Spec.Agents, ResolvedAgentDefinition{AgentDefinition: AgentDefinition{
+	agentDeployment := NewTestDeployment(t)
+	agentDeployment.Spec.Agents[0].Name = "coordinator"
+	agentDeployment.Spec.Agents[0].SubAgents = []deploymentpkg.AgentReference{{Name: "worker"}}
+	agentDeployment.Spec.Agents = append(agentDeployment.Spec.Agents, deploymentpkg.ResolvedAgentDefinition{AgentDefinition: deploymentpkg.AgentDefinition{
 		Name:        "worker",
 		Version:     "1.0.0",
 		Description: "generic worker",
-		Mode:        AgentModeTask,
-		SubAgents:   []AgentReference{},
-		Instruction: deployment.Spec.Agents[0].Instruction,
-		Output:      deployment.Spec.Agents[0].Output,
-		Tools:       ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+		Mode:        deploymentpkg.AgentModeTask,
+		SubAgents:   []deploymentpkg.AgentReference{},
+		Instruction: agentDeployment.Spec.Agents[0].Instruction,
+		Output:      agentDeployment.Spec.Agents[0].Output,
+		Tools:       deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
 	}})
-	if err := deployment.validate(); err != nil {
-		t.Fatalf("validate deployment: %v", err)
+	if err := agentDeployment.Validate(); err != nil {
+		t.Fatalf("validate agentDeployment: %v", err)
 	}
 
 	events := &recordingAudit{}
 	metrics := &stubMetrics{}
-	ledger := newLLMCallAuditor(events, metrics, "test-provider", deployment, func() time.Time {
+	ledger := newLLMCallAuditor(events, metrics, "test-provider", agentDeployment, func() time.Time {
 		return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	})
 	auditor := newDelegationAuditor(
 		events,
 		metrics,
 		func() time.Time { return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC) },
-		deployment,
+		agentDeployment,
 		"coordinator",
 		ledger.scope,
 	)
@@ -141,24 +143,24 @@ func TestDelegationAuditorFailsPending(t *testing.T) {
 
 func TestDelegationAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 	events := &failOnceAudit{eventType: audit.EventDelegationCompleted}
-	deployment := NewTestDeployment(t)
-	deployment.Spec.Agents[0].Name = "coordinator"
-	deployment.Spec.Agents[0].SubAgents = []AgentReference{{Name: "worker"}}
-	deployment.Spec.Agents = append(deployment.Spec.Agents, ResolvedAgentDefinition{AgentDefinition: AgentDefinition{
+	agentDeployment := NewTestDeployment(t)
+	agentDeployment.Spec.Agents[0].Name = "coordinator"
+	agentDeployment.Spec.Agents[0].SubAgents = []deploymentpkg.AgentReference{{Name: "worker"}}
+	agentDeployment.Spec.Agents = append(agentDeployment.Spec.Agents, deploymentpkg.ResolvedAgentDefinition{AgentDefinition: deploymentpkg.AgentDefinition{
 		Name:        "worker",
 		Version:     "1.0.0",
 		Description: "worker",
-		Mode:        AgentModeTask,
-		Instruction: deployment.Spec.Agents[0].Instruction,
-		Tools:       ToolAllowlist{Allow: map[string][]string{}},
+		Mode:        deploymentpkg.AgentModeTask,
+		Instruction: agentDeployment.Spec.Agents[0].Instruction,
+		Tools:       deploymentpkg.ToolAllowlist{Allow: map[string][]string{}},
 	}})
-	if err := deployment.validate(); err != nil {
-		t.Fatalf("validate deployment: %v", err)
+	if err := agentDeployment.Validate(); err != nil {
+		t.Fatalf("validate agentDeployment: %v", err)
 	}
 	scope := newTestScope()
-	ledger := newLLMCallAuditor(events, nil, "test-provider", deployment, fixedLedgerNow)
+	ledger := newLLMCallAuditor(events, nil, "test-provider", agentDeployment, fixedLedgerNow)
 	ledger.begin("session_1", scope)
-	auditor := newDelegationAuditor(events, nil, fixedLedgerNow, deployment, "coordinator", ledger.scope)
+	auditor := newDelegationAuditor(events, nil, fixedLedgerNow, agentDeployment, "coordinator", ledger.scope)
 	ctx := &fakeAgentContext{
 		sessionID:    "session_1",
 		invocationID: "inv_worker",

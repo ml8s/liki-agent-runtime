@@ -1,5 +1,7 @@
 package main
 
+import "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"errors"
@@ -120,7 +122,7 @@ func run() (err error) {
 			err = fmt.Errorf("drain audit recorder: %w", closeErr)
 		}
 	}()
-	deployment, err := agentruntime.LoadAgentDeployment(cfg.DeploymentFile)
+	deployment, err := deployment.LoadAgentDeployment(cfg.DeploymentFile)
 	if err != nil {
 		return err
 	}
@@ -300,7 +302,7 @@ func shutdownServers(servers []*http.Server, protocolServer *transport.Server, s
 	return firstErr
 }
 
-func mcpServerNames(deployment *agentruntime.AgentDeployment) []string {
+func mcpServerNames(deployment *deployment.AgentDeployment) []string {
 	names := make([]string, 0, len(deployment.Spec.MCPServers))
 	for _, server := range deployment.Spec.MCPServers {
 		names = append(names, server.Name)

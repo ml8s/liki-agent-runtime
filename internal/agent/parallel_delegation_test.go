@@ -1,5 +1,7 @@
 package agent
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"testing"
@@ -14,22 +16,22 @@ import (
 // single-turn sub-agent. Single-turn delegation runs through the standard
 // tool pipeline, so a model response that carries two function calls
 // executes both sub-agent invocations concurrently.
-func parallelDelegationDeployment(t *testing.T) *AgentDeployment {
+func parallelDelegationDeployment(t *testing.T) *deploymentpkg.AgentDeployment {
 	t.Helper()
-	deployment := plainTestDeployment(t)
-	root := &deployment.Spec.Agents[0]
+	agentDeployment := plainTestDeployment(t)
+	root := &agentDeployment.Spec.Agents[0]
 	root.Name = "coordinator"
-	root.SubAgents = []AgentReference{{Name: "worker"}}
+	root.SubAgents = []deploymentpkg.AgentReference{{Name: "worker"}}
 	worker := *root
 	worker.Name = "worker"
 	worker.Description = "generic single-turn worker"
-	worker.Mode = AgentModeSingleTurn
+	worker.Mode = deploymentpkg.AgentModeSingleTurn
 	worker.SubAgents = nil
-	deployment.Spec.Agents = append(deployment.Spec.Agents, worker)
-	if err := deployment.validate(); err != nil {
-		t.Fatalf("validate parallel delegation deployment: %v", err)
+	agentDeployment.Spec.Agents = append(agentDeployment.Spec.Agents, worker)
+	if err := agentDeployment.Validate(); err != nil {
+		t.Fatalf("validate parallel delegation agentDeployment: %v", err)
 	}
-	return deployment
+	return agentDeployment
 }
 
 // TestRuntimeRunsParallelSingleTurnDelegation pins the parallel delegation
@@ -38,7 +40,7 @@ func parallelDelegationDeployment(t *testing.T) *AgentDeployment {
 // every invocation gets its own started/completed evidence with distinct
 // event identities, despite sharing target name, session, and invocation.
 func TestRuntimeRunsParallelSingleTurnDelegation(t *testing.T) {
-	deployment := parallelDelegationDeployment(t)
+	agentDeployment := parallelDelegationDeployment(t)
 	events := &recordingAudit{}
 	llm := &turnBasedLLM{turns: []*model.LLMResponse{
 		// The coordinator emits two worker calls in one response.
@@ -52,7 +54,7 @@ func TestRuntimeRunsParallelSingleTurnDelegation(t *testing.T) {
 		// The coordinator synthesises the final answer.
 		{Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "both done"}}}},
 	}}
-	runtime := newTestRuntime(t, deployment, events, llm)
+	runtime := newTestRuntime(t, agentDeployment, events, llm)
 
 	result, err := runtime.Run(context.Background(), RunRequest{
 		RunID: "run_parallel_delegation", ThreadID: "thread_parallel", UserID: "user_1",

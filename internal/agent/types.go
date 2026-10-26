@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"encoding/json"
 	"time"
@@ -50,7 +52,7 @@ func (r RunRequest) runIdentity() RunIdentity {
 
 // RunResult is the validated outcome of one execution.
 type RunResult struct {
-	Definition DefinitionRef
+	Definition agentdeployment.DefinitionRef
 	Output     json.RawMessage
 	Text       string
 	Usage      RunUsage

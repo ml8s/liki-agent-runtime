@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	agentruntime "github.com/ml8s/liki-agent-runtime/internal/agent"
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 )
 
 // FourAgentArtifactIsLoadable proves the generic runtime can describe a
@@ -62,7 +62,7 @@ func TestFourAgentArtifactIsLoadable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deployment, err := agentruntime.LoadAgentDeployment(filepath.Join(root, "agent-deployment.json"))
+	deployment, err := deploymentpkg.LoadAgentDeployment(filepath.Join(root, "agent-deployment.json"))
 	if err != nil {
 		t.Fatalf("LoadAgentDeployment() error = %v", err)
 	}
@@ -74,7 +74,7 @@ func TestFourAgentArtifactIsLoadable(t *testing.T) {
 		t.Fatalf("root=%q agents=%d, want main/4", rootName, len(deployment.Spec.Agents))
 	}
 
-	byName := map[string]agentruntime.ResolvedAgentDefinition{}
+	byName := map[string]deploymentpkg.ResolvedAgentDefinition{}
 	for _, definition := range deployment.Spec.Agents {
 		byName[definition.Name] = definition
 	}

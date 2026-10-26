@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
@@ -95,11 +97,11 @@ func rawOutputSchemaCallback(schema map[string]any) llmagent.BeforeModelCallback
 	}
 }
 
-func adkMode(mode AgentMode) llmagent.Mode {
+func adkMode(mode agentdeployment.AgentMode) llmagent.Mode {
 	switch mode {
-	case AgentModeTask:
+	case agentdeployment.AgentModeTask:
 		return llmagent.ModeTask
-	case AgentModeSingleTurn:
+	case agentdeployment.AgentModeSingleTurn:
 		return llmagent.ModeSingleTurn
 	default:
 		return llmagent.ModeChat

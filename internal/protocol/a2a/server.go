@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
@@ -72,14 +74,14 @@ type structuredMemo struct {
 	valid  bool
 
 	// parse is a test seam; production always uses agent.ParseStructuredOutput.
-	parse func(value any, definition *agent.ResolvedAgentDefinition) (agent.OutputResult, error)
+	parse func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (agent.OutputResult, error)
 }
 
 // structuredOutput returns the memoized parse when the event's state delta
 // selects the structured branch. applies reports whether the branch matches.
 func (s *Server) structuredOutput(
 	event *session.Event,
-	entrypoint *agent.ResolvedAgentDefinition,
+	entrypoint *deploymentpkg.ResolvedAgentDefinition,
 ) (output agent.OutputResult, applies bool, err error) {
 	if event == nil || entrypoint == nil ||
 		event.Author != entrypoint.Name || !event.IsFinalResponse() {
@@ -165,7 +167,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			// delegated under a plain entrypoint must not leak raw JSON.
 			exposesText := func(author string) bool {
 				definition, ok := deployment.Agent(author)
-				return ok && agent.ExposesModelText(&definition.AgentDefinition)
+				return ok && deploymentpkg.ExposesModelText(&definition.AgentDefinition)
 			}
 			structured, applies, err := server.structuredOutput(event, resolvedEntrypoint)
 			if applies && err != nil {
@@ -245,7 +247,7 @@ func cancelExecution(ctx context.Context) {
 // safeAgentSkills builds standard A2A skills from curated deployment metadata.
 // ADK's default skill builder derives descriptions from instructions, which
 // would turn prompt material into public discovery data.
-func safeAgentSkills(deployment *agent.AgentDeployment) []a2a.AgentSkill {
+func safeAgentSkills(deployment *deploymentpkg.AgentDeployment) []a2a.AgentSkill {
 	entrypoint, err := deployment.EntrypointDefinition()
 	if err != nil {
 		return nil
@@ -297,7 +299,7 @@ func agentPart(
 	event *session.Event,
 	part *genai.Part,
 	exposesText func(author string) bool,
-	entrypoint *agent.ResolvedAgentDefinition,
+	entrypoint *deploymentpkg.ResolvedAgentDefinition,
 	structured *agent.OutputResult,
 ) (*a2a.Part, error) {
 	if part == nil {

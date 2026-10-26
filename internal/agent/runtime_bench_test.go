@@ -63,10 +63,10 @@ func benchHistory() []Message {
 // through the single-writer recorder. It isolates runtime framework overhead
 // from model and MCP network time.
 func BenchmarkRuntimeRun(b *testing.B) {
-	deployment := plainTestDeployment(b)
+	agentDeployment := plainTestDeployment(b)
 	events := &recordingAudit{}
 	llm := &cyclingLLM{turns: cyclingTurns()}
-	runtime := newTestRuntime(b, deployment, events, llm)
+	runtime := newTestRuntime(b, agentDeployment, events, llm)
 	history := benchHistory()
 	ctx := context.Background()
 

@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -55,11 +57,11 @@ func (s eventProjectionState) clearPartial(author string) eventProjectionState {
 
 // eventProjectorIndex is the immutable deployment lookup shared by every run.
 type eventProjectorIndex struct {
-	definitions map[string]*ResolvedAgentDefinition
+	definitions map[string]*agentdeployment.ResolvedAgentDefinition
 }
 
-func newEventProjectorIndex(deployment *AgentDeployment) eventProjectorIndex {
-	definitions := make(map[string]*ResolvedAgentDefinition, len(deployment.Spec.Agents))
+func newEventProjectorIndex(deployment *agentdeployment.AgentDeployment) eventProjectorIndex {
+	definitions := make(map[string]*agentdeployment.ResolvedAgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		definition := &deployment.Spec.Agents[index]
 		definitions[definition.Name] = definition
@@ -106,8 +108,7 @@ func (p eventProjector) Project(
 
 func (s eventProjectionState) projectPartial(
 	event *session.Event,
-	definition *AgentDefinition,
-	exposeModelText bool,
+	definition *agentdeployment.AgentDefinition, exposeModelText bool,
 ) (*session.Event, eventProjectionState) {
 	if !exposeModelText {
 		return nil, s
@@ -145,8 +146,7 @@ func (s eventProjectionState) projectPartial(
 
 func (s eventProjectionState) projectFinal(
 	event *session.Event,
-	definition *AgentDefinition,
-	exposeModelText bool,
+	definition *agentdeployment.AgentDefinition, exposeModelText bool,
 ) (*session.Event, eventProjectionState) {
 	if event.Content == nil {
 		// ADK can represent a terminal state transition without model content.
@@ -159,7 +159,7 @@ func (s eventProjectionState) projectFinal(
 		projected.Content = nil
 		return &projected, s
 	}
-	if definition != nil && !ExposesModelText(definition) {
+	if definition != nil && !agentdeployment.ExposesModelText(definition) {
 		exposeModelText = false
 	}
 	if definition == nil {
@@ -235,10 +235,10 @@ func (s eventProjectionState) projectFinal(
 	return &projected, next
 }
 
-func (p eventProjector) definitionFor(author string) (*AgentDefinition, bool) {
+func (p eventProjector) definitionFor(author string) (*agentdeployment.AgentDefinition, bool) {
 	definition, ok := p.index.definitions[author]
 	if !ok || definition == nil {
 		return nil, false
 	}
-	return &definition.AgentDefinition, ExposesModelText(&definition.AgentDefinition)
+	return &definition.AgentDefinition, agentdeployment.ExposesModelText(&definition.AgentDefinition)
 }

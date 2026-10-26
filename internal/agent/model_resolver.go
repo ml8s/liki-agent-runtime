@@ -1,5 +1,7 @@
 package agent
 
+import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/model"
@@ -13,7 +15,7 @@ type modelRegistry struct {
 	models map[string]model.LLM
 }
 
-func newModelRegistry(config Config, deployment *AgentDeployment) (modelRegistry, error) {
+func newModelRegistry(config Config, deployment *agentdeployment.AgentDeployment) (modelRegistry, error) {
 	return newModelRegistryWithBuilder(newModelBuilder(config), deploymentModelNames(deployment, config.Model))
 }
 
@@ -35,7 +37,7 @@ func newModelRegistryWithBuilder(
 	return modelRegistry{models: models}, nil
 }
 
-func deploymentModelNames(deployment *AgentDeployment, defaultModel string) []string {
+func deploymentModelNames(deployment *agentdeployment.AgentDeployment, defaultModel string) []string {
 	names := make([]string, 0, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		names = append(names, deployment.Spec.Agents[index].EffectiveModel(defaultModel))

@@ -1,5 +1,7 @@
 package agent
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"errors"
@@ -250,11 +252,11 @@ func TestNewMCPToolsetsMemoizeDiscovery(t *testing.T) {
 		mcpTransportOverrides: map[string]mcp.Transport{
 			"test": clientTransport,
 		},
-		AgentDeployment: &AgentDeployment{Spec: DeploymentSpec{
-			MCPServers: []MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-			Agents: resolvedAgentDefinitions([]AgentDefinition{{
+		AgentDeployment: &deploymentpkg.AgentDeployment{Spec: deploymentpkg.DeploymentSpec{
+			MCPServers: []deploymentpkg.MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
+			Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
 				Name:  "test-agent",
-				Tools: ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+				Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
 			}}),
 		}},
 		Now: catalogClock(),

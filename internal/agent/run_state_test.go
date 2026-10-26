@@ -1,5 +1,7 @@
 package agent
 
+import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 import (
 	"context"
 	"encoding/json"
@@ -104,10 +106,10 @@ func TestStructuredOutputPreservesJSONNumberFidelity(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := runState{}
-	definition := &ResolvedAgentDefinition{
-		AgentDefinition: AgentDefinition{
-			Output: OutputDefinition{
-				Schema:      FileReference{Path: "output.schema.json"},
+	definition := &deploymentpkg.ResolvedAgentDefinition{
+		AgentDefinition: deploymentpkg.AgentDefinition{
+			Output: deploymentpkg.OutputDefinition{
+				Schema:      deploymentpkg.FileReference{Path: "output.schema.json"},
 				TextPointer: "/answer",
 			},
 		},
@@ -131,7 +133,7 @@ func TestParseStructuredOutputRejections(t *testing.T) {
 	testCases := []struct {
 		name  string
 		value any
-		def   *ResolvedAgentDefinition
+		def   *deploymentpkg.ResolvedAgentDefinition
 		code  string
 	}{
 		{name: "nil definition", value: map[string]any{"answer": "x"}, code: domain.CodeStructuredOutputInvalid},

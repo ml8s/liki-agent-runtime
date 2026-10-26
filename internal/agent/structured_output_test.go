@@ -34,8 +34,8 @@ func TestJSONObjectModelKeepsStructuredSemanticsOnJSONMode(t *testing.T) {
 	inner := &capturingLLM{response: &model.LLMResponse{
 		Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "{}"}}},
 	}}
-	deployment := NewTestDeployment(t)
-	entrypoint, err := deployment.EntrypointDefinition()
+	agentDeployment := NewTestDeployment(t)
+	entrypoint, err := agentDeployment.EntrypointDefinition()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,8 +164,8 @@ func TestJSONObjectModelNormalizesCommentaryAroundJSONPayload(t *testing.T) {
 			{Text: "以下是结构化结果：\n" + payload + "\n谢谢。"},
 		}},
 	}}
-	deployment := NewTestDeployment(t)
-	entrypoint, err := deployment.EntrypointDefinition()
+	agentDeployment := NewTestDeployment(t)
+	entrypoint, err := agentDeployment.EntrypointDefinition()
 	if err != nil {
 		t.Fatal(err)
 	}
