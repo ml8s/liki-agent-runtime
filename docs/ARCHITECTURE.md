@@ -104,6 +104,11 @@ Protocol adapters never import each other. Database technology is confined to
 A protocol request is mapped to a generic `RunRequest`. History and opaque
 protocol context may be supplied by the caller; the runtime does not store
 product conversation state.
+History is rebuilt per run as native multi-turn events in the run-scoped ADK
+session (user and entrypoint-authored model turns, latest message last), so
+the model receives chronological turns and providers can prefix-cache every
+earlier turn; the seeded events are deleted with the session at terminal
+execution and the caller stays the owner of durable history.
 
 Run, thread, and user identifiers are required. A RunID cannot start while it
 is active, and an ADK session is run-scoped: terminal execution removes the

@@ -744,6 +744,13 @@ func (r *Runtime) Run(
 			"model", r.entrypoint.EffectiveModel(r.config.Model),
 		)...)
 
+	if err := r.seedConversationHistory(ctx, request, sessionID); err != nil {
+		runSpan.RecordError(err)
+		runSpan.SetStatus(codes.Error, runtimeError(err).Error())
+		runErr = err
+		return RunResult{}, runErr
+	}
+
 	events := r.runner.Run(
 		ctx,
 		request.UserID,

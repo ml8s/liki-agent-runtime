@@ -225,19 +225,6 @@ func buildUserContent(request RunRequest) *genai.Content {
 	prompt.WriteString("</request_context>\n<user_message>")
 	writeJSONString(&prompt, request.UserMessage)
 	prompt.WriteString("</user_message>\n")
-
-	if len(request.History) != 0 {
-		prompt.WriteString("\n<conversation_history format=\"json-array\">\n")
-		for _, message := range request.History {
-			prompt.WriteString(`{"role":`)
-			writeJSONString(&prompt, string(message.Role))
-			prompt.WriteString(`,"content":`)
-			writeJSONString(&prompt, message.Content)
-			prompt.WriteString("}\n")
-		}
-		prompt.WriteString("</conversation_history>\n")
-	}
-
 	return genai.NewContentFromText(prompt.String(), genai.RoleUser)
 }
 

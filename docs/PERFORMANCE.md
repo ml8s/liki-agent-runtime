@@ -42,12 +42,10 @@ Optimizations follow one loop, and correctness outranks every number in it:
 | Writer observability closure | `liki_agents_audit_batch_events`, `liki_agents_audit_queue_depth`, `liki_agents_run_rejections_total{reason}` verify group-commit and capacity behavior in production | `internal/audit/sqlite/recorder.go`, `internal/agent/runtime.go` |
 | Recovery scan window (7 days) | Startup orphan scan stays index-bounded as the audit ledger grows; every prior startup already closed older orphans | `TestAuditEventRepositoryRecoverySkipsEventsOutsideWindow` |
 | Audit secondary-index trim (8 → 3) | Insert path maintains three secondary B-trees instead of eight; sequential appends −20%, parallel grouped appends −20–30% vs the untrimmed recorder. Retained: `run_id` (idempotency), `event_type+occurred_at` (recovery), `trace_id` (incident correlation). Dropped dimensions (root run, agent, tool, tool call, definition) remain queryable via table scans; their aggregate questions are answered by Prometheus counters | `migrations/00004_trim_audit_indexes.sql`, `TestAuditEventIndexSetMatchesWritePathContract` |
+| Native multi-turn Contents | Caller history is seeded as run-scoped session events instead of a JSON array inside one user message: chronological user/model turns, latest message last, no JSON framing overhead, and a stable prefix every later turn can reuse through provider prefix caching. Wire contracts unchanged; the session stays run-scoped and caller-owned history stays authoritative | `internal/agent/history_seed.go`, `TestRunSeedsHistoryAsNativeMultiTurnContents` |
 
 ## Deferred (needs cross-repo alignment)
 
-- Multi-turn Contents and prompt-prefix caching: the code is in-repo
-  (`buildUserContent`), but it changes prompt shape and needs answer-quality
-  evaluation with the Liki skill repo before deployment.
 - Audit retention/archival policy (ownership with `liki-deploy`).
 - Run concurrency and HPA tuning after the audit writer is validated in
   production.
