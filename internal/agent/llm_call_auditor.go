@@ -100,7 +100,7 @@ func (l *llmCallAuditor) failActive(scope *runExecution, err error, finishedAt t
 		}
 		call = domain.FailLLMCall(call, err, finishedAt)
 		call = domain.NormalizeLLMCall(call)
-		l.applyAgent(&call, call.AgentName)
+		call = l.withAgent(call, call.AgentName)
 		recordErr := l.recordCall(context.Background(), scope, &call, audit.EventLLMCallFailed, audit.StatusFailed)
 		if recordErr == nil {
 			delete(scope.activeCalls, callbackKey)
@@ -118,15 +118,16 @@ func (l *llmCallAuditor) reconcile(scope *runExecution, cause error) error {
 	return l.failActive(scope, cause, l.now())
 }
 
-func (l *llmCallAuditor) applyAgent(call *domain.LLMCall, name string) {
+func (l *llmCallAuditor) withAgent(call domain.LLMCall, name string) domain.LLMCall {
 	definition, ok := l.agents[name]
 	if !ok {
-		return
+		return call
 	}
 	call.AgentName = definition.Name
 	call.AgentVersion = definition.Version
 	call.AgentDefinitionDigest = definition.Digest
 	call.PromptVersion = definition.InstructionDigest
+	return call
 }
 
 // recordCallStarted appends the started fact for a model call that ADK reported
@@ -148,9 +149,8 @@ func (l *llmCallAuditor) recordCallStarted(ctx agent.Context, scope *runExecutio
 		DefinitionDigest:  scope.definitionDigest,
 		StartedAt:         runtime.startedAt,
 	}
-	call.Normalize()
-	l.applyAgent(&call, call.AgentName)
-	if err := call.Validate(); err != nil {
+	call = l.withAgent(domain.NormalizeLLMCall(call), call.AgentName)
+	if err := domain.ValidateLLMCall(call); err != nil {
 		return err
 	}
 	return l.recordCall(context.WithoutCancel(ctx), scope, &call, audit.EventLLMCallStarted, audit.StatusRunning)
@@ -193,7 +193,8 @@ func (l *llmCallAuditor) recordCall(ctx context.Context, scope *runExecution, ca
 	} else {
 		event.OccurredAt = call.FinishedAt
 	}
-	if err := event.Validate(); err != nil {
+	event, err := audit.ValidateEvent(event)
+	if err != nil {
 		return err
 	}
 	return l.recorder.Record(ctx, &event)

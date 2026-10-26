@@ -135,9 +135,11 @@ func (r *AuditRecorder) record(event *audit.Event) (string, error) {
 			domain.ErrInvalidInput,
 		)
 	}
-	if err := event.Validate(); err != nil {
+	normalized, err := audit.ValidateEvent(*event)
+	if err != nil {
 		return audit.AppendStatusInvalid, err
 	}
+	*event = normalized
 	job := recorderJob{event: event, result: make(chan recorderResult, 1)}
 	if err := r.enqueue(job); err != nil {
 		return audit.AppendStatusRejected, err

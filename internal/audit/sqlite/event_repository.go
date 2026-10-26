@@ -60,9 +60,11 @@ func (r *AuditEventRepository) record(ctx context.Context, event *audit.Event) (
 			domain.ErrInvalidInput,
 		)
 	}
-	if err := event.Validate(); err != nil {
+	normalized, err := audit.ValidateEvent(*event)
+	if err != nil {
 		return audit.AppendStatusInvalid, err
 	}
+	*event = normalized
 	return r.append(ctx, r.db, event)
 }
 
@@ -210,7 +212,7 @@ func recoveryEvent(original auditEventModel, terminalType, id string, now time.T
 		)
 	}
 
-	event := &audit.Event{
+	event := audit.Event{
 		ID:                    id,
 		Type:                  audit.EventType(terminalType),
 		OccurredAt:            now,
@@ -241,10 +243,11 @@ func recoveryEvent(original auditEventModel, terminalType, id string, now time.T
 		ErrorMessage:          "process interruption detected during startup recovery",
 		Payload:               payload,
 	}
-	if err := event.Validate(); err != nil {
+	normalized, err := audit.ValidateEvent(event)
+	if err != nil {
 		return nil, err
 	}
-	return event, nil
+	return &normalized, nil
 }
 
 // RunExists reports whether any audit evidence exists for the run id.

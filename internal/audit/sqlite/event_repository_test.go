@@ -44,7 +44,7 @@ func TestAuditEventRepositoryAppendsImmutableEvents(t *testing.T) {
 		UserID: "user_1", AgentName: "coordinator",
 		Model: "test-model", Provider: "test", Status: audit.StatusRunning,
 	}
-	if err := started.Validate(); err != nil {
+	if _, err := audit.ValidateEvent(started); err != nil {
 		t.Fatalf("validate started event: %v", err)
 	}
 	exists, err := recorder.RunExists(ctx, started.RunID)
@@ -182,7 +182,7 @@ func TestAuditEventRepositoryRejectsInvalidEvents(t *testing.T) {
 	}
 
 	event := audit.Event{ID: "invalid"}
-	if err := event.Validate(); err == nil {
+	if _, err := audit.ValidateEvent(event); err == nil {
 		t.Fatal("Validate() unexpectedly succeeded")
 	}
 	if err := recorder.Record(context.Background(), &event); err == nil {

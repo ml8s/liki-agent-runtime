@@ -54,9 +54,8 @@ func (l *llmCallAuditor) beforeModel(ctx agent.Context, request *model.LLMReques
 		DefinitionDigest:  scope.definitionDigest,
 		StartedAt:         startedAt,
 	}
-	call.Normalize()
-	l.applyAgent(&call, call.AgentName)
-	if err := call.Validate(); err != nil {
+	call = l.withAgent(domain.NormalizeLLMCall(call), call.AgentName)
+	if err := domain.ValidateLLMCall(call); err != nil {
 		return nil, err
 	}
 	if err := l.recordCall(ctx, scope, &call, audit.EventLLMCallStarted, audit.StatusRunning); err != nil {
@@ -126,8 +125,8 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 	scope.completionTokens += int(call.CompletionTokens)
 	scope.thoughtTokens += int(call.ThoughtTokens)
 	scope.mu.Unlock()
-	l.applyAgent(&call, call.AgentName)
-	if err := call.Validate(); err != nil {
+	call = l.withAgent(call, call.AgentName)
+	if err := domain.ValidateLLMCall(call); err != nil {
 		return response, err
 	}
 	terminalEvent := audit.EventLLMCallCompleted
@@ -214,8 +213,8 @@ func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMReque
 	}
 	call = domain.FailLLMCall(call, requestErr, finishedAt)
 	call = domain.NormalizeLLMCall(call)
-	l.applyAgent(&call, call.AgentName)
-	if err := call.Validate(); err != nil {
+	call = l.withAgent(call, call.AgentName)
+	if err := domain.ValidateLLMCall(call); err != nil {
 		return nil, err
 	}
 	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, &call, audit.EventLLMCallFailed, audit.StatusFailed); auditErr != nil {

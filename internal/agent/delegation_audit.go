@@ -307,7 +307,8 @@ func (a *DelegationAuditor) record(ctx context.Context, scope *runExecution, rec
 	} else {
 		event.OccurredAt = record.StartedAt
 	}
-	if err := event.Validate(); err != nil {
+	event, err := audit.ValidateEvent(event)
+	if err != nil {
 		return err
 	}
 	return a.recorder.Record(context.WithoutCancel(ctx), &event)

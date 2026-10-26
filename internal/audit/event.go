@@ -73,9 +73,20 @@ type Event struct {
 	Payload               map[string]any
 }
 
-// NormalizeEvent returns an equivalent event with whitespace removed from
+// ValidateEvent normalizes an event and reports whether it carries the
+// required lifecycle evidence. The normalized value must replace the input;
+// validation never mutates the caller's event.
+func ValidateEvent(event Event) (Event, error) {
+	event = normalizeEvent(event)
+	if err := event.validate(); err != nil {
+		return Event{}, err
+	}
+	return event, nil
+}
+
+// normalizeEvent returns an equivalent event with whitespace removed from
 // identifier and provenance fields. The input event is never modified.
-func NormalizeEvent(event Event) Event {
+func normalizeEvent(event Event) Event {
 	event.ID = strings.TrimSpace(event.ID)
 	event.Type = EventType(strings.TrimSpace(string(event.Type)))
 	event.UserID = strings.TrimSpace(event.UserID)
@@ -93,15 +104,9 @@ func NormalizeEvent(event Event) Event {
 	return event
 }
 
-// Normalize trims whitespace from identifier fields in place.
-func (e *Event) Normalize() {
-	*e = NormalizeEvent(*e)
-}
-
-// Validate reports whether the event carries the required lifecycle evidence.
-func (e *Event) Validate() error {
-	normalized := NormalizeEvent(*e)
-	*e = normalized
+// validate reports whether the already-normalized event carries the required
+// lifecycle evidence.
+func (e Event) validate() error {
 	switch {
 	case e.ID == "":
 		return NewError(CodeIDRequired, "audit event id is required", domain.ErrInvalidInput)

@@ -271,7 +271,8 @@ func (r *Runtime) recordRunAudit(
 	cause error,
 ) error {
 	event := r.runEvent(ctx, scope, eventType, status, cause)
-	if err := event.Validate(); err != nil {
+	event, err := audit.ValidateEvent(event)
+	if err != nil {
 		return err
 	}
 	return r.recordAuditWithRetry(ctx, &event)

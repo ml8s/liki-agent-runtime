@@ -39,6 +39,15 @@ type RunRequest struct {
 	Context     json.RawMessage
 }
 
+// runIdentity projects the request's caller-owned identity fields.
+func (r RunRequest) runIdentity() RunIdentity {
+	return RunIdentity{
+		RunID:    domain.ID(r.RunID),
+		ThreadID: domain.ID(r.ThreadID),
+		UserID:   r.UserID,
+	}
+}
+
 // RunResult is the validated outcome of one execution.
 type RunResult struct {
 	Definition DefinitionRef

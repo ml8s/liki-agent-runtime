@@ -65,27 +65,22 @@ func NormalizeLLMCall(call LLMCall) LLMCall {
 	return call
 }
 
-// Normalize trims whitespace from identifier and code fields in place.
-func (c *LLMCall) Normalize() {
-	*c = NormalizeLLMCall(*c)
-}
-
-// Validate reports whether the call carries the required provenance.
-func (c *LLMCall) Validate() error {
+// ValidateLLMCall reports whether the call carries the required provenance.
+func ValidateLLMCall(call LLMCall) error {
 	switch {
-	case c.ID == "":
+	case call.ID == "":
 		return NewError(CodeLLMCallIDRequired, "llm call id is required", ErrInvalidInput)
-	case c.RunID == "":
+	case call.RunID == "":
 		return NewError(CodeRunIDRequired, "run_id is required", ErrInvalidInput)
-	case c.ThreadID == "":
+	case call.ThreadID == "":
 		return NewError(CodeThreadIDRequired, "thread_id is required", ErrInvalidInput)
-	case c.UserID == "":
+	case call.UserID == "":
 		return NewError(CodeUserIDRequired, "user_id is required", ErrInvalidInput)
-	case c.AgentName == "":
+	case call.AgentName == "":
 		return NewError(CodeAgentNameRequired, "agent_name is required", ErrInvalidInput)
-	case c.Model == "":
+	case call.Model == "":
 		return NewError(CodeModelRequired, "model is required", ErrInvalidInput)
-	case c.StartedAt.IsZero():
+	case call.StartedAt.IsZero():
 		return NewError(CodeLLMCallStartedAtRequired, "llm call start time is required", ErrInvalidInput)
 	}
 	return nil
@@ -123,14 +118,4 @@ func FailLLMCall(call LLMCall, err error, finishedAt time.Time) LLMCall {
 	next.ErrorCode = CodeLLMCallFailed
 	next.ErrorMessage = "LLM call failed"
 	return next
-}
-
-// Complete marks the call succeeded and records its token usage.
-func (c *LLMCall) Complete(usage LLMTokenUsage, finishedAt time.Time) {
-	*c = CompleteLLMCall(*c, usage, finishedAt)
-}
-
-// Fail marks the call failed with a stable error code.
-func (c *LLMCall) Fail(err error, finishedAt time.Time) {
-	*c = FailLLMCall(*c, err, finishedAt)
 }

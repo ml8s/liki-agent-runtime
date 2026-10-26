@@ -6,38 +6,32 @@ import (
 	"time"
 )
 
-func TestLLMCallNormalize(t *testing.T) {
+func TestNormalizeLLMCall(t *testing.T) {
 	t.Parallel()
-	call := &LLMCall{ID: " call_1 ", AgentName: " coordinator ", Model: " test-model ", ErrorCode: " runtime_timeout "}
-	call.Normalize()
-	if call.ID != "call_1" || call.AgentName != "coordinator" || call.Model != "test-model" || call.ErrorCode != CodeRuntimeTimeout {
-		t.Fatalf("normalized call = %+v", call)
+	input := LLMCall{
+		ID:        " call_1 ",
+		AgentName: " coordinator ",
+		Model:     " test-model ",
+		ErrorCode: " runtime_timeout ",
 	}
-}
-
-func TestNormalizeLLMCallDoesNotMutateInput(t *testing.T) {
-	t.Parallel()
-	input := LLMCall{ID: " call_1 ", AgentName: " main ", Model: " model "}
 	normalized := NormalizeLLMCall(input)
-	if normalized.ID != "call_1" || normalized.AgentName != "main" || normalized.Model != "model" {
+	if normalized.ID != "call_1" || normalized.AgentName != "coordinator" || normalized.Model != "test-model" || normalized.ErrorCode != CodeRuntimeTimeout {
 		t.Fatalf("normalized call = %+v", normalized)
 	}
-	if input.ID != " call_1 " || input.AgentName != " main " || input.Model != " model " {
+	if input.ID != " call_1 " || input.AgentName != " coordinator " || input.Model != " test-model " || input.ErrorCode != " runtime_timeout " {
 		t.Fatalf("input call = %+v, want unchanged", input)
 	}
 }
 
-func TestLLMCallValidate(t *testing.T) {
+func TestValidateLLMCall(t *testing.T) {
 	t.Parallel()
 	started := time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)
-	valid := func() *LLMCall {
-		return &LLMCall{
-			ID: "call_1", RunID: "run_1", ThreadID: "thread_1", UserID: "user_1",
-			AgentName: "coordinator", Model: "test-model", StartedAt: started,
-		}
+	valid := LLMCall{
+		ID: "call_1", RunID: "run_1", ThreadID: "thread_1", UserID: "user_1",
+		AgentName: "coordinator", Model: "test-model", StartedAt: started,
 	}
-	if err := valid().Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
+	if err := ValidateLLMCall(valid); err != nil {
+		t.Fatalf("ValidateLLMCall() error = %v", err)
 	}
 
 	testCases := []struct {
@@ -55,12 +49,12 @@ func TestLLMCallValidate(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			call := valid()
-			testCase.mutate(call)
-			err := call.Validate()
+			call := valid
+			testCase.mutate(&call)
+			err := ValidateLLMCall(call)
 			var domainErr *Error
 			if !errors.As(err, &domainErr) || domainErr.Code != testCase.wantCode {
-				t.Fatalf("Validate() error = %v, want code %s", err, testCase.wantCode)
+				t.Fatalf("ValidateLLMCall() error = %v, want code %s", err, testCase.wantCode)
 			}
 		})
 	}
@@ -70,23 +64,21 @@ func TestLLMCallLifecycle(t *testing.T) {
 	t.Parallel()
 	started := time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)
 	finished := started.Add(2 * time.Second)
+	call := LLMCall{ID: "call_1", StartedAt: started}
 
-	call := &LLMCall{ID: "call_1", StartedAt: started}
-	call.Complete(LLMTokenUsage{PromptTokens: 10, CompletionTokens: 4, ThoughtTokens: 1, TotalTokens: 15}, finished)
-	if call.Status != LLMCallCompleted || call.DurationMS != 2000 || call.TotalTokens != 15 {
-		t.Fatalf("completed call = %+v", call)
+	completed := CompleteLLMCall(call, LLMTokenUsage{PromptTokens: 10, CompletionTokens: 4, ThoughtTokens: 1, TotalTokens: 15}, finished)
+	if completed.Status != LLMCallCompleted || completed.DurationMS != 2000 || completed.TotalTokens != 15 {
+		t.Fatalf("completed call = %+v", completed)
 	}
 
-	call = &LLMCall{ID: "call_1", StartedAt: started}
-	call.Fail(NewError(CodeRuntimeTimeout, "runtime timeout", nil), finished)
-	if call.Status != LLMCallFailed || call.ErrorCode != CodeRuntimeTimeout || call.ErrorMessage != "runtime timeout" {
-		t.Fatalf("domain failed call = %+v", call)
+	failed := FailLLMCall(call, NewError(CodeRuntimeTimeout, "runtime timeout", nil), finished)
+	if failed.Status != LLMCallFailed || failed.ErrorCode != CodeRuntimeTimeout || failed.ErrorMessage != "runtime timeout" {
+		t.Fatalf("domain failed call = %+v", failed)
 	}
 
-	call = &LLMCall{ID: "call_1", StartedAt: started}
-	call.Fail(errors.New("network failed"), finished)
-	if call.ErrorCode != CodeLLMCallFailed || call.ErrorMessage != "LLM call failed" {
-		t.Fatalf("generic failed call = %+v", call)
+	genericFailed := FailLLMCall(call, errors.New("network failed"), finished)
+	if genericFailed.ErrorCode != CodeLLMCallFailed || genericFailed.ErrorMessage != "LLM call failed" {
+		t.Fatalf("generic failed call = %+v", genericFailed)
 	}
 }
 

@@ -94,17 +94,9 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 	scope.RunID = strings.TrimSpace(scope.RunID)
 	scope.ThreadID = strings.TrimSpace(scope.ThreadID)
 	scope.UserID = strings.TrimSpace(scope.UserID)
-	if scope.RunID == "" || scope.ThreadID == "" || scope.UserID == "" {
-		return domain.NewError(domain.CodeAuditScopeRequired, "run, thread, and user identifiers are required", domain.ErrInvalidInput)
-	}
-	if !ValidIdentifier(scope.RunID) {
-		return domain.NewError(domain.CodeRunIDInvalid, "run id must contain at most 128 printable bytes", domain.ErrInvalidInput)
-	}
-	if !ValidIdentifier(scope.ThreadID) {
-		return domain.NewError(domain.CodeThreadIDInvalid, "thread id must contain at most 128 printable bytes", domain.ErrInvalidInput)
-	}
-	if !ValidIdentifier(scope.UserID) {
-		return domain.NewError(domain.CodeUserIDInvalid, "user id must contain at most 128 printable bytes", domain.ErrInvalidInput)
+	identity, err := scope.runIdentity()
+	if err != nil {
+		return err
 	}
 	if err := r.ensureDurableRunID(ctx, scope.RunID); err != nil {
 		return err
@@ -121,11 +113,7 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 		return err
 	}
 	ledgerScope := &runExecution{
-		identity: RunIdentity{
-			RunID:    domain.ID(scope.RunID),
-			ThreadID: domain.ID(scope.ThreadID),
-			UserID:   scope.UserID,
-		},
+		identity: identity,
 		provenance: RunProvenance{
 			Protocol: scope.Protocol,
 			TraceID:  traceIDFromContext(ctx),
@@ -261,22 +249,13 @@ func normalizeRunRequest(request RunRequest) RunRequest {
 // validateRunRequest 校验一次执行的入参不变量：三类标识符必须存在且为
 // 有界可打印字符，用户消息不得为空，会话历史不得超限。
 func validateRunRequest(request RunRequest) error {
-	switch {
-	case request.RunID == "":
-		return domain.NewError(domain.CodeRunIDRequired, "run id is required", domain.ErrInvalidInput)
-	case request.ThreadID == "":
-		return domain.NewError(domain.CodeThreadIDRequired, "thread id is required", domain.ErrInvalidInput)
-	case request.UserID == "":
-		return domain.NewError(domain.CodeUserIDRequired, "user id is required", domain.ErrInvalidInput)
-	case request.UserMessage == "":
+	if request.UserMessage == "" {
 		return domain.NewError(domain.CodeUserMessageRequired, "user message is required", domain.ErrInvalidInput)
-	case !ValidIdentifier(request.RunID):
-		return domain.NewError(domain.CodeRunIDInvalid, "run id must contain at most 128 printable bytes", domain.ErrInvalidInput)
-	case !ValidIdentifier(request.ThreadID):
-		return domain.NewError(domain.CodeThreadIDInvalid, "thread id must contain at most 128 printable bytes", domain.ErrInvalidInput)
-	case !ValidIdentifier(request.UserID):
-		return domain.NewError(domain.CodeUserIDInvalid, "user id must contain at most 128 printable bytes", domain.ErrInvalidInput)
-	case len(request.History) > MaxHistoryMessages:
+	}
+	if err := request.runIdentity().Validate(); err != nil {
+		return err
+	}
+	if len(request.History) > MaxHistoryMessages {
 		return domain.NewError(domain.CodeHistoryInvalid, fmt.Sprintf("conversation history exceeds %d messages", MaxHistoryMessages), domain.ErrInvalidInput)
 	}
 	return nil

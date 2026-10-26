@@ -15,7 +15,7 @@ func TestEventValidate(t *testing.T) {
 		RootRunID: "run_1", RunID: "run_1", ThreadID: "thread_1",
 		UserID: "user_1", AgentName: "coordinator", Status: StatusRunning,
 	}
-	if err := valid.Validate(); err != nil {
+	if _, err := ValidateEvent(valid); err != nil {
 		t.Fatalf("Validate() error = %v", err)
 	}
 
@@ -91,7 +91,7 @@ func TestEventValidate(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			event := valid
 			testCase.mutate(&event)
-			err := event.Validate()
+			_, err := ValidateEvent(event)
 			var domainErr *domain.Error
 			if !errors.As(err, &domainErr) || domainErr.Code != testCase.wantCode {
 				t.Fatalf("Validate() error = %v, want code %s", err, testCase.wantCode)

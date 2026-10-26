@@ -342,7 +342,8 @@ func (a *ToolExecutionAuditor) record(
 	} else {
 		event.OccurredAt = record.FinishedAt
 	}
-	if err := event.Validate(); err != nil {
+	event, err := audit.ValidateEvent(event)
+	if err != nil {
 		return err
 	}
 	return a.recorder.Record(context.WithoutCancel(ctx), &event)
