@@ -17,7 +17,7 @@ import (
 // 因果与补偿错误编码为终态事件的失败原因；返回值仅表示终态事件是否成功
 // 追加——失败时调用方据自身契约决定重试或交给启动恢复，且在此之前不得
 // 释放任何进程状态。Run 与 EndAuditRun 共用此唯一实现。
-func (r *Runtime) closeRunEvidence(ctx context.Context, scope *runScope, cause error) error {
+func (r *Runtime) closeRunEvidence(ctx context.Context, scope *runExecution, cause error) error {
 	ctx = context.WithoutCancel(ctx)
 	if ledgerErr := r.callAuditor.closeActive(scope, runtimeError(cause)); ledgerErr != nil {
 		if reconcileErr := r.callAuditor.reconcile(scope, ledgerErr); reconcileErr != nil && cause == nil {

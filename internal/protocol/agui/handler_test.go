@@ -29,12 +29,12 @@ func (r *recordingAuditEvents) Record(_ context.Context, _ *audit.Event) error {
 
 func newRuntime(t *testing.T) *agent.Runtime {
 	t.Helper()
-	deployment := testagent.Deployment(t)
+	deployment := testagent.AgentDeployment(t)
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		Deployment:       deployment,
+		AgentDeployment:  deployment,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 		AuditRecorder:    &recordingAuditEvents{},
 	})

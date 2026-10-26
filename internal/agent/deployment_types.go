@@ -22,8 +22,8 @@ const (
 	ContractVersion = "liki.agent-deployment.v1"
 )
 
-// Deployment is the validated AgentDeployment artifact and its derived digest.
-type Deployment struct {
+// AgentDeployment is the validated AgentDeployment artifact and its derived digest.
+type AgentDeployment struct {
 	SchemaVersion string             `json:"schema_version"`
 	Metadata      DeploymentMetadata `json:"metadata"`
 	Spec          DeploymentSpec     `json:"spec"`

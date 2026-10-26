@@ -14,11 +14,11 @@ import (
 // Validate rechecks an in-memory deployment, including its derived graph
 // invariants. This is useful after a caller composes a test or migration
 // artifact without changing immutable files.
-func (d *Deployment) Validate() error {
+func (d *AgentDeployment) Validate() error {
 	return d.validate()
 }
 
-func (d *Deployment) validate() error {
+func (d *AgentDeployment) validate() error {
 	if d.SchemaVersion != ContractVersion {
 		return fmt.Errorf("unsupported schema_version %q; want %q", d.SchemaVersion, ContractVersion)
 	}
@@ -70,7 +70,7 @@ func (s *MCPServerDefinition) validate() error {
 	return nil
 }
 
-func (d *Deployment) validateAgentGraph(names map[string]struct{}) error {
+func (d *AgentDeployment) validateAgentGraph(names map[string]struct{}) error {
 	callers := make(map[string]string, len(d.Spec.Agents))
 	incoming := make(map[string]int, len(d.Spec.Agents))
 	for name := range names {
@@ -341,5 +341,5 @@ func selectsString(schema *jsonschema.Schema) bool {
 }
 
 // ToolReferenceFor returns the logical MCP server binding for a tool name.
-// Deployment validation rejects duplicate tool names across servers for one
+// AgentDeployment validation rejects duplicate tool names across servers for one
 // Agent, making this lookup deterministic after artifact validation.

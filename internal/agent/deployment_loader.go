@@ -13,7 +13,7 @@ type definitionLoader struct {
 
 // LoadAgentDeployment validates an AgentDeployment artifact, resolves its
 // external artifacts, and computes its content digest.
-func LoadAgentDeployment(path string) (*Deployment, error) {
+func LoadAgentDeployment(path string) (*AgentDeployment, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, fmt.Errorf("agent deployment file is required")
 	}

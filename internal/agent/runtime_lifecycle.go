@@ -79,9 +79,9 @@ func (l *runLifecycle) finish(runID string) {
 	}
 }
 
-// AuditRunScope identifies an externally driven ADK execution for the LLM
+// RunAuditIdentity identifies an externally driven ADK execution for the LLM
 // audit ledger. It does not create a second execution path.
-type AuditRunScope struct {
+type RunAuditIdentity struct {
 	RunID    string
 	ThreadID string
 	UserID   string
@@ -90,7 +90,7 @@ type AuditRunScope struct {
 
 // BeginAuditRun attaches protocol identity to model callbacks when an official
 // protocol executor drives the shared ADK runtime directly.
-func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope AuditRunScope) error {
+func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope RunAuditIdentity) error {
 	scope.RunID = strings.TrimSpace(scope.RunID)
 	scope.ThreadID = strings.TrimSpace(scope.ThreadID)
 	scope.UserID = strings.TrimSpace(scope.UserID)
@@ -120,7 +120,7 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Aud
 		r.runs.finish(scope.RunID)
 		return err
 	}
-	ledgerScope := &runScope{
+	ledgerScope := &runExecution{
 		runID:             domain.ID(scope.RunID),
 		threadID:          domain.ID(scope.ThreadID),
 		userID:            scope.UserID,
@@ -203,7 +203,7 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 // EndAuditRun path.
 func (r *Runtime) runEvent(
 	ctx context.Context,
-	scope *runScope,
+	scope *runExecution,
 	eventType audit.EventType,
 	status audit.Status,
 	cause error,

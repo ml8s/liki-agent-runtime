@@ -173,7 +173,7 @@ func exposeNone() func(string) bool { return func(string) bool { return false } 
 
 // exposeByDeployment resolves model-text visibility per author from the
 // deployment, mirroring the resolver built by a2a.New.
-func exposeByDeployment(deployment *agent.Deployment) func(string) bool {
+func exposeByDeployment(deployment *agent.AgentDeployment) func(string) bool {
 	return func(author string) bool {
 		definition, ok := deployment.Agent(author)
 		return ok && agent.ExposesModelText(definition)
@@ -182,8 +182,8 @@ func exposeByDeployment(deployment *agent.Deployment) func(string) bool {
 
 // visibilityDeployment models a plain-text entrypoint delegating to a
 // structured expert, the topology that previously leaked raw model JSON.
-func visibilityDeployment() *agent.Deployment {
-	return &agent.Deployment{
+func visibilityDeployment() *agent.AgentDeployment {
+	return &agent.AgentDeployment{
 		Metadata: agent.DeploymentMetadata{Name: "t", Version: "1.0.0"},
 		Spec: agent.DeploymentSpec{Agents: []agent.AgentDefinition{
 			{Name: "main"},
@@ -350,7 +350,7 @@ func TestAgentPartHidesUnknownAuthorText(t *testing.T) {
 
 func structuredEntrypoint(t *testing.T) *agent.AgentDefinition {
 	t.Helper()
-	entrypoint, err := testagent.Deployment(t).EntrypointDefinition()
+	entrypoint, err := testagent.AgentDeployment(t).EntrypointDefinition()
 	if err != nil {
 		t.Fatal(err)
 	}

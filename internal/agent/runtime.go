@@ -49,14 +49,14 @@ const (
 // dependencies, and the durable audit hooks that protocol adapters drive.
 type Runtime struct {
 	config            Config
-	definition        *Deployment
+	definition        *AgentDeployment
 	entrypoint        *AgentDefinition
 	root              agent.Agent
 	sessions          session.Service
 	runner            *runner.Runner
 	runnerConfig      runner.Config
 	callAuditor       *llmCallAuditor
-	delegationAuditor *AgentReferenceAuditor
+	delegationAuditor *DelegationAuditor
 	toolAuditor       *ToolExecutionAuditor
 	tracer            trace.Tracer
 	projectorIndex    eventProjectorIndex
@@ -84,7 +84,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 	if config.AuditRecorder == nil {
 		return Config{}, domain.NewError(domain.CodeAuditRecorderMissing, "audit recorder is required", domain.ErrInvalidInput)
 	}
-	if config.Deployment == nil {
+	if config.AgentDeployment == nil {
 		return Config{}, domain.NewError(domain.CodeAgentDefinitionMissing, "AgentDefinition is required", domain.ErrInvalidInput)
 	}
 	switch config.StructuredOutput {
@@ -93,7 +93,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output capability is invalid", domain.ErrInvalidInput)
 	}
 	structuredAgents := 0
-	for _, candidate := range config.Deployment.Spec.Agents {
+	for _, candidate := range config.AgentDeployment.Spec.Agents {
 		if candidate.Output.Structured() {
 			structuredAgents++
 		}
@@ -187,16 +187,16 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if config.SessionService != nil {
 		sessionService = config.SessionService
 	}
-	entrypoint, err := config.Deployment.EntrypointDefinition()
+	entrypoint, err := config.AgentDeployment.EntrypointDefinition()
 	if err != nil {
 		return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, "select entrypoint AgentDefinition", err)
 	}
-	models, err := newModelRegistry(config, config.Deployment)
+	models, err := newModelRegistry(config, config.AgentDeployment)
 	if err != nil {
 		return nil, err
 	}
 	temperature := float32(config.Temperature)
-	callAuditor := newLLMCallAuditor(config.AuditRecorder, config.Metrics, config.Provider, config.Deployment, config.Now)
+	callAuditor := newLLMCallAuditor(config.AuditRecorder, config.Metrics, config.Provider, config.AgentDeployment, config.Now)
 	mcpToolsets, err := newMCPToolsets(config)
 	if err != nil {
 		return nil, err
@@ -207,18 +207,18 @@ func NewRuntime(config Config) (*Runtime, error) {
 		config.Metrics,
 		config.Now,
 		config.Provider,
-		config.Deployment,
+		config.AgentDeployment,
 		callAuditor.scope,
 	)
-	delegationAuditor := newAgentReferenceAuditor(
+	delegationAuditor := newDelegationAuditor(
 		config.AuditRecorder,
 		config.Metrics,
 		config.Now,
-		config.Deployment,
+		config.AgentDeployment,
 		entrypoint.Name,
 		callAuditor.scope,
 	)
-	graph := newAgentGraphBuilder(config.Deployment, entrypoint.Name, agentGraphDeps{
+	graph := newAgentGraphBuilder(config.AgentDeployment, entrypoint.Name, agentGraphDeps{
 		mcpToolsets:       mcpToolsets,
 		modelName:         config.Model,
 		resolveModel:      models.resolve,
@@ -232,7 +232,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create ADK agent", err)
 	}
-	projectorIndex := newEventProjectorIndex(config.Deployment)
+	projectorIndex := newEventProjectorIndex(config.AgentDeployment)
 	retryPlugin, err := retryandreflect.New(
 		retryandreflect.WithMaxRetries(2),
 		retryandreflect.WithErrorIfRetryExceeded(true),
@@ -265,7 +265,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		toolAuditor:       toolAuditor,
 		tracer:            tracer,
 		projectorIndex:    projectorIndex,
-		definition:        config.Deployment,
+		definition:        config.AgentDeployment,
 		entrypoint:        entrypoint,
 		runs:              newRunLifecycle(),
 		runSlots:          make(chan struct{}, config.MaxConcurrentRuns),
@@ -273,8 +273,8 @@ func NewRuntime(config Config) (*Runtime, error) {
 }
 
 func newMCPToolsets(config Config) ([]tool.Toolset, error) {
-	toolsets := make([]tool.Toolset, 0, len(config.Deployment.Spec.MCPServers))
-	for _, definition := range config.Deployment.Spec.MCPServers {
+	toolsets := make([]tool.Toolset, 0, len(config.AgentDeployment.Spec.MCPServers))
+	for _, definition := range config.AgentDeployment.Spec.MCPServers {
 		resolved, err := resolveMCPServer(definition)
 		if err != nil {
 			return nil, err

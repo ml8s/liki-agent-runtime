@@ -56,7 +56,7 @@ func BenchmarkEventProjectorPartialText(b *testing.B) {
 }
 
 func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
-	deployment := &Deployment{
+	deployment := &AgentDeployment{
 		Metadata: DeploymentMetadata{Name: "test", Version: "1.0.0"},
 		Spec: DeploymentSpec{Agents: []AgentDefinition{{
 			Name:        "main",
@@ -84,7 +84,7 @@ func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 }
 
 func TestEventProjectorHidesStructuredPayload(t *testing.T) {
-	deployment := &Deployment{
+	deployment := &AgentDeployment{
 		Metadata: DeploymentMetadata{Name: "test", Version: "1.0.0"},
 		Spec: DeploymentSpec{Agents: []AgentDefinition{{
 			Name:        "main",
@@ -191,8 +191,8 @@ func TestEventProjectorKeepsToolFactWhenSuppressingFinalText(t *testing.T) {
 	}
 }
 
-func plainTextDeployment() *Deployment {
-	return &Deployment{
+func plainTextDeployment() *AgentDeployment {
+	return &AgentDeployment{
 		Metadata: DeploymentMetadata{Name: "test", Version: "1.0.0"},
 		Spec: DeploymentSpec{Agents: []AgentDefinition{{
 			Name:        "main",
@@ -205,8 +205,8 @@ func plainTextDeployment() *Deployment {
 	}
 }
 
-func structuredTextDeployment() *Deployment {
-	return &Deployment{
+func structuredTextDeployment() *AgentDeployment {
+	return &AgentDeployment{
 		Metadata: DeploymentMetadata{Name: "test", Version: "1.0.0"},
 		Spec: DeploymentSpec{Agents: []AgentDefinition{{
 			Name:        "main",
@@ -247,7 +247,7 @@ func TestExposesModelText(t *testing.T) {
 // TestEventProjectorExposeDecisionMatchesRule locks the projector to the single
 // visibility policy so a protocol adapter cannot silently diverge from it.
 func TestEventProjectorExposeDecisionMatchesRule(t *testing.T) {
-	for _, deployment := range []*Deployment{plainTextDeployment(), structuredTextDeployment()} {
+	for _, deployment := range []*AgentDeployment{plainTextDeployment(), structuredTextDeployment()} {
 		entrypoint := deployment.Spec.Agents[0]
 		projector := newEventProjector(newEventProjectorIndex(deployment))
 		definition, expose := projector.definitionFor(entrypoint.Name)

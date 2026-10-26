@@ -47,7 +47,7 @@ func newAuditRuntime(t *testing.T) (*agent.Runtime, *recordingAuditEvents) {
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		Deployment:       deployment,
+		AgentDeployment:  deployment,
 		StructuredOutput: "json_schema",
 		Provider:         "test-provider",
 		AuditRecorder:    events,
@@ -90,7 +90,7 @@ func newAuditRuntimeWithClock(t *testing.T, recorder audit.Recorder, maxConcurre
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:             "test-model",
 		ModelAPIKey:       "test-key",
-		Deployment:        deployment,
+		AgentDeployment:   deployment,
 		StructuredOutput:  "json_schema",
 		Provider:          "test-provider",
 		AuditRecorder:     recorder,
@@ -105,7 +105,7 @@ func newAuditRuntimeWithClock(t *testing.T, recorder audit.Recorder, maxConcurre
 
 func TestExternalAuditRunLifecycleIsExclusive(t *testing.T) {
 	runtime, events := newAuditRuntime(t)
-	scope := agent.AuditRunScope{RunID: "run_1", ThreadID: "thread_1", UserID: "user_1"}
+	scope := agent.RunAuditIdentity{RunID: "run_1", ThreadID: "thread_1", UserID: "user_1"}
 	ctx := context.Background()
 	if err := runtime.BeginAuditRun(ctx, "session_1", scope); err != nil {
 		t.Fatalf("BeginAuditRun() error = %v", err)
@@ -135,7 +135,7 @@ func TestExternalAuditRunAllowsMultipleTasksInOneSession(t *testing.T) {
 	runtime, events := newAuditRuntime(t)
 	ctx := context.Background()
 	for _, runID := range []string{"task_1", "task_2"} {
-		scope := agent.AuditRunScope{
+		scope := agent.RunAuditIdentity{
 			RunID:    runID,
 			ThreadID: "context_1",
 			UserID:   "user_1",
@@ -170,7 +170,7 @@ func TestExternalAuditRunAllowsMultipleTasksInOneSession(t *testing.T) {
 func TestExternalAuditRunRejectsDuplicateRunID(t *testing.T) {
 	runtime, _ := newAuditRuntime(t)
 	ctx := context.Background()
-	scope := agent.AuditRunScope{
+	scope := agent.RunAuditIdentity{
 		RunID:    "task_duplicate",
 		ThreadID: "context_1",
 		UserID:   "user_1",
@@ -197,7 +197,7 @@ func TestExternalAuditRunRecordsDuration(t *testing.T) {
 		return tick
 	})
 	ctx := context.Background()
-	scope := agent.AuditRunScope{
+	scope := agent.RunAuditIdentity{
 		RunID:    "task_duration",
 		ThreadID: "context_1",
 		UserID:   "user_1",
@@ -219,7 +219,7 @@ func TestExternalAuditRunRetriesTerminalAppendAndReleasesOnce(t *testing.T) {
 	recorder := &flakyRunTerminalAudit{recordingAuditEvents: &recordingAuditEvents{}, remaining: 2}
 	runtime := newAuditRuntimeWith(t, recorder, 1)
 	ctx := context.Background()
-	scope := agent.AuditRunScope{RunID: "task_retry", ThreadID: "context_1", UserID: "user_1", Protocol: "a2a"}
+	scope := agent.RunAuditIdentity{RunID: "task_retry", ThreadID: "context_1", UserID: "user_1", Protocol: "a2a"}
 	if err := runtime.BeginAuditRun(ctx, "context_1", scope); err != nil {
 		t.Fatalf("BeginAuditRun() error = %v", err)
 	}
@@ -240,7 +240,7 @@ func TestExternalAuditRunRetriesTerminalAppendAndReleasesOnce(t *testing.T) {
 	}
 	// The slot was released exactly once: a fresh single-slot run acquires it
 	// instead of observing CodeRuntimeBusy (release) or blocking (double release).
-	next := agent.AuditRunScope{RunID: "task_next", ThreadID: "context_2", UserID: "user_1", Protocol: "a2a"}
+	next := agent.RunAuditIdentity{RunID: "task_next", ThreadID: "context_2", UserID: "user_1", Protocol: "a2a"}
 	if err := runtime.BeginAuditRun(ctx, "context_2", next); err != nil {
 		t.Fatalf("BeginAuditRun() after release error = %v", err)
 	}
@@ -262,7 +262,7 @@ func (e *existsAudit) RunExists(_ context.Context, _ domain.ID) (bool, error) {
 // run-id check (ensureDurableRunID) that runs before in-memory bookkeeping.
 func TestExternalAuditRunRejectsDurableDuplicateRunID(t *testing.T) {
 	runtime := newAuditRuntimeWith(t, &existsAudit{exists: true}, 1)
-	scope := agent.AuditRunScope{RunID: "run_dup", ThreadID: "thread_1", UserID: "user_1", Protocol: "a2a"}
+	scope := agent.RunAuditIdentity{RunID: "run_dup", ThreadID: "thread_1", UserID: "user_1", Protocol: "a2a"}
 	err := runtime.BeginAuditRun(context.Background(), "session_dup", scope)
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRunIDConflict {

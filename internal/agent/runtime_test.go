@@ -36,8 +36,8 @@ func TestNewRuntimeValidatesDeployment(t *testing.T) {
 		{
 			name: "missing model",
 			config: agent.Config{
-				Deployment:    agent.NewTestDeployment(t),
-				AuditRecorder: nopAuditRecorder{},
+				AgentDeployment: agent.NewTestDeployment(t),
+				AuditRecorder:   nopAuditRecorder{},
 			},
 			expected: domain.CodeLLMModelMissing,
 		},
@@ -45,7 +45,7 @@ func TestNewRuntimeValidatesDeployment(t *testing.T) {
 			name: "invalid structured output capability",
 			config: agent.Config{
 				Model:            "test-model",
-				Deployment:       agent.NewTestDeployment(t),
+				AgentDeployment:  agent.NewTestDeployment(t),
 				AuditRecorder:    nopAuditRecorder{},
 				StructuredOutput: "yaml",
 			},
@@ -71,7 +71,7 @@ func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
 	_, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		Deployment:       deployment,
+		AgentDeployment:  deployment,
 		AuditRecorder:    failing,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 	})
@@ -87,7 +87,7 @@ func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		Deployment:       deployment,
+		AgentDeployment:  deployment,
 		AuditRecorder:    recovered,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 	})
@@ -104,11 +104,11 @@ func TestRuntimeExposesImmutableDeploymentViews(t *testing.T) {
 	entrypoint := runtime.Entrypoint()
 	entrypoint.Name = "mutated"
 	entrypoint.Tools.Allow["test"] = []string{"unauthorized"}
-	mutatedDeployment := runtime.Deployment()
+	mutatedDeployment := runtime.AgentDeployment()
 	mutatedDeployment.Metadata.Name = "mutated-deployment"
 
 	unchangedEntrypoint := runtime.Entrypoint()
-	unchangedDeployment := runtime.Deployment()
+	unchangedDeployment := runtime.AgentDeployment()
 	if unchangedEntrypoint.Name == "mutated" ||
 		len(unchangedEntrypoint.Tools.Allow["test"]) != 1 ||
 		unchangedEntrypoint.Tools.Allow["test"][0] != "test_tool" ||
@@ -124,7 +124,7 @@ func TestNewRuntimeUsesInjectedOfficialSessionService(t *testing.T) {
 	runtime, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
-		Deployment:       deployment,
+		AgentDeployment:  deployment,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 		AuditRecorder:    nopAuditRecorder{},
 		SessionService:   injected,
@@ -142,7 +142,7 @@ func TestNewRuntimeRequiresMCPEndpointEnvironment(t *testing.T) {
 	t.Setenv("TEST_MCP_ENDPOINT", "")
 	_, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
-		Deployment:       deployment,
+		AgentDeployment:  deployment,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 		AuditRecorder:    nopAuditRecorder{},
 	})
@@ -167,7 +167,7 @@ func TestNewRuntimeRejectsInvalidMCPEndpoint(t *testing.T) {
 			t.Setenv("TEST_MCP_ENDPOINT", test.endpoint)
 			_, err := agent.NewRuntime(agent.Config{
 				Model:            "test-model",
-				Deployment:       agent.NewTestDeployment(t),
+				AgentDeployment:  agent.NewTestDeployment(t),
 				StructuredOutput: agent.StructuredOutputJSONSchema,
 				AuditRecorder:    nopAuditRecorder{},
 			})

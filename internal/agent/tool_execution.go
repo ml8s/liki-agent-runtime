@@ -12,10 +12,10 @@ import (
 	"google.golang.org/adk/v2/tool"
 )
 
-// ToolExecutionRecord is the runtime evidence for one standard ADK tool call.
+// ToolCallRecord is the runtime evidence for one standard ADK tool call.
 // Raw arguments and results never enter audit; only canonical digests and size
 // are retained.
-type ToolExecutionRecord struct {
+type ToolCallRecord struct {
 	CallID       string
 	Tool         string
 	RootRunID    domain.ID
@@ -46,10 +46,10 @@ type ToolExecutionAuditor struct {
 	provider string
 
 	agents map[string]*AgentDefinition
-	scope  func(sessionID string) (*runScope, bool)
+	scope  func(sessionID string) (*runExecution, bool)
 
 	mu      sync.Mutex
-	pending map[string]ToolExecutionRecord
+	pending map[string]ToolCallRecord
 }
 
 func newToolExecutionAuditor(
@@ -57,8 +57,8 @@ func newToolExecutionAuditor(
 	metrics Metrics,
 	now func() time.Time,
 	provider string,
-	deployment *Deployment,
-	scope func(sessionID string) (*runScope, bool),
+	deployment *AgentDeployment,
+	scope func(sessionID string) (*runExecution, bool),
 ) *ToolExecutionAuditor {
 	agents := make(map[string]*AgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
@@ -72,7 +72,7 @@ func newToolExecutionAuditor(
 		provider: provider,
 		agents:   agents,
 		scope:    scope,
-		pending:  make(map[string]ToolExecutionRecord),
+		pending:  make(map[string]ToolCallRecord),
 	}
 }
 
@@ -211,10 +211,10 @@ func (a *ToolExecutionAuditor) AfterTool(
 // transient failure stays retryable by the run's cleanup callback.
 func (a *ToolExecutionAuditor) FailPending(
 	ctx context.Context,
-	scope *runScope,
+	scope *runExecution,
 ) error {
 	a.mu.Lock()
-	pending := make(map[string]ToolExecutionRecord)
+	pending := make(map[string]ToolCallRecord)
 	for key, record := range a.pending {
 		if scope == nil || string(record.RunID) == string(scope.runID) {
 			pending[key] = record
@@ -249,9 +249,9 @@ func (a *ToolExecutionAuditor) startedRecord(
 	ctx adkagent.Context,
 	tool tool.Tool,
 	args map[string]any,
-	scope *runScope,
-) (ToolExecutionRecord, error) {
-	record := ToolExecutionRecord{
+	scope *runExecution,
+) (ToolCallRecord, error) {
+	record := ToolCallRecord{
 		RootRunID: scope.runID,
 		RunID:     scope.runID,
 		ThreadID:  scope.threadID,
@@ -259,19 +259,19 @@ func (a *ToolExecutionAuditor) startedRecord(
 	}
 	definition, ok := a.agents[ctx.AgentName()]
 	if !ok {
-		return ToolExecutionRecord{}, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("tool execution agent %q is not deployed", ctx.AgentName()), nil)
+		return ToolCallRecord{}, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("tool execution agent %q is not deployed", ctx.AgentName()), nil)
 	}
 	reference, allowed := definition.ToolReferenceFor(tool.Name())
 	if !allowed {
-		return ToolExecutionRecord{}, domain.NewError(domain.CodeToolCallInvalid, fmt.Sprintf("tool %q is not allowlisted for agent %q", tool.Name(), ctx.AgentName()), nil)
+		return ToolCallRecord{}, domain.NewError(domain.CodeToolCallInvalid, fmt.Sprintf("tool %q is not allowlisted for agent %q", tool.Name(), ctx.AgentName()), nil)
 	}
 	inputDigest, inputBytes, err := audit.CanonicalDigest(args)
 	if err != nil {
-		return ToolExecutionRecord{}, domain.NewError(domain.CodeToolProvenanceInvalid, "digest tool input", err)
+		return ToolCallRecord{}, domain.NewError(domain.CodeToolProvenanceInvalid, "digest tool input", err)
 	}
 	callID := ctx.FunctionCallID()
 	if callID == "" {
-		return ToolExecutionRecord{}, domain.NewError(domain.CodeToolCallIDRequired, "tool function call id is required", nil)
+		return ToolCallRecord{}, domain.NewError(domain.CodeToolCallIDRequired, "tool function call id is required", nil)
 	}
 	record.CallID = callID
 	record.Tool = tool.Name()
@@ -290,8 +290,8 @@ func (a *ToolExecutionAuditor) startedRecord(
 // missing scope fails closed instead of dropping evidence.
 func (a *ToolExecutionAuditor) record(
 	ctx context.Context,
-	scope *runScope,
-	record ToolExecutionRecord,
+	scope *runExecution,
+	record ToolCallRecord,
 	eventType audit.EventType,
 ) error {
 	if scope == nil {

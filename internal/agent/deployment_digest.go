@@ -52,7 +52,7 @@ func agentDigest(definition AgentDefinition) (string, error) {
 	return sha256Hex(raw), nil
 }
 
-func deploymentDigest(manifest []byte, deployment *Deployment) (string, error) {
+func deploymentDigest(manifest []byte, deployment *AgentDeployment) (string, error) {
 	agents := make([]agentDigestInput, 0, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		agents = append(agents, agentDigestInputFrom(&deployment.Spec.Agents[index]))
@@ -68,7 +68,7 @@ func deploymentDigest(manifest []byte, deployment *Deployment) (string, error) {
 }
 
 // EntrypointDefinition returns the sole root of the ADK Agent tree.
-func (d *Deployment) EntrypointDefinition() (*AgentDefinition, error) {
+func (d *AgentDeployment) EntrypointDefinition() (*AgentDefinition, error) {
 	root, err := d.RootName()
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func (d *Deployment) EntrypointDefinition() (*AgentDefinition, error) {
 
 // RootName derives the entrypoint from the ADK Agent tree rather than from a
 // duplicate deployment field.
-func (d *Deployment) RootName() (string, error) {
+func (d *AgentDeployment) RootName() (string, error) {
 	incoming := make(map[string]int, len(d.Spec.Agents))
 	for _, definition := range d.Spec.Agents {
 		incoming[definition.Name] += 0
@@ -104,7 +104,7 @@ func (d *Deployment) RootName() (string, error) {
 }
 
 // Agent returns the AgentDefinition with the given name, if present.
-func (d *Deployment) Agent(name string) (*AgentDefinition, bool) {
+func (d *AgentDeployment) Agent(name string) (*AgentDefinition, bool) {
 	for index := range d.Spec.Agents {
 		if d.Spec.Agents[index].Name == name {
 			return &d.Spec.Agents[index], true
@@ -114,7 +114,7 @@ func (d *Deployment) Agent(name string) (*AgentDefinition, bool) {
 }
 
 // DefinitionRef returns the deployment-level identity used by audit and MCP.
-func (d *Deployment) DefinitionRef() DefinitionRef {
+func (d *AgentDeployment) DefinitionRef() DefinitionRef {
 	return DefinitionRef{
 		Name:    d.Metadata.Name,
 		Version: d.Metadata.Version,

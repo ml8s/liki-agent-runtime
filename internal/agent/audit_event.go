@@ -8,7 +8,7 @@ import "github.com/ml8s/liki-agent-runtime/internal/audit"
 //
 // Keeping this in one place means a new shared provenance field is added once
 // instead of at every event-construction site.
-func scopedEvent(scope *runScope) audit.Event {
+func scopedEvent(scope *runExecution) audit.Event {
 	return audit.Event{
 		RootRunID:         scope.runID,
 		RunID:             scope.runID,

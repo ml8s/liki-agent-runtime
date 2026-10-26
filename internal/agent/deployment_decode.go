@@ -8,8 +8,8 @@ import (
 	"io"
 )
 
-func decodeAgentDeployment(raw []byte) (*Deployment, error) {
-	var deployment Deployment
+func decodeAgentDeployment(raw []byte) (*AgentDeployment, error) {
+	var deployment AgentDeployment
 	if err := decodeStrictJSON(raw, &deployment); err != nil {
 		return nil, fmt.Errorf("decode agent deployment: %w", err)
 	}

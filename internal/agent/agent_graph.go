@@ -22,20 +22,20 @@ type agentGraphDeps struct {
 	temperature       float32
 	maxOutputTokens   int
 	callAuditor       *llmCallAuditor
-	delegationAuditor *AgentReferenceAuditor
+	delegationAuditor *DelegationAuditor
 	toolAuditor       *ToolExecutionAuditor
 }
 
 // agentGraphBuilder 构建以入口定义为根的 Agent 依赖图。
 type agentGraphBuilder struct {
-	deployment     *Deployment
+	deployment     *AgentDeployment
 	entrypointName string
 	deps           agentGraphDeps
 	built          map[string]agent.Agent
 	building       map[string]struct{}
 }
 
-func newAgentGraphBuilder(deployment *Deployment, entrypointName string, deps agentGraphDeps) *agentGraphBuilder {
+func newAgentGraphBuilder(deployment *AgentDeployment, entrypointName string, deps agentGraphDeps) *agentGraphBuilder {
 	return &agentGraphBuilder{
 		deployment:     deployment,
 		entrypointName: entrypointName,

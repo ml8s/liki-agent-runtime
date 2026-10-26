@@ -38,7 +38,7 @@ func writeDeploymentFixture(t *testing.T, root, instruction, schema, manifest st
 	return path
 }
 
-func writeDeployment(t *testing.T, root string, manifest string) *Deployment {
+func writeDeployment(t *testing.T, root string, manifest string) *AgentDeployment {
 	t.Helper()
 	path := writeDeploymentFixture(t, root, genericInstruction, requiredAnswerSchema, manifest)
 	deployment, err := LoadAgentDeployment(path)
@@ -394,7 +394,7 @@ func TestLoadAgentDeploymentValidatesGraph(t *testing.T) {
 }
 
 // TestDeploymentValidateRechecksInMemoryMutation covers the exported
-// Deployment.Validate method directly: an unchanged deployment passes, and
+// AgentDeployment.Validate method directly: an unchanged deployment passes, and
 // mutating the graph to a duplicate agent fails validation.
 func TestDeploymentValidateRechecksInMemoryMutation(t *testing.T) {
 	deployment := NewTestDeployment(t)

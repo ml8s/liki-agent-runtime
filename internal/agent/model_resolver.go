@@ -5,7 +5,7 @@ import (
 	"google.golang.org/adk/v2/model"
 )
 
-// modelRegistry is immutable after construction. Deployment graph validation
+// modelRegistry is immutable after construction. AgentDeployment graph validation
 // guarantees every Agent is reachable from the entrypoint, so construction can
 // eagerly build each distinct model client once and runtime event flow only
 // performs read-only lookups.
@@ -13,7 +13,7 @@ type modelRegistry struct {
 	models map[string]model.LLM
 }
 
-func newModelRegistry(config Config, deployment *Deployment) (modelRegistry, error) {
+func newModelRegistry(config Config, deployment *AgentDeployment) (modelRegistry, error) {
 	return newModelRegistryWithBuilder(newModelBuilder(config), deploymentModelNames(deployment, config.Model))
 }
 
@@ -35,7 +35,7 @@ func newModelRegistryWithBuilder(
 	return modelRegistry{models: models}, nil
 }
 
-func deploymentModelNames(deployment *Deployment, defaultModel string) []string {
+func deploymentModelNames(deployment *AgentDeployment, defaultModel string) []string {
 	names := make([]string, 0, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		names = append(names, deployment.Spec.Agents[index].EffectiveModel(defaultModel))

@@ -23,7 +23,7 @@ import (
 	"google.golang.org/genai"
 )
 
-func buildTestDeployment(t testing.TB) (*Deployment, error) {
+func buildTestDeployment(t testing.TB) (*AgentDeployment, error) {
 	t.Helper()
 	root := t.TempDir()
 	files := map[string]string{
@@ -71,7 +71,7 @@ func buildTestDeployment(t testing.TB) (*Deployment, error) {
 	return LoadAgentDeployment(filepath.Join(root, "agent-deployment.json"))
 }
 
-func testDeployment(t testing.TB) (*Deployment, error) {
+func testDeployment(t testing.TB) (*AgentDeployment, error) {
 	t.Helper()
 	return buildTestDeployment(t)
 }
@@ -279,13 +279,13 @@ func (r *recordingAudit) eventsOfType(eventType audit.EventType) []audit.Event {
 
 // newTestRuntime wires a fake model and an in-memory MCP server. This avoids
 // network dependencies while retaining ADK's real runner and toolset behavior.
-func newTestRuntime(t testing.TB, deployment *Deployment, events *recordingAudit, llm model.LLM) *Runtime {
+func newTestRuntime(t testing.TB, deployment *AgentDeployment, events *recordingAudit, llm model.LLM) *Runtime {
 	return newTestRuntimeWithLimit(t, deployment, events, llm, 0)
 }
 
 func newTestRuntimeWithLimit(
 	t testing.TB,
-	deployment *Deployment,
+	deployment *AgentDeployment,
 	events *recordingAudit,
 	llm model.LLM,
 	maxRuns int,
@@ -306,7 +306,7 @@ func newTestRuntimeWithLimit(
 	t.Cleanup(func() { _ = serverSession.Close() })
 	runtime, err := NewRuntime(Config{
 		Model:             "fake-model",
-		Deployment:        deployment,
+		AgentDeployment:   deployment,
 		AuditRecorder:     events,
 		MaxConcurrentRuns: maxRuns,
 		modelOverride:     llm,
@@ -320,7 +320,7 @@ func newTestRuntimeWithLimit(
 	return runtime
 }
 
-func plainTestDeployment(t testing.TB) *Deployment {
+func plainTestDeployment(t testing.TB) *AgentDeployment {
 	t.Helper()
 	deployment := NewTestDeployment(t)
 	for index := range deployment.Spec.Agents {
@@ -342,7 +342,7 @@ func plainTestDeployment(t testing.TB) *Deployment {
 func TestNewRuntimeRejectsRedundantStructuredOutputMode(t *testing.T) {
 	_, err := NewRuntime(Config{
 		Model:            "fake-model",
-		Deployment:       plainTestDeployment(t),
+		AgentDeployment:  plainTestDeployment(t),
 		StructuredOutput: StructuredOutputJSONObject,
 		AuditRecorder:    &recordingAudit{},
 	})
@@ -479,7 +479,7 @@ func TestExternalSessionCleanupFailureDoesNotFlipSuccessfulRun(t *testing.T) {
 	events := &recordingAudit{}
 	runtime, err := NewRuntime(Config{
 		Model:             "fake-model",
-		Deployment:        deployment,
+		AgentDeployment:   deployment,
 		AuditRecorder:     events,
 		MaxConcurrentRuns: 1,
 		modelOverride: &fakeLLM{responses: []*model.LLMResponse{{
@@ -491,7 +491,7 @@ func TestExternalSessionCleanupFailureDoesNotFlipSuccessfulRun(t *testing.T) {
 		t.Fatalf("NewRuntime() error = %v", err)
 	}
 
-	scope := AuditRunScope{
+	scope := RunAuditIdentity{
 		RunID: "external_cleanup_failure", ThreadID: "external_context", UserID: "user_1", Protocol: "a2a",
 	}
 	if err := runtime.BeginAuditRun(context.Background(), "external_context", scope); err != nil {
@@ -512,7 +512,7 @@ func TestExternalAuditRunDeletesExternalSession(t *testing.T) {
 	events := &recordingAudit{}
 	runtime := newTestRuntime(t, NewTestDeployment(t), events, &fakeLLM{})
 	ctx := context.Background()
-	scope := AuditRunScope{
+	scope := RunAuditIdentity{
 		RunID:    "a2a_task",
 		ThreadID: "a2a_context",
 		UserID:   "user_1",
@@ -782,7 +782,7 @@ func TestRuntimeRunLLMError(t *testing.T) {
 
 // NewTestDeployment exposes the generic test deployment to external adapter
 // tests compiled into the same test binary.
-func NewTestDeployment(t testing.TB) *Deployment {
+func NewTestDeployment(t testing.TB) *AgentDeployment {
 	t.Setenv("TEST_MCP_ENDPOINT", "in-memory://test")
 	deployment, err := testDeployment(t)
 	if err != nil {

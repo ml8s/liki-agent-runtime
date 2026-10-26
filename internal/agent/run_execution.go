@@ -7,7 +7,7 @@ import (
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
 
-type runScope struct {
+type runExecution struct {
 	mu                sync.Mutex
 	runID             domain.ID
 	threadID          domain.ID
@@ -32,7 +32,7 @@ type runScope struct {
 }
 
 // usage returns the aggregated model usage recorded for this run so far.
-func (s *runScope) usage() RunUsage {
+func (s *runExecution) usage() RunUsage {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return RunUsage{

@@ -14,7 +14,7 @@ import (
 // single-turn sub-agent. Single-turn delegation runs through the standard
 // tool pipeline, so a model response that carries two function calls
 // executes both sub-agent invocations concurrently.
-func parallelDelegationDeployment(t *testing.T) *Deployment {
+func parallelDelegationDeployment(t *testing.T) *AgentDeployment {
 	t.Helper()
 	deployment := plainTestDeployment(t)
 	root := &deployment.Spec.Agents[0]

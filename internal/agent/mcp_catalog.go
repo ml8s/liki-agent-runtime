@@ -30,7 +30,7 @@ func (systemReadonlyContext) SessionID() string { return "" }
 func (systemReadonlyContext) Branch() string    { return "" }
 
 // mcpCatalogTTL bounds how long one standard tools/list discovery round is
-// reused. Deployment artifacts are immutable; a server-side catalog changes
+// reused. AgentDeployment artifacts are immutable; a server-side catalog changes
 // only when the MCP server itself redeploys, so one minute bounds staleness
 // while removing an outbound round trip from every agent flow.
 const mcpCatalogTTL = time.Minute

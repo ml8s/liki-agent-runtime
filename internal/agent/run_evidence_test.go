@@ -76,16 +76,16 @@ func TestCloseRunEvidenceEncodesCompensationFailureAndPersistsTerminal(t *testin
 	}
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	runtime, err := NewRuntime(Config{
-		Model:         "test-model",
-		ModelAPIKey:   "test-key",
-		Deployment:    deployment,
-		Provider:      "test-provider",
-		AuditRecorder: events,
+		Model:           "test-model",
+		ModelAPIKey:     "test-key",
+		AgentDeployment: deployment,
+		Provider:        "test-provider",
+		AuditRecorder:   events,
 	})
 	if err != nil {
 		t.Fatalf("NewRuntime() error = %v", err)
 	}
-	scope := AuditRunScope{RunID: "run_e1", ThreadID: "thread_e1", UserID: "user_e1"}
+	scope := RunAuditIdentity{RunID: "run_e1", ThreadID: "thread_e1", UserID: "user_e1"}
 	sessionID := runSessionID(scope.RunID)
 	ctx := context.Background()
 	if err := runtime.BeginAuditRun(ctx, sessionID, scope); err != nil {

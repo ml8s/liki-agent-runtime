@@ -27,7 +27,7 @@ type Config struct {
 	// MaxOutputTokens bounds every model response; 0 leaves the provider
 	// default unbounded.
 	MaxOutputTokens int
-	Deployment      *Deployment
+	AgentDeployment *AgentDeployment
 
 	MCPTimeout time.Duration
 

@@ -122,8 +122,8 @@ func fixedLedgerNow() time.Time {
 	return time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
 }
 
-func newTestScope() *runScope {
-	return &runScope{
+func newTestScope() *runExecution {
+	return &runExecution{
 		runID:             "run_1",
 		threadID:          "thread_1",
 		userID:            "user_1",

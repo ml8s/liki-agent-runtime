@@ -10,7 +10,7 @@ import (
 	"google.golang.org/genai"
 )
 
-func (l *definitionLoader) loadAgents(deployment *Deployment) error {
+func (l *definitionLoader) loadAgents(deployment *AgentDeployment) error {
 	for index := range deployment.Spec.Agents {
 		agent := &deployment.Spec.Agents[index]
 		instructionRaw, err := l.readFile(agent.Instruction.Path)

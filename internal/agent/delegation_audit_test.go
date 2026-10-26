@@ -14,7 +14,7 @@ import (
 	"google.golang.org/genai"
 )
 
-func newDelegationAuditor(t *testing.T, branch string) (*AgentReferenceAuditor, *recordingAudit, *stubMetrics, *fakeAgentContext) {
+func newDelegationAuditorForTest(t *testing.T, branch string) (*DelegationAuditor, *recordingAudit, *stubMetrics, *fakeAgentContext) {
 	t.Helper()
 	deployment := NewTestDeployment(t)
 	deployment.Spec.Agents[0].Name = "coordinator"
@@ -38,7 +38,7 @@ func newDelegationAuditor(t *testing.T, branch string) (*AgentReferenceAuditor, 
 	ledger := newLLMCallAuditor(events, metrics, "test-provider", deployment, func() time.Time {
 		return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	})
-	auditor := newAgentReferenceAuditor(
+	auditor := newDelegationAuditor(
 		events,
 		metrics,
 		func() time.Time { return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC) },
@@ -69,8 +69,8 @@ func newDelegationAuditor(t *testing.T, branch string) (*AgentReferenceAuditor, 
 	return auditor, events, metrics, ctx
 }
 
-func TestAgentReferenceAuditorRecordsSuccessfulDelegation(t *testing.T) {
-	auditor, events, metrics, ctx := newDelegationAuditor(t, "coordinator.worker")
+func TestDelegationAuditorRecordsSuccessfulDelegation(t *testing.T) {
+	auditor, events, metrics, ctx := newDelegationAuditorForTest(t, "coordinator.worker")
 	if _, err := auditor.BeforeAgent(ctx); err != nil {
 		t.Fatalf("BeforeAgent() error = %v", err)
 	}
@@ -97,8 +97,8 @@ func TestAgentReferenceAuditorRecordsSuccessfulDelegation(t *testing.T) {
 	}
 }
 
-func TestAgentReferenceAuditorSkipsEntrypoint(t *testing.T) {
-	auditor, events, _, ctx := newDelegationAuditor(t, "coordinator")
+func TestDelegationAuditorSkipsEntrypoint(t *testing.T) {
+	auditor, events, _, ctx := newDelegationAuditorForTest(t, "coordinator")
 	ctx.agentName = "coordinator"
 	ctx.branch = "coordinator"
 	if _, err := auditor.BeforeAgent(ctx); err != nil {
@@ -109,8 +109,8 @@ func TestAgentReferenceAuditorSkipsEntrypoint(t *testing.T) {
 	}
 }
 
-func TestAgentReferenceAuditorFailsPending(t *testing.T) {
-	auditor, events, metrics, ctx := newDelegationAuditor(t, "coordinator.worker")
+func TestDelegationAuditorFailsPending(t *testing.T) {
+	auditor, events, metrics, ctx := newDelegationAuditorForTest(t, "coordinator.worker")
 	ledger := newLLMCallAuditor(events, metrics, "test-provider", NewTestDeployment(t), func() time.Time {
 		return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	})
@@ -139,7 +139,7 @@ func TestAgentReferenceAuditorFailsPending(t *testing.T) {
 	}
 }
 
-func TestAgentReferenceAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
+func TestDelegationAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 	events := &failOnceAudit{eventType: audit.EventDelegationCompleted}
 	deployment := NewTestDeployment(t)
 	deployment.Spec.Agents[0].Name = "coordinator"
@@ -158,7 +158,7 @@ func TestAgentReferenceAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testi
 	scope := newTestScope()
 	ledger := newLLMCallAuditor(events, nil, "test-provider", deployment, fixedLedgerNow)
 	ledger.begin("session_1", scope)
-	auditor := newAgentReferenceAuditor(events, nil, fixedLedgerNow, deployment, "coordinator", ledger.scope)
+	auditor := newDelegationAuditor(events, nil, fixedLedgerNow, deployment, "coordinator", ledger.scope)
 	ctx := &fakeAgentContext{
 		sessionID:    "session_1",
 		invocationID: "inv_worker",

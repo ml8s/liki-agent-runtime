@@ -64,7 +64,7 @@ func (r *Runtime) Run(
 	projector := newEventProjector(r.projectorIndex)
 	projection := newEventProjectionState()
 	sessionID := runSessionID(request.RunID)
-	scope := &runScope{
+	scope := &runExecution{
 		runID:             domain.ID(request.RunID),
 		threadID:          domain.ID(request.ThreadID),
 		userID:            request.UserID,
@@ -261,7 +261,7 @@ func (r *Runtime) ensureDurableRunID(ctx context.Context, runID string) error {
 
 func (r *Runtime) recordRunAudit(
 	ctx context.Context,
-	scope *runScope,
+	scope *runExecution,
 	eventType audit.EventType,
 	status audit.Status,
 	cause error,
@@ -334,9 +334,9 @@ func (r *Runtime) Entrypoint() *AgentDefinition {
 	return &clone
 }
 
-// Deployment exposes non-secret deployment metadata for standard protocol
+// AgentDeployment exposes non-secret deployment metadata for standard protocol
 // discovery. Instructions and schemas remain internal to the runtime.
-func (r *Runtime) Deployment() *Deployment {
+func (r *Runtime) AgentDeployment() *AgentDeployment {
 	deployment := *r.definition
 	deployment.Spec.MCPServers = append([]MCPServerDefinition(nil), r.definition.Spec.MCPServers...)
 	deployment.Spec.Agents = make([]AgentDefinition, len(r.definition.Spec.Agents))

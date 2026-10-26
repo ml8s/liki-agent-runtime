@@ -127,13 +127,13 @@ func checkMCPDependencyHealth(
 }
 
 func (r *Runtime) deploymentMCPServers() []MCPServerDefinition {
-	if r.config.Deployment == nil {
+	if r.config.AgentDeployment == nil {
 		return nil
 	}
-	return r.config.Deployment.Spec.MCPServers
+	return r.config.AgentDeployment.Spec.MCPServers
 }
 
-func deploymentToolReferences(deployment *Deployment, server string) []ToolReference {
+func deploymentToolReferences(deployment *AgentDeployment, server string) []ToolReference {
 	if deployment == nil {
 		return nil
 	}
@@ -156,7 +156,7 @@ func (r *Runtime) checkMCPDependency(
 		ctx,
 		r.config,
 		server,
-		deploymentToolReferences(r.config.Deployment, server.definition.Name),
+		deploymentToolReferences(r.config.AgentDeployment, server.definition.Name),
 	)
 }
 

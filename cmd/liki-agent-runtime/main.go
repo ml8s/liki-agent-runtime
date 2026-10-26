@@ -137,7 +137,7 @@ func run() (err error) {
 		Provider:          cfg.LLMProvider,
 		StructuredOutput:  cfg.LLMStructuredOutput,
 		MaxOutputTokens:   cfg.LLMMaxOutputTokens,
-		Deployment:        deployment,
+		AgentDeployment:   deployment,
 		MCPTimeout:        cfg.MCPTimeout,
 		MCPHealthTimeout:  cfg.MCPHealthTimeout,
 		MaxConcurrentRuns: cfg.MaxConcurrentRuns,
@@ -300,7 +300,7 @@ func shutdownServers(servers []*http.Server, protocolServer *transport.Server, s
 	return firstErr
 }
 
-func mcpServerNames(deployment *agentruntime.Deployment) []string {
+func mcpServerNames(deployment *agentruntime.AgentDeployment) []string {
 	names := make([]string, 0, len(deployment.Spec.MCPServers))
 	for _, server := range deployment.Spec.MCPServers {
 		names = append(names, server.Name)

@@ -18,7 +18,7 @@ import (
 // taskDelegationDeployment builds the standard ADK agent-as-tool shape: a
 // plain-text chat coordinator with one task-mode sub-agent. It is the same
 // shape the natal expert uses for bazi/ziwei.
-func taskDelegationDeployment(t *testing.T) *Deployment {
+func taskDelegationDeployment(t *testing.T) *AgentDeployment {
 	t.Helper()
 	deployment := plainTestDeployment(t)
 	root := &deployment.Spec.Agents[0]
@@ -137,7 +137,7 @@ func TestRuntimeRunsTaskDelegationEndToEnd(t *testing.T) {
 
 // twoTaskDelegationDeployment builds the natal shape at its smallest: one chat
 // coordinator with TWO task-mode sub-agents (bazi/ziwei).
-func twoTaskDelegationDeployment(t *testing.T) *Deployment {
+func twoTaskDelegationDeployment(t *testing.T) *AgentDeployment {
 	t.Helper()
 	deployment := plainTestDeployment(t)
 	root := &deployment.Spec.Agents[0]

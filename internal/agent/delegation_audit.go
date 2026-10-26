@@ -35,35 +35,35 @@ type DelegationExecutionRecord struct {
 	ErrorMessage          string
 }
 
-// AgentReferenceAuditor instruments ADK's standard BeforeAgent and
+// DelegationAuditor instruments ADK's standard BeforeAgent and
 // AfterAgent callbacks. The entrypoint is excluded because Runtime.Run already
 // records its run lifecycle.
-type AgentReferenceAuditor struct {
+type DelegationAuditor struct {
 	recorder   audit.Recorder
 	metrics    Metrics
 	now        func() time.Time
 	entrypoint string
 	agents     map[string]*AgentDefinition
-	scope      func(sessionID string) (*runScope, bool)
+	scope      func(sessionID string) (*runExecution, bool)
 
 	mu      sync.Mutex
 	pending map[string]DelegationExecutionRecord
 }
 
-func newAgentReferenceAuditor(
+func newDelegationAuditor(
 	recorder audit.Recorder,
 	metrics Metrics,
 	now func() time.Time,
-	deployment *Deployment,
+	deployment *AgentDeployment,
 	entrypoint string,
-	scope func(sessionID string) (*runScope, bool),
-) *AgentReferenceAuditor {
+	scope func(sessionID string) (*runExecution, bool),
+) *DelegationAuditor {
 	agents := make(map[string]*AgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		definition := &deployment.Spec.Agents[index]
 		agents[definition.Name] = definition
 	}
-	return &AgentReferenceAuditor{
+	return &DelegationAuditor{
 		recorder:   recorder,
 		metrics:    metrics,
 		now:        now,
@@ -76,7 +76,7 @@ func newAgentReferenceAuditor(
 
 // BeforeAgent records a delegated Agent invocation. The deployment entrypoint
 // is skipped because Runtime.Run records the top-level run lifecycle.
-func (a *AgentReferenceAuditor) BeforeAgent(ctx adkagent.Context) (*genai.Content, error) {
+func (a *DelegationAuditor) BeforeAgent(ctx adkagent.Context) (*genai.Content, error) {
 	if ctx == nil {
 		return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, "agent callback context is required", nil)
 	}
@@ -106,7 +106,7 @@ func (a *AgentReferenceAuditor) BeforeAgent(ctx adkagent.Context) (*genai.Conten
 
 // AfterAgent records a successful delegated Agent invocation. Agent failures
 // that prevent AfterAgent are reconciled by FailPending when the run ends.
-func (a *AgentReferenceAuditor) AfterAgent(ctx adkagent.Context) (*genai.Content, error) {
+func (a *DelegationAuditor) AfterAgent(ctx adkagent.Context) (*genai.Content, error) {
 	if ctx == nil {
 		return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, "agent callback context is required", nil)
 	}
@@ -133,9 +133,9 @@ func (a *AgentReferenceAuditor) AfterAgent(ctx adkagent.Context) (*genai.Content
 // sub-agent's AfterAgent callback never runs; the synthesized task-tool
 // function response (tool name == sub-agent name) is the framework's
 // completion signal for that delegation.
-func (a *AgentReferenceAuditor) CompleteByToolResponse(
+func (a *DelegationAuditor) CompleteByToolResponse(
 	ctx context.Context,
-	scope *runScope,
+	scope *runExecution,
 	event *session.Event,
 ) error {
 	if event == nil || event.Content == nil {
@@ -162,7 +162,7 @@ func (a *AgentReferenceAuditor) CompleteByToolResponse(
 // pendingForTarget returns the oldest pending delegation record for a target
 // Agent. Task delegations are sequential (ADK forbids parallel task calls), so
 // at most one record per target is in flight.
-func (a *AgentReferenceAuditor) pendingForTarget(target string) (string, DelegationExecutionRecord, bool) {
+func (a *DelegationAuditor) pendingForTarget(target string) (string, DelegationExecutionRecord, bool) {
 	for key, record := range a.pending {
 		if record.TargetAgent == target {
 			return key, record, true
@@ -173,9 +173,9 @@ func (a *AgentReferenceAuditor) pendingForTarget(target string) (string, Delegat
 
 // complete appends the succeeded terminal evidence for one delegation and
 // releases its pending record.
-func (a *AgentReferenceAuditor) complete(
+func (a *DelegationAuditor) complete(
 	ctx context.Context,
-	scope *runScope,
+	scope *runExecution,
 	key string,
 	record DelegationExecutionRecord,
 ) error {
@@ -199,7 +199,7 @@ func (a *AgentReferenceAuditor) complete(
 // because the run failed or was cancelled. A record is dequeued only after its
 // terminal evidence is durably appended, so a transient failure stays
 // retryable by the run's cleanup callback.
-func (a *AgentReferenceAuditor) FailPending(ctx context.Context, scope *runScope) error {
+func (a *DelegationAuditor) FailPending(ctx context.Context, scope *runExecution) error {
 	a.mu.Lock()
 	pending := make(map[string]DelegationExecutionRecord)
 	for key, record := range a.pending {
@@ -232,9 +232,9 @@ func (a *AgentReferenceAuditor) FailPending(ctx context.Context, scope *runScope
 	return firstErr
 }
 
-func (a *AgentReferenceAuditor) startedRecord(
+func (a *DelegationAuditor) startedRecord(
 	ctx adkagent.Context,
-	scope *runScope,
+	scope *runExecution,
 ) (DelegationExecutionRecord, error) {
 	target := ctx.AgentName()
 	definition, ok := a.agents[target]
@@ -262,7 +262,7 @@ func (a *AgentReferenceAuditor) startedRecord(
 	}, nil
 }
 
-func (a *AgentReferenceAuditor) record(ctx context.Context, scope *runScope, record DelegationExecutionRecord, eventType audit.EventType) error {
+func (a *DelegationAuditor) record(ctx context.Context, scope *runExecution, record DelegationExecutionRecord, eventType audit.EventType) error {
 	target, ok := a.agents[record.TargetAgent]
 	if !ok {
 		return domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("delegated agent %q is not deployed", record.TargetAgent), nil)
@@ -305,7 +305,7 @@ func (a *AgentReferenceAuditor) record(ctx context.Context, scope *runScope, rec
 	return a.recorder.Record(context.WithoutCancel(ctx), &event)
 }
 
-func (a *AgentReferenceAuditor) pendingKey(ctx adkagent.Context) string {
+func (a *DelegationAuditor) pendingKey(ctx adkagent.Context) string {
 	return ctx.SessionID() + "\x00" + ctx.Branch() + "\x00" + ctx.AgentName() + "\x00" + ctx.InvocationID()
 }
 

@@ -25,7 +25,7 @@ type eventProjectorIndex struct {
 	definitions map[string]*AgentDefinition
 }
 
-func newEventProjectorIndex(deployment *Deployment) eventProjectorIndex {
+func newEventProjectorIndex(deployment *AgentDeployment) eventProjectorIndex {
 	definitions := make(map[string]*AgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		definition := &deployment.Spec.Agents[index]

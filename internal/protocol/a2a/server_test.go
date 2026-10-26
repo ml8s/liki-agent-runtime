@@ -48,10 +48,10 @@ func (r *testAuditRecorder) eventsOfType(eventType audit.EventType) []audit.Even
 }
 
 func testRuntime(t *testing.T) (*agent.Runtime, *testAuditRecorder) {
-	return testRuntimeWithDeployment(t, testagent.Deployment(t))
+	return testRuntimeWithDeployment(t, testagent.AgentDeployment(t))
 }
 
-func testRuntimeWithDeployment(t *testing.T, deployment *agent.Deployment) (*agent.Runtime, *testAuditRecorder) {
+func testRuntimeWithDeployment(t *testing.T, deployment *agent.AgentDeployment) (*agent.Runtime, *testAuditRecorder) {
 	t.Helper()
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +73,7 @@ func testRuntimeWithDeployment(t *testing.T, deployment *agent.Deployment) (*age
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
 		ModelBaseURL:     modelServer.URL + "/v1",
-		Deployment:       deployment,
+		AgentDeployment:  deployment,
 		StructuredOutput: agent.StructuredOutputJSONSchema,
 		Provider:         "test-provider",
 		AuditRecorder:    recorder,
@@ -138,7 +138,7 @@ func TestAgentCardDeclaresStandardJSONRPCBinding(t *testing.T) {
 }
 
 func TestAgentCardDescribesSubAgentsWithoutInstructions(t *testing.T) {
-	deployment := testagent.Deployment(t)
+	deployment := testagent.AgentDeployment(t)
 	deployment.Spec.Agents[0].Name = "coordinator"
 	deployment.Spec.Agents[0].SubAgents = []agent.AgentReference{{Name: "worker"}}
 	worker := deployment.Spec.Agents[0]
@@ -202,7 +202,7 @@ func newA2AServer(t *testing.T, publicURL *url.URL) (*a2a.Server, *testAuditReco
 func newA2AServerWithDeployment(
 	t *testing.T,
 	publicURL *url.URL,
-	deployment *agent.Deployment,
+	deployment *agent.AgentDeployment,
 ) (*a2a.Server, *testAuditRecorder, error) {
 	t.Helper()
 	runtime, recorder := testRuntimeWithDeployment(t, deployment)
@@ -215,7 +215,7 @@ func TestA2AJSONRPCExecutesRuntimeAndClosesAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deployment := testagent.Deployment(t)
+	deployment := testagent.AgentDeployment(t)
 	deployment.Spec.Agents[0].Tools.Allow = map[string][]string{
 		"skilltoolset": {"list_skills", "load_skill", "load_skill_resource"},
 	}

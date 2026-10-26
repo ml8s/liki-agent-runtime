@@ -11,8 +11,8 @@ import (
 	"github.com/ml8s/liki-agent-runtime/internal/agent"
 )
 
-// Deployment loads a generic structured AgentDeployment for adapter tests.
-func Deployment(t *testing.T) *agent.Deployment {
+// AgentDeployment loads a generic structured AgentDeployment for adapter tests.
+func AgentDeployment(t *testing.T) *agent.AgentDeployment {
 	t.Helper()
 	t.Setenv("TEST_MCP_ENDPOINT", "in-memory://test")
 	root := t.TempDir()

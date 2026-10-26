@@ -122,7 +122,7 @@ func newHealthTestRuntime(t *testing.T, options *mcp.ServerOptions, toolName str
 		mcpTransportOverrides: map[string]mcp.Transport{
 			"test": clientTransport,
 		},
-		Deployment: &Deployment{Spec: DeploymentSpec{
+		AgentDeployment: &AgentDeployment{Spec: DeploymentSpec{
 			MCPServers: []MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
 			Agents: []AgentDefinition{{
 				Name:  "test-agent",
@@ -143,7 +143,7 @@ func checkMCPHealth(t *testing.T, runtime *Runtime) platform.DependencyHealth {
 
 func TestCheckHealthRejectsMissingAllowedTool(t *testing.T) {
 	_, runtime := newHealthTestRuntime(t, &mcp.ServerOptions{}, "available_tool")
-	runtime.config.Deployment.Spec.Agents[0].Tools = ToolAllowlist{Allow: map[string][]string{"test": {"missing_tool"}}}
+	runtime.config.AgentDeployment.Spec.Agents[0].Tools = ToolAllowlist{Allow: map[string][]string{"test": {"missing_tool"}}}
 	health := checkMCPHealth(t, runtime)
 	if health.OK {
 		t.Fatal("CheckHealth() accepted a server missing an allowlisted tool")
@@ -152,7 +152,7 @@ func TestCheckHealthRejectsMissingAllowedTool(t *testing.T) {
 
 func TestCheckHealthValidatesEveryAgentAllowlist(t *testing.T) {
 	_, runtime := newHealthTestRuntime(t, &mcp.ServerOptions{}, "available_tool")
-	runtime.config.Deployment = &Deployment{Spec: DeploymentSpec{
+	runtime.config.AgentDeployment = &AgentDeployment{Spec: DeploymentSpec{
 		MCPServers: []MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
 		Agents: []AgentDefinition{
 			{Name: "entrypoint", Tools: ToolAllowlist{Allow: map[string][]string{"test": {"available_tool"}}}},

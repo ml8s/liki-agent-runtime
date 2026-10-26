@@ -123,7 +123,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 	}
 	server := &Server{structured: structuredMemo{parse: agent.ParseStructuredOutput}}
 	root := runtime.RootAgent()
-	deployment := runtime.Deployment()
+	deployment := runtime.AgentDeployment()
 	entrypoint := runtime.Entrypoint()
 	outputModes := []string{"text/plain"}
 	if entrypoint.Output.Structured() {
@@ -189,7 +189,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			if caller == "" {
 				caller = "a2a:" + string(request.TaskID)
 			}
-			scope := agent.AuditRunScope{
+			scope := agent.RunAuditIdentity{
 				RunID:    string(request.TaskID),
 				ThreadID: request.ContextID,
 				UserID:   caller,
@@ -244,7 +244,7 @@ func cancelExecution(ctx context.Context) {
 // safeAgentSkills builds standard A2A skills from curated deployment metadata.
 // ADK's default skill builder derives descriptions from instructions, which
 // would turn prompt material into public discovery data.
-func safeAgentSkills(deployment *agent.Deployment) []a2a.AgentSkill {
+func safeAgentSkills(deployment *agent.AgentDeployment) []a2a.AgentSkill {
 	entrypoint, err := deployment.EntrypointDefinition()
 	if err != nil {
 		return nil

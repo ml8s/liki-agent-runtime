@@ -250,7 +250,7 @@ func TestNewMCPToolsetsMemoizeDiscovery(t *testing.T) {
 		mcpTransportOverrides: map[string]mcp.Transport{
 			"test": clientTransport,
 		},
-		Deployment: &Deployment{Spec: DeploymentSpec{
+		AgentDeployment: &AgentDeployment{Spec: DeploymentSpec{
 			MCPServers: []MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
 			Agents: []AgentDefinition{{
 				Name:  "test-agent",
