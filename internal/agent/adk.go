@@ -43,21 +43,22 @@ type ADKAgentRuntime struct {
 
 // ADKConfig is the single translation point from a validated artifact
 // definition to ADK's public LlmAgent API.
-func (a *AgentDefinition) ADKConfig(runtime ADKAgentRuntime) llmagent.Config {
+func (r RuntimeAgentDefinition) ADKConfig(runtime ADKAgentRuntime) llmagent.Config {
+	declaration := r.Definition.AgentDefinition
 	beforeModelCallbacks := runtime.BeforeModelCallbacks
-	if runtime.RawOutputSchema != nil {
+	if r.RawOutputSchema != nil {
 		beforeModelCallbacks = append([]llmagent.BeforeModelCallback{
-			rawOutputSchemaCallback(runtime.RawOutputSchema),
+			rawOutputSchemaCallback(r.RawOutputSchema),
 		}, beforeModelCallbacks...)
 	}
 	return llmagent.Config{
-		Name:        a.Name,
-		Description: a.Description,
-		Mode:        adkMode(a.Mode),
+		Name:        declaration.Name,
+		Description: declaration.Description,
+		Mode:        adkMode(declaration.Mode),
 		Model:       runtime.Model,
-		Instruction: a.InstructionText,
+		Instruction: r.Definition.InstructionText,
 		InstructionProvider: func(_ agent.ReadonlyContext) (string, error) {
-			return a.InstructionText, nil
+			return r.Definition.InstructionText, nil
 		},
 		SubAgents:                runtime.SubAgents,
 		Toolsets:                 runtime.Toolsets,
@@ -74,7 +75,7 @@ func (a *AgentDefinition) ADKConfig(runtime ADKAgentRuntime) llmagent.Config {
 			Temperature:     &runtime.Temperature,
 			MaxOutputTokens: int32(runtime.MaxOutputTokens),
 		},
-		OutputSchema: a.GenaiOutputSchema,
+		OutputSchema: r.GenaiOutputSchema,
 		OutputKey:    runtime.OutputKey,
 	}
 }

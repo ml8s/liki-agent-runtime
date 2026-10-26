@@ -327,7 +327,6 @@ func plainTestDeployment(t testing.TB) *AgentDeployment {
 		deployment.Spec.Agents[index].Output = OutputDefinition{}
 		deployment.Spec.Agents[index].OutputSchema = nil
 		deployment.Spec.Agents[index].ResolvedOutput = nil
-		deployment.Spec.Agents[index].GenaiOutputSchema = nil
 		deployment.Spec.Agents[index].SchemaDigest = ""
 	}
 	if err := deployment.validate(); err != nil {
@@ -796,14 +795,19 @@ func TestRuntimeBuildsStandardADKAgentGraph(t *testing.T) {
 	// Convert the generic single-agent test deployment into a two-Agent tree.
 	deployment.Spec.Agents[0].Name = "coordinator"
 	deployment.Spec.Agents[0].SubAgents = []AgentReference{{Name: "worker"}}
-	deployment.Spec.Agents = append(deployment.Spec.Agents, AgentDefinition{
-		Name:        "worker",
-		Version:     "1.0.0",
-		Description: "generic worker agent",
-		Mode:        AgentModeTask,
-		Instruction: deployment.Spec.Agents[0].Instruction,
-		Output:      deployment.Spec.Agents[0].Output,
-		Tools:       ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+	deployment.Spec.Agents = append(deployment.Spec.Agents, ResolvedAgentDefinition{
+		AgentDefinition: AgentDefinition{
+			Name:        "worker",
+			Version:     "1.0.0",
+			Description: "generic worker agent",
+			Mode:        AgentModeTask,
+			Instruction: deployment.Spec.Agents[0].Instruction,
+			Output:      deployment.Spec.Agents[0].Output,
+			Tools:       ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+		},
+		OutputSchema:    deployment.Spec.Agents[0].OutputSchema,
+		ResolvedOutput:  deployment.Spec.Agents[0].ResolvedOutput,
+		RawOutputSchema: deployment.Spec.Agents[0].RawOutputSchema,
 	})
 	if err := deployment.validate(); err != nil {
 		t.Fatalf("validate multi-agent deployment: %v", err)

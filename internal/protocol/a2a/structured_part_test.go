@@ -25,7 +25,7 @@ func TestStructuredMemoParsesOncePerEvent(t *testing.T) {
 	event.Author = entrypoint.Name
 	parseCount := 0
 	server := &Server{structured: structuredMemo{
-		parse: func(value any, definition *agent.AgentDefinition) (agent.OutputResult, error) {
+		parse: func(value any, definition *agent.ResolvedAgentDefinition) (agent.OutputResult, error) {
 			parseCount++
 			return agent.ParseStructuredOutput(value, definition)
 		},
@@ -81,7 +81,7 @@ func TestStructuredMemoMemoizesParseErrors(t *testing.T) {
 	event.Author = entrypoint.Name
 	parseCount := 0
 	server := &Server{structured: structuredMemo{
-		parse: func(value any, definition *agent.AgentDefinition) (agent.OutputResult, error) {
+		parse: func(value any, definition *agent.ResolvedAgentDefinition) (agent.OutputResult, error) {
 			parseCount++
 			return agent.ParseStructuredOutput(value, definition)
 		},
@@ -176,7 +176,7 @@ func exposeNone() func(string) bool { return func(string) bool { return false } 
 func exposeByDeployment(deployment *agent.AgentDeployment) func(string) bool {
 	return func(author string) bool {
 		definition, ok := deployment.Agent(author)
-		return ok && agent.ExposesModelText(definition)
+		return ok && agent.ExposesModelText(&definition.AgentDefinition)
 	}
 }
 
@@ -185,9 +185,9 @@ func exposeByDeployment(deployment *agent.AgentDeployment) func(string) bool {
 func visibilityDeployment() *agent.AgentDeployment {
 	return &agent.AgentDeployment{
 		Metadata: agent.DeploymentMetadata{Name: "t", Version: "1.0.0"},
-		Spec: agent.DeploymentSpec{Agents: []agent.AgentDefinition{
-			{Name: "main"},
-			{Name: "worker", Output: agent.OutputDefinition{TextPointer: "/answer"}},
+		Spec: agent.DeploymentSpec{Agents: []agent.ResolvedAgentDefinition{
+			{AgentDefinition: agent.AgentDefinition{Name: "main"}},
+			{AgentDefinition: agent.AgentDefinition{Name: "worker", Output: agent.OutputDefinition{TextPointer: "/answer"}}},
 		}},
 	}
 }
@@ -348,7 +348,7 @@ func TestAgentPartHidesUnknownAuthorText(t *testing.T) {
 	}
 }
 
-func structuredEntrypoint(t *testing.T) *agent.AgentDefinition {
+func structuredEntrypoint(t *testing.T) *agent.ResolvedAgentDefinition {
 	t.Helper()
 	entrypoint, err := testagent.AgentDeployment(t).EntrypointDefinition()
 	if err != nil {

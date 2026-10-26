@@ -16,7 +16,7 @@ type llmCallAuditor struct {
 	metrics  Metrics
 	now      func() time.Time
 	provider string
-	agents   map[string]*AgentDefinition
+	agents   map[string]*ResolvedAgentDefinition
 	scopes   map[string]*runExecution
 }
 
@@ -29,7 +29,7 @@ func newLLMCallAuditor(recorder audit.Recorder, metrics Metrics, provider string
 		metrics:  metrics,
 		provider: provider,
 		now:      now,
-		agents:   make(map[string]*AgentDefinition, len(deployment.Spec.Agents)),
+		agents:   make(map[string]*ResolvedAgentDefinition, len(deployment.Spec.Agents)),
 		scopes:   make(map[string]*runExecution),
 	}
 	for index := range deployment.Spec.Agents {

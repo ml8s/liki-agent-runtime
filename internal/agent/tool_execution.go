@@ -45,7 +45,7 @@ type ToolExecutionAuditor struct {
 	now      func() time.Time
 	provider string
 
-	agents map[string]*AgentDefinition
+	agents map[string]*ResolvedAgentDefinition
 	scope  func(sessionID string) (*runExecution, bool)
 
 	mu      sync.Mutex
@@ -60,7 +60,7 @@ func newToolExecutionAuditor(
 	deployment *AgentDeployment,
 	scope func(sessionID string) (*runExecution, bool),
 ) *ToolExecutionAuditor {
-	agents := make(map[string]*AgentDefinition, len(deployment.Spec.Agents))
+	agents := make(map[string]*ResolvedAgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		definition := &deployment.Spec.Agents[index]
 		agents[definition.Name] = definition

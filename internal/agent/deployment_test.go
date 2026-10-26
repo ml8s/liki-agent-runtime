@@ -90,8 +90,9 @@ func TestLoadAgentDeployment(t *testing.T) {
 	if entrypoint.InstructionDigest == "" || entrypoint.SchemaDigest == "" {
 		t.Fatalf("artifact digests = %q/%q", entrypoint.InstructionDigest, entrypoint.SchemaDigest)
 	}
-	if len(entrypoint.GenaiOutputSchema.Properties) != 1 {
-		t.Fatalf("output properties = %+v", entrypoint.GenaiOutputSchema.Properties)
+	runtimeView := mustRuntimeAgentDefinition(t, *entrypoint)
+	if len(runtimeView.GenaiOutputSchema.Properties) != 1 {
+		t.Fatalf("output properties = %+v", runtimeView.GenaiOutputSchema.Properties)
 	}
 	if len(deployment.Spec.MCPServers) != 1 || deployment.Spec.MCPServers[0].Name != "test" {
 		t.Fatalf("MCP servers = %+v", deployment.Spec.MCPServers)
@@ -298,7 +299,7 @@ func TestAgentOutputIsOptional(t *testing.T) {
 	if entrypoint.Output.Structured() {
 		t.Fatal("agent output was structured without an output declaration")
 	}
-	if entrypoint.OutputSchema != nil || entrypoint.ResolvedOutput != nil || entrypoint.GenaiOutputSchema != nil {
+	if entrypoint.OutputSchema != nil || entrypoint.ResolvedOutput != nil || mustRuntimeAgentDefinition(t, *entrypoint).GenaiOutputSchema != nil {
 		t.Fatal("plain agent resolved an output schema")
 	}
 	if entrypoint.SchemaDigest != "" {
@@ -402,10 +403,10 @@ func TestDeploymentValidateRechecksInMemoryMutation(t *testing.T) {
 		t.Fatalf("valid deployment rejected: %v", err)
 	}
 	original := deployment.Spec.Agents[0].Name
-	deployment.Spec.Agents = append(deployment.Spec.Agents, AgentDefinition{
+	deployment.Spec.Agents = append(deployment.Spec.Agents, ResolvedAgentDefinition{AgentDefinition: AgentDefinition{
 		Name:    original,
 		Version: "1.0.0",
-	})
+	}})
 	if err := deployment.Validate(); err == nil {
 		t.Fatal("duplicate agent name accepted by Validate")
 	}

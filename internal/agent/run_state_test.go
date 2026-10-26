@@ -104,10 +104,12 @@ func TestStructuredOutputPreservesJSONNumberFidelity(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := runState{}
-	definition := &AgentDefinition{
-		Output: OutputDefinition{
-			Schema:      FileReference{Path: "output.schema.json"},
-			TextPointer: "/answer",
+	definition := &ResolvedAgentDefinition{
+		AgentDefinition: AgentDefinition{
+			Output: OutputDefinition{
+				Schema:      FileReference{Path: "output.schema.json"},
+				TextPointer: "/answer",
+			},
 		},
 		ResolvedOutput: resolved,
 	}
@@ -129,7 +131,7 @@ func TestParseStructuredOutputRejections(t *testing.T) {
 	testCases := []struct {
 		name  string
 		value any
-		def   *AgentDefinition
+		def   *ResolvedAgentDefinition
 		code  string
 	}{
 		{name: "nil definition", value: map[string]any{"answer": "x"}, code: domain.CodeStructuredOutputInvalid},

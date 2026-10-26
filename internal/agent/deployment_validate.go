@@ -114,7 +114,7 @@ func (d *AgentDeployment) validateAgentGraph(names map[string]struct{}) error {
 
 	visiting := make(map[string]struct{})
 	visited := make(map[string]struct{})
-	definitions := make(map[string]*AgentDefinition, len(d.Spec.Agents))
+	definitions := make(map[string]*ResolvedAgentDefinition, len(d.Spec.Agents))
 	for index := range d.Spec.Agents {
 		definitions[d.Spec.Agents[index].Name] = &d.Spec.Agents[index]
 	}

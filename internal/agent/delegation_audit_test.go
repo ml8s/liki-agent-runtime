@@ -19,7 +19,7 @@ func newDelegationAuditorForTest(t *testing.T, branch string) (*DelegationAudito
 	deployment := NewTestDeployment(t)
 	deployment.Spec.Agents[0].Name = "coordinator"
 	deployment.Spec.Agents[0].SubAgents = []AgentReference{{Name: "worker"}}
-	deployment.Spec.Agents = append(deployment.Spec.Agents, AgentDefinition{
+	deployment.Spec.Agents = append(deployment.Spec.Agents, ResolvedAgentDefinition{AgentDefinition: AgentDefinition{
 		Name:        "worker",
 		Version:     "1.0.0",
 		Description: "generic worker",
@@ -28,7 +28,7 @@ func newDelegationAuditorForTest(t *testing.T, branch string) (*DelegationAudito
 		Instruction: deployment.Spec.Agents[0].Instruction,
 		Output:      deployment.Spec.Agents[0].Output,
 		Tools:       ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
-	})
+	}})
 	if err := deployment.validate(); err != nil {
 		t.Fatalf("validate deployment: %v", err)
 	}
@@ -144,14 +144,14 @@ func TestDelegationAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T
 	deployment := NewTestDeployment(t)
 	deployment.Spec.Agents[0].Name = "coordinator"
 	deployment.Spec.Agents[0].SubAgents = []AgentReference{{Name: "worker"}}
-	deployment.Spec.Agents = append(deployment.Spec.Agents, AgentDefinition{
+	deployment.Spec.Agents = append(deployment.Spec.Agents, ResolvedAgentDefinition{AgentDefinition: AgentDefinition{
 		Name:        "worker",
 		Version:     "1.0.0",
 		Description: "worker",
 		Mode:        AgentModeTask,
 		Instruction: deployment.Spec.Agents[0].Instruction,
 		Tools:       ToolAllowlist{Allow: map[string][]string{}},
-	})
+	}})
 	if err := deployment.validate(); err != nil {
 		t.Fatalf("validate deployment: %v", err)
 	}

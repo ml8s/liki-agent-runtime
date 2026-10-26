@@ -61,15 +61,20 @@ func TestCloseRunEvidenceEncodesCompensationFailureAndPersistsTerminal(t *testin
 	// 双代理拓扑：coordinator 经 task 工具委派 worker（与 assembly E2E 同构）。
 	deployment.Spec.Agents[0].Name = "coordinator"
 	deployment.Spec.Agents[0].SubAgents = []AgentReference{{Name: "worker"}}
-	deployment.Spec.Agents = append(deployment.Spec.Agents, AgentDefinition{
-		Name:        "worker",
-		Version:     "1.0.0",
-		Description: "generic worker",
-		Mode:        AgentModeTask,
-		SubAgents:   []AgentReference{},
-		Instruction: deployment.Spec.Agents[0].Instruction,
-		Output:      deployment.Spec.Agents[0].Output,
-		Tools:       ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+	deployment.Spec.Agents = append(deployment.Spec.Agents, ResolvedAgentDefinition{
+		AgentDefinition: AgentDefinition{
+			Name:        "worker",
+			Version:     "1.0.0",
+			Description: "generic worker",
+			Mode:        AgentModeTask,
+			SubAgents:   []AgentReference{},
+			Instruction: deployment.Spec.Agents[0].Instruction,
+			Output:      deployment.Spec.Agents[0].Output,
+			Tools:       ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+		},
+		OutputSchema:    deployment.Spec.Agents[0].OutputSchema,
+		ResolvedOutput:  deployment.Spec.Agents[0].ResolvedOutput,
+		RawOutputSchema: deployment.Spec.Agents[0].RawOutputSchema,
 	})
 	if err := deployment.validate(); err != nil {
 		t.Fatalf("validate deployment: %v", err)

@@ -335,8 +335,15 @@ func (r *Runtime) loadStructuredAnalysis(
 
 // Entrypoint exposes the selected AgentDefinition to protocol adapters.
 func (r *Runtime) Entrypoint() *AgentDefinition {
-	clone := cloneAgentDefinition(r.entrypoint)
+	clone := cloneAgentDefinition(&r.entrypoint.AgentDefinition)
 	return &clone
+}
+
+// ResolvedEntrypoint exposes the loaded runtime-neutral state required by
+// structured-output protocol mappings. Instructions remain internal to callers
+// that only render discovery metadata.
+func (r *Runtime) ResolvedEntrypoint() *ResolvedAgentDefinition {
+	return r.entrypoint
 }
 
 // AgentDeployment exposes non-secret deployment metadata for standard protocol
@@ -344,11 +351,17 @@ func (r *Runtime) Entrypoint() *AgentDefinition {
 func (r *Runtime) AgentDeployment() *AgentDeployment {
 	deployment := *r.definition
 	deployment.Spec.MCPServers = append([]MCPServerDefinition(nil), r.definition.Spec.MCPServers...)
-	deployment.Spec.Agents = make([]AgentDefinition, len(r.definition.Spec.Agents))
+	deployment.Spec.Agents = make([]ResolvedAgentDefinition, len(r.definition.Spec.Agents))
 	for index := range r.definition.Spec.Agents {
-		deployment.Spec.Agents[index] = cloneAgentDefinition(&r.definition.Spec.Agents[index])
+		deployment.Spec.Agents[index] = cloneResolvedAgentDefinition(&r.definition.Spec.Agents[index])
 	}
 	return &deployment
+}
+
+func cloneResolvedAgentDefinition(definition *ResolvedAgentDefinition) ResolvedAgentDefinition {
+	clone := *definition
+	clone.AgentDefinition = cloneAgentDefinition(&definition.AgentDefinition)
+	return clone
 }
 
 func cloneAgentDefinition(definition *AgentDefinition) AgentDefinition {

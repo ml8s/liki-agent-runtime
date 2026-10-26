@@ -124,10 +124,10 @@ func newHealthTestRuntime(t *testing.T, options *mcp.ServerOptions, toolName str
 		},
 		AgentDeployment: &AgentDeployment{Spec: DeploymentSpec{
 			MCPServers: []MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-			Agents: []AgentDefinition{{
+			Agents: resolvedAgentDefinitions([]AgentDefinition{{
 				Name:  "test-agent",
 				Tools: ToolAllowlist{Allow: map[string][]string{"test": {toolName}}},
-			}},
+			}}),
 		}},
 	}}
 }
@@ -154,10 +154,10 @@ func TestCheckHealthValidatesEveryAgentAllowlist(t *testing.T) {
 	_, runtime := newHealthTestRuntime(t, &mcp.ServerOptions{}, "available_tool")
 	runtime.config.AgentDeployment = &AgentDeployment{Spec: DeploymentSpec{
 		MCPServers: []MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-		Agents: []AgentDefinition{
+		Agents: resolvedAgentDefinitions([]AgentDefinition{
 			{Name: "entrypoint", Tools: ToolAllowlist{Allow: map[string][]string{"test": {"available_tool"}}}},
 			{Name: "worker", Tools: ToolAllowlist{Allow: map[string][]string{"test": {"missing_tool"}}}},
-		},
+		}),
 	}}
 	health := checkMCPHealth(t, runtime)
 	if health.OK {

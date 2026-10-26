@@ -46,7 +46,7 @@ func TestJSONObjectModelKeepsStructuredSemanticsOnJSONMode(t *testing.T) {
 	if adapter.Name() != inner.Name() {
 		t.Fatalf("Name() = %q, want %q", adapter.Name(), inner.Name())
 	}
-	schema := entrypoint.GenaiOutputSchema
+	schema := mustRuntimeAgentDefinition(t, *entrypoint).GenaiOutputSchema
 	request := &model.LLMRequest{
 		Model: "glm-5.3-flash",
 		Config: &genai.GenerateContentConfig{
@@ -173,7 +173,7 @@ func TestJSONObjectModelNormalizesCommentaryAroundJSONPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newJSONObjectModel() error = %v", err)
 	}
-	request := &model.LLMRequest{Config: &genai.GenerateContentConfig{ResponseSchema: entrypoint.GenaiOutputSchema}}
+	request := &model.LLMRequest{Config: &genai.GenerateContentConfig{ResponseSchema: mustRuntimeAgentDefinition(t, *entrypoint).GenaiOutputSchema}}
 	var normalizedResponse *model.LLMResponse
 	for response, err := range adapter.GenerateContent(context.Background(), request, false) {
 		if err != nil {

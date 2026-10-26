@@ -55,11 +55,11 @@ func (s eventProjectionState) clearPartial(author string) eventProjectionState {
 
 // eventProjectorIndex is the immutable deployment lookup shared by every run.
 type eventProjectorIndex struct {
-	definitions map[string]*AgentDefinition
+	definitions map[string]*ResolvedAgentDefinition
 }
 
 func newEventProjectorIndex(deployment *AgentDeployment) eventProjectorIndex {
-	definitions := make(map[string]*AgentDefinition, len(deployment.Spec.Agents))
+	definitions := make(map[string]*ResolvedAgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
 		definition := &deployment.Spec.Agents[index]
 		definitions[definition.Name] = definition
@@ -240,5 +240,5 @@ func (p eventProjector) definitionFor(author string) (*AgentDefinition, bool) {
 	if !ok || definition == nil {
 		return nil, false
 	}
-	return definition, ExposesModelText(definition)
+	return &definition.AgentDefinition, ExposesModelText(&definition.AgentDefinition)
 }

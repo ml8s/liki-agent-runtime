@@ -233,7 +233,7 @@ func TestDevDeploymentSkillsPinsContainerPath(t *testing.T) {
 	if _, statErr := os.Stat("/skills"); statErr != nil {
 		// No mount in this process: the pinned path must fail fast instead of
 		// silently resolving elsewhere.
-		toolset, err := newSkillToolset(skillBinding(definition))
+		toolset, err := newSkillToolset(skillBinding(&definition.AgentDefinition))
 		if err == nil {
 			t.Fatalf("toolset without the /skills mount = %v, want fail-fast on missing /skills", toolset)
 		}

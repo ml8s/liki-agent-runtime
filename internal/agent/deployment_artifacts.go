@@ -42,20 +42,15 @@ func (l *definitionLoader) loadAgents(deployment *AgentDeployment) error {
 			if err != nil {
 				return fmt.Errorf("agent %q resolve output schema: %w", agent.Name, err)
 			}
-			genaiSchema, err := convertJSONSchemaToGenai(&outputSchema)
-			if err != nil {
-				return fmt.Errorf("agent %q output schema: %w", agent.Name, err)
-			}
 			if err := validateOutputPointer(&outputSchema, agent.Output.TextPointer); err != nil {
 				return fmt.Errorf("agent %q output.textPointer: %w", agent.Name, err)
 			}
-			if genaiSchema.Type != genai.TypeObject {
+			if err := validateOutputSchemaRoot(&outputSchema); err != nil {
 				return fmt.Errorf("agent %q output schema root must be an object", agent.Name)
 			}
 			agent.OutputSchema = &outputSchema
 			agent.ResolvedOutput = resolved
 			agent.SchemaDigest = sha256Hex(schemaRaw)
-			agent.GenaiOutputSchema = genaiSchema
 			var rawOutputSchema map[string]any
 			if err := decodeStrictJSON(schemaRaw, &rawOutputSchema); err != nil {
 				return fmt.Errorf("agent %q decode raw output schema: %w", agent.Name, err)
@@ -174,4 +169,15 @@ func genaiType(value string) (genai.Type, error) {
 	default:
 		return "", fmt.Errorf("unsupported schema type %q", value)
 	}
+}
+
+func validateOutputSchemaRoot(schema *jsonschema.Schema) error {
+	converted, err := convertJSONSchemaToGenai(schema)
+	if err != nil {
+		return err
+	}
+	if converted.Type != genai.TypeObject {
+		return fmt.Errorf("root type is %q, want %q", converted.Type, genai.TypeObject)
+	}
+	return nil
 }

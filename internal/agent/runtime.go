@@ -50,7 +50,7 @@ const (
 type Runtime struct {
 	config            Config
 	definition        *AgentDeployment
-	entrypoint        *AgentDefinition
+	entrypoint        *ResolvedAgentDefinition
 	root              agent.Agent
 	sessions          session.Service
 	runner            *runner.Runner

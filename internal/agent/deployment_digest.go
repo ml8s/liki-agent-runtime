@@ -29,7 +29,7 @@ type agentDigestInput struct {
 	Tools             []ToolReference  `json:"tools"`
 }
 
-func agentDigestInputFrom(definition *AgentDefinition) agentDigestInput {
+func agentDigestInputFrom(definition *ResolvedAgentDefinition) agentDigestInput {
 	references := definition.Tools.References()
 	return agentDigestInput{
 		Name:              definition.Name,
@@ -44,7 +44,7 @@ func agentDigestInputFrom(definition *AgentDefinition) agentDigestInput {
 	}
 }
 
-func agentDigest(definition AgentDefinition) (string, error) {
+func agentDigest(definition ResolvedAgentDefinition) (string, error) {
 	raw, err := json.Marshal(agentDigestInputFrom(&definition))
 	if err != nil {
 		return "", fmt.Errorf("marshal agent digest input: %w", err)
@@ -68,7 +68,7 @@ func deploymentDigest(manifest []byte, deployment *AgentDeployment) (string, err
 }
 
 // EntrypointDefinition returns the sole root of the ADK Agent tree.
-func (d *AgentDeployment) EntrypointDefinition() (*AgentDefinition, error) {
+func (d *AgentDeployment) EntrypointDefinition() (*ResolvedAgentDefinition, error) {
 	root, err := d.RootName()
 	if err != nil {
 		return nil, err
@@ -103,8 +103,8 @@ func (d *AgentDeployment) RootName() (string, error) {
 	return roots[0], nil
 }
 
-// Agent returns the AgentDefinition with the given name, if present.
-func (d *AgentDeployment) Agent(name string) (*AgentDefinition, bool) {
+// Agent returns the resolved AgentDefinition with the given name, if present.
+func (d *AgentDeployment) Agent(name string) (*ResolvedAgentDefinition, bool) {
 	for index := range d.Spec.Agents {
 		if d.Spec.Agents[index].Name == name {
 			return &d.Spec.Agents[index], true

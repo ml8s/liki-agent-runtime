@@ -72,14 +72,14 @@ type structuredMemo struct {
 	valid  bool
 
 	// parse is a test seam; production always uses agent.ParseStructuredOutput.
-	parse func(value any, definition *agent.AgentDefinition) (agent.OutputResult, error)
+	parse func(value any, definition *agent.ResolvedAgentDefinition) (agent.OutputResult, error)
 }
 
 // structuredOutput returns the memoized parse when the event's state delta
 // selects the structured branch. applies reports whether the branch matches.
 func (s *Server) structuredOutput(
 	event *session.Event,
-	entrypoint *agent.AgentDefinition,
+	entrypoint *agent.ResolvedAgentDefinition,
 ) (output agent.OutputResult, applies bool, err error) {
 	if event == nil || entrypoint == nil ||
 		event.Author != entrypoint.Name || !event.IsFinalResponse() {
@@ -125,6 +125,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 	root := runtime.RootAgent()
 	deployment := runtime.AgentDeployment()
 	entrypoint := runtime.Entrypoint()
+	resolvedEntrypoint := runtime.ResolvedEntrypoint()
 	outputModes := []string{"text/plain"}
 	if entrypoint.Output.Structured() {
 		outputModes = append(outputModes, "application/json")
@@ -164,9 +165,9 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			// delegated under a plain entrypoint must not leak raw JSON.
 			exposesText := func(author string) bool {
 				definition, ok := deployment.Agent(author)
-				return ok && agent.ExposesModelText(definition)
+				return ok && agent.ExposesModelText(&definition.AgentDefinition)
 			}
-			structured, applies, err := server.structuredOutput(event, entrypoint)
+			structured, applies, err := server.structuredOutput(event, resolvedEntrypoint)
 			if applies && err != nil {
 				return nil, err
 			}
@@ -176,7 +177,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			} else {
 				structuredPointer = &structured
 			}
-			return agentPart(event, part, exposesText, entrypoint, structuredPointer)
+			return agentPart(event, part, exposesText, resolvedEntrypoint, structuredPointer)
 		},
 		BeforeExecuteCallback: func(ctx context.Context, request *a2asrv.ExecutorContext) (context.Context, error) {
 			caller := ""
@@ -296,7 +297,7 @@ func agentPart(
 	event *session.Event,
 	part *genai.Part,
 	exposesText func(author string) bool,
-	entrypoint *agent.AgentDefinition,
+	entrypoint *agent.ResolvedAgentDefinition,
 	structured *agent.OutputResult,
 ) (*a2a.Part, error) {
 	if part == nil {

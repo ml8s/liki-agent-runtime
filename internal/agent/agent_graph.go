@@ -46,7 +46,7 @@ func newAgentGraphBuilder(deployment *AgentDeployment, entrypointName string, de
 }
 
 // build 依依赖序构建一个 Agent 及其全部子代理（记忆化）。
-func (b *agentGraphBuilder) build(definition *AgentDefinition) (agent.Agent, error) {
+func (b *agentGraphBuilder) build(definition *ResolvedAgentDefinition) (agent.Agent, error) {
 	if built, ok := b.built[definition.Name]; ok {
 		return built, nil
 	}
@@ -58,8 +58,9 @@ func (b *agentGraphBuilder) build(definition *AgentDefinition) (agent.Agent, err
 	if definition.Output.Structured() {
 		outputKey = StructuredOutputStateKey(definition.Name)
 	}
-	subAgents := make([]agent.Agent, 0, len(definition.SubAgents))
-	for _, reference := range definition.SubAgents {
+	declaration := &definition.AgentDefinition
+	subAgents := make([]agent.Agent, 0, len(declaration.SubAgents))
+	for _, reference := range declaration.SubAgents {
 		target, ok := b.deployment.Agent(reference.Name)
 		if !ok {
 			return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("sub-agent %q is not defined", reference.Name), nil)
@@ -72,7 +73,7 @@ func (b *agentGraphBuilder) build(definition *AgentDefinition) (agent.Agent, err
 	}
 	toolsets := make([]tool.Toolset, 0, len(b.deployment.Spec.MCPServers))
 	for index, server := range b.deployment.Spec.MCPServers {
-		allowed := definition.Tools.Allow[server.Name]
+		allowed := declaration.Tools.Allow[server.Name]
 		if len(allowed) == 0 {
 			continue
 		}
@@ -81,7 +82,7 @@ func (b *agentGraphBuilder) build(definition *AgentDefinition) (agent.Agent, err
 			tool.AllowedToolsPredicate(allowed),
 		))
 	}
-	if binding := skillBinding(definition); binding != nil {
+	if binding := skillBinding(declaration); binding != nil {
 		skillToolset, err := newSkillToolset(binding)
 		if err != nil {
 			return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("build skill toolset for agent %q: %v", definition.Name, err), nil)
@@ -90,19 +91,22 @@ func (b *agentGraphBuilder) build(definition *AgentDefinition) (agent.Agent, err
 	}
 	delete(b.building, definition.Name)
 	// Per-Agent model settings fall back to the runtime-wide defaults.
-	aiModel, err := b.deps.resolveModel(definition.EffectiveModel(b.deps.modelName))
+	aiModel, err := b.deps.resolveModel(declaration.EffectiveModel(b.deps.modelName))
 	if err != nil {
 		return nil, err
 	}
-	built, err := llmagent.New(definition.ADKConfig(ADKAgentRuntime{
-		RawOutputSchema: definition.RawOutputSchema,
+	runtimeDefinition, err := NewRuntimeAgentDefinition(*definition)
+	if err != nil {
+		return nil, domain.NewError(domain.CodeRuntimeInitFailed, fmt.Sprintf("build runtime agent %q", declaration.Name), err)
+	}
+	built, err := llmagent.New(runtimeDefinition.ADKConfig(ADKAgentRuntime{
 		Model:           aiModel,
 		Toolsets:        toolsets,
 		SubAgents:       subAgents,
-		Temperature:     definition.EffectiveTemperature(b.deps.temperature),
-		MaxOutputTokens: definition.EffectiveMaxOutputTokens(b.deps.maxOutputTokens),
+		Temperature:     declaration.EffectiveTemperature(b.deps.temperature),
+		MaxOutputTokens: declaration.EffectiveMaxOutputTokens(b.deps.maxOutputTokens),
 		OutputKey:       outputKey,
-		IsEntrypoint:    definition.Name == b.entrypointName,
+		IsEntrypoint:    declaration.Name == b.entrypointName,
 		BeforeModelCallbacks: []llmagent.BeforeModelCallback{
 			b.deps.callAuditor.beforeModel,
 		},
@@ -126,8 +130,8 @@ func (b *agentGraphBuilder) build(definition *AgentDefinition) (agent.Agent, err
 		},
 	}))
 	if err != nil {
-		return nil, domain.NewError(domain.CodeRuntimeInitFailed, fmt.Sprintf("create ADK agent %q", definition.Name), err)
+		return nil, domain.NewError(domain.CodeRuntimeInitFailed, fmt.Sprintf("create ADK agent %q", declaration.Name), err)
 	}
-	b.built[definition.Name] = built
+	b.built[declaration.Name] = built
 	return built, nil
 }

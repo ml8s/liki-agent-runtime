@@ -74,7 +74,7 @@ func TestFourAgentArtifactIsLoadable(t *testing.T) {
 		t.Fatalf("root=%q agents=%d, want main/4", rootName, len(deployment.Spec.Agents))
 	}
 
-	byName := map[string]agentruntime.AgentDefinition{}
+	byName := map[string]agentruntime.ResolvedAgentDefinition{}
 	for _, definition := range deployment.Spec.Agents {
 		byName[definition.Name] = definition
 	}

@@ -7,9 +7,6 @@ package agent
 import (
 	"slices"
 	"strings"
-
-	"github.com/google/jsonschema-go/jsonschema"
-	"google.golang.org/genai"
 )
 
 const (
@@ -39,8 +36,8 @@ type DeploymentMetadata struct {
 
 // DeploymentSpec declares the deployment's MCP dependencies and Agent tree.
 type DeploymentSpec struct {
-	MCPServers []MCPServerDefinition `json:"mcpServers"`
-	Agents     []AgentDefinition     `json:"agents"`
+	MCPServers []MCPServerDefinition     `json:"mcpServers"`
+	Agents     []ResolvedAgentDefinition `json:"agents"`
 }
 
 // MCPServerDefinition binds a logical MCP server to environment variables.
@@ -65,8 +62,8 @@ type AgentReference struct {
 	Name string `json:"name"`
 }
 
-// AgentDefinition is one deployed Agent: instruction, optional output schema,
-// tool allowlist, and delegation edges.
+// AgentDefinition is the external artifact declaration for one Agent. It has
+// no loaded instruction text, schema state, digests, or provider mappings.
 type AgentDefinition struct {
 	Name        string           `json:"name"`
 	Version     string           `json:"version"`
@@ -83,16 +80,6 @@ type AgentDefinition struct {
 	Model           string   `json:"model,omitempty"`
 	Temperature     *float64 `json:"temperature,omitempty"`
 	MaxOutputTokens int      `json:"maxOutputTokens,omitempty"`
-
-	// Runtime-only resolved values. They are never read from JSON.
-	InstructionDigest string               `json:"-"`
-	InstructionText   string               `json:"-"`
-	SchemaDigest      string               `json:"-"`
-	OutputSchema      *jsonschema.Schema   `json:"-"`
-	ResolvedOutput    *jsonschema.Resolved `json:"-"`
-	GenaiOutputSchema *genai.Schema        `json:"-"`
-	RawOutputSchema   map[string]any       `json:"-"`
-	Digest            string               `json:"-"`
 }
 
 // FileReference points at an external artifact relative to the deployment

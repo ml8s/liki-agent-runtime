@@ -107,7 +107,7 @@ func (s runState) consume(event *session.Event) runState {
 
 func (s runState) consumeStructuredOutput(
 	value any,
-	definition *AgentDefinition,
+	definition *ResolvedAgentDefinition,
 ) (runState, error) {
 	result, err := ParseStructuredOutput(value, definition)
 	if err != nil {

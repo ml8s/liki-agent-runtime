@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"
@@ -22,23 +23,34 @@ func (staticToolset) Tools(adkagent.ReadonlyContext) ([]tool.Tool, error) {
 
 func TestAgentDefinitionCompilesToStandardADKConfig(t *testing.T) {
 	temperature := float32(0.25)
-	rawSchema := map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
+	outputSchema := &jsonschema.Schema{Type: "object"}
+	resolved, err := outputSchema.Resolve(nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	definition := AgentDefinition{
-		Name:              "worker",
-		Description:       "generic worker",
-		Mode:              AgentModeTask,
-		InstructionText:   "generic instruction",
-		GenaiOutputSchema: &genai.Schema{Type: genai.TypeObject},
-		RawOutputSchema:   rawSchema,
-		Tools:             ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+	declaration := AgentDefinition{
+		Name:        "worker",
+		Description: "generic worker",
+		Mode:        AgentModeTask,
+		Output: OutputDefinition{
+			Schema:      FileReference{Path: "output.schema.json"},
+			TextPointer: "/answer",
+		},
+		Tools: ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+	}
+	definition, err := NewRuntimeAgentDefinition(ResolvedAgentDefinition{
+		AgentDefinition: declaration,
+		InstructionText: "generic instruction",
+		OutputSchema:    outputSchema,
+		ResolvedOutput:  resolved,
+		RawOutputSchema: map[string]any{"type": "object", "additionalProperties": false},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	beforeModel := func(adkagent.Context, *model.LLMRequest) (*model.LLMResponse, error) { return nil, nil }
 	config := definition.ADKConfig(ADKAgentRuntime{
-		RawOutputSchema:      rawSchema,
 		Toolsets:             []tool.Toolset{staticToolset{}},
 		SubAgents:            []adkagent.Agent{nil},
 		Temperature:          temperature,
@@ -79,7 +91,7 @@ func TestAgentDefinitionCompilesToStandardADKConfig(t *testing.T) {
 
 func TestADKConfigCarriesMaxOutputTokens(t *testing.T) {
 	t.Parallel()
-	definition := AgentDefinition{Name: "worker"}
+	definition := RuntimeAgentDefinition{Definition: ResolvedAgentDefinition{AgentDefinition: AgentDefinition{Name: "worker"}}}
 	bounded := definition.ADKConfig(ADKAgentRuntime{
 		Temperature:     0.2,
 		MaxOutputTokens: 2048,

@@ -252,10 +252,10 @@ func TestNewMCPToolsetsMemoizeDiscovery(t *testing.T) {
 		},
 		AgentDeployment: &AgentDeployment{Spec: DeploymentSpec{
 			MCPServers: []MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-			Agents: []AgentDefinition{{
+			Agents: resolvedAgentDefinitions([]AgentDefinition{{
 				Name:  "test-agent",
 				Tools: ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
-			}},
+			}}),
 		}},
 		Now: catalogClock(),
 	}

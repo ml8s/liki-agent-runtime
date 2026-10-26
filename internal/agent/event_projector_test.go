@@ -58,14 +58,14 @@ func BenchmarkEventProjectorPartialText(b *testing.B) {
 func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 	deployment := &AgentDeployment{
 		Metadata: DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: DeploymentSpec{Agents: []AgentDefinition{{
+		Spec: DeploymentSpec{Agents: resolvedAgentDefinitions([]AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "plain text agent",
 			Mode:        AgentModeChat,
 			Instruction: FileReference{Path: "instruction.md"},
 			Tools:       ToolAllowlist{Allow: map[string][]string{}},
-		}}},
+		}})},
 	}
 	projection := newEventProjectionState()
 	projector := newEventProjector(newEventProjectorIndex(deployment))
@@ -86,7 +86,7 @@ func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 func TestEventProjectorHidesStructuredPayload(t *testing.T) {
 	deployment := &AgentDeployment{
 		Metadata: DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: DeploymentSpec{Agents: []AgentDefinition{{
+		Spec: DeploymentSpec{Agents: resolvedAgentDefinitions([]AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "structured agent",
@@ -97,7 +97,7 @@ func TestEventProjectorHidesStructuredPayload(t *testing.T) {
 				TextPointer: "/answer",
 			},
 			Tools: ToolAllowlist{Allow: map[string][]string{}},
-		}}},
+		}})},
 	}
 	projection := newEventProjectionState()
 	projector := newEventProjector(newEventProjectorIndex(deployment))
@@ -231,21 +231,21 @@ func TestEventProjectorKeepsToolFactWhenSuppressingFinalText(t *testing.T) {
 func plainTextDeployment() *AgentDeployment {
 	return &AgentDeployment{
 		Metadata: DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: DeploymentSpec{Agents: []AgentDefinition{{
+		Spec: DeploymentSpec{Agents: resolvedAgentDefinitions([]AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "plain text agent",
 			Mode:        AgentModeChat,
 			Instruction: FileReference{Path: "instruction.md"},
 			Tools:       ToolAllowlist{Allow: map[string][]string{}},
-		}}},
+		}})},
 	}
 }
 
 func structuredTextDeployment() *AgentDeployment {
 	return &AgentDeployment{
 		Metadata: DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: DeploymentSpec{Agents: []AgentDefinition{{
+		Spec: DeploymentSpec{Agents: resolvedAgentDefinitions([]AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "structured agent",
@@ -256,7 +256,7 @@ func structuredTextDeployment() *AgentDeployment {
 				TextPointer: "/answer",
 			},
 			Tools: ToolAllowlist{Allow: map[string][]string{}},
-		}}},
+		}})},
 	}
 }
 
@@ -269,8 +269,8 @@ func TestExposesModelText(t *testing.T) {
 		want       bool
 	}{
 		{name: "nil definition", definition: nil, want: false},
-		{name: "plain agent", definition: &plain, want: true},
-		{name: "structured agent", definition: &structured, want: false},
+		{name: "plain agent", definition: &plain.AgentDefinition, want: true},
+		{name: "structured agent", definition: &structured.AgentDefinition, want: false},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -291,8 +291,8 @@ func TestEventProjectorExposeDecisionMatchesRule(t *testing.T) {
 		if definition == nil {
 			t.Fatalf("definitionFor(%q) returned nil for structured=%v", entrypoint.Name, entrypoint.Output.Structured())
 		}
-		if expose != ExposesModelText(&entrypoint) {
-			t.Fatalf("projector expose = %v, ExposesModelText = %v", expose, ExposesModelText(&entrypoint))
+		if expose != ExposesModelText(&entrypoint.AgentDefinition) {
+			t.Fatalf("projector expose = %v, ExposesModelText = %v", expose, ExposesModelText(&entrypoint.AgentDefinition))
 		}
 	}
 }
