@@ -170,27 +170,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
 	result, runErr := h.runtime.Run(runCtx, spec, func(event *session.Event) error {
 		next, outgoing := streamer.consume(event)
-		if err := emitAll(outgoing); err != nil {
-			return err
-		}
+		// Apply the full state transition before publication. SSE is a
+		// best-effort stream after the first write failure; advancing the
+		// reducer matches the previous imperative behavior and prevents
+		// compensations from repeating already-emitted lifecycle facts.
 		streamer = next
-		return nil
+		return emitAll(outgoing)
 	})
 	finishedAt := time.Now()
 	if runErr == nil {
 		next, outgoing := streamer.finish(result.Text)
+		streamer = next
 		runErr = emitAll(outgoing)
-		if runErr == nil {
-			streamer = next
-		}
 	}
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		message, code := publicError(runErr)
 		next, outgoing := streamer.failSubagents(message, code)
+		streamer = next
 		if err := emitAll(outgoing); err != nil {
 			return
 		}
-		streamer = next
 	}
 	if runErr == nil {
 		// 协议契约：RUN_FINISHED 必须带成功 outcome（与中继网关一致）；
@@ -209,8 +208,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err := emitAll(outgoing); err != nil {
 			runErr = err
 		}
-		// RUN_FINISHED is terminal even if its SSE write fails; the
-		// protocol forbids RUN_ERROR after a terminal success event.
 		streamer = next
 	}
 	if runErr != nil && !errors.Is(runErr, context.Canceled) && !streamer.state.runFinished {

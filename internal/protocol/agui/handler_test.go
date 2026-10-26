@@ -514,6 +514,49 @@ func TestAGUIDoesNotEmitRunErrorAfterRunFinished(t *testing.T) {
 	}
 }
 
+type textFailureWriter struct {
+	*httptest.ResponseRecorder
+}
+
+func (w *textFailureWriter) Write(body []byte) (int, error) {
+	written, err := w.ResponseRecorder.Write(body)
+	if err == nil && strings.Contains(string(body), `"TEXT_MESSAGE_CONTENT"`) {
+		return written, errors.New("stream failed after text delta")
+	}
+	return written, err
+}
+
+func TestAGUIAdvancesStateBeforeSSEWriteFailure(t *testing.T) {
+	events := []*session.Event{{
+		Author: "worker",
+		Branch: "main.worker",
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Parts: []*genai.Part{{Text: "worker answer"}}},
+		},
+	}}
+	scripted := &scriptedRuntime{events: events, err: context.DeadlineExceeded}
+	handler, err := agui.New(scripted, agui.Config{RunTimeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := &textFailureWriter{ResponseRecorder: httptest.NewRecorder()}
+	handler.ServeHTTP(response, authenticatedRequest(t, `{"threadId":"t","runId":"r","messages":[{"role":"user","content":"hi"}]}`))
+
+	got := sseEvents(t, response.Body.String())
+	var starts, errors int
+	for _, event := range got {
+		switch event.Type {
+		case "SUBAGENT_STARTED":
+			starts++
+		case "SUBAGENT_ERROR":
+			errors++
+		}
+	}
+	if starts != 1 || errors != 1 {
+		t.Fatalf("subagent events = %d started / %d error, want 1/1; all=%#v", starts, errors, got)
+	}
+}
+
 func (r *capturingRuntime) Entrypoint() *agent.AgentDefinition {
 	return &agent.AgentDefinition{Name: "main"}
 }
