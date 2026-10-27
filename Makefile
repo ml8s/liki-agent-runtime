@@ -1,7 +1,7 @@
 # 统一语义：
 #   make check  静态检查（docs、format、lint、vet、artifact、action pinning）
 #   make test   本仓全部测试（unit/integration，race + coverage floor）
-#   make gate   check + test
+#   make gate   check + test + protocol conformance
 
 RELEASE_VERSION ?=
 export RELEASE_VERSION
@@ -23,10 +23,11 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help check test gate bench build run dev dev-down image smoke
+.PHONY: help check test conformance gate bench build run dev dev-down image smoke
 help:
 	@echo "make check    - static checks: docs, formatting, lint, vet, artifact, and action pinning"
 	@echo "make test     - run tests with race detection and the coverage floor"
+	@echo "make conformance - run official-client protocol conformance checks"
 	@echo "make bench    - run focused performance benchmarks"
 	@echo "make gate     - run the full pre-push source gate"
 	@echo "make smoke    - smoke the local agent-runtime image"
@@ -76,7 +77,10 @@ smoke: image ## Smoke the local runtime image with the development deployment
 run:
 	./scripts/dev.sh
 
-gate: check test
+conformance: ## Run official-client protocol conformance checks
+	$(GO) test -race -count=1 ./internal/protocol/... ./cmd/mcp-fixture
+
+gate: check test conformance
 
 dev-down:
 	docker compose --project-directory . $(COMPOSE_ENV_FILE) -f dev/docker-compose.yml down --remove-orphans

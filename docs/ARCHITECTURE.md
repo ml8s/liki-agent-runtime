@@ -207,6 +207,10 @@ MCP endpoint bindings are deployment-owned complete URLs. A gateway may expose
 service prefixes such as `/tools-a` and `/tools-b`; the MCP service owns its
 standard `/mcp` and `/mcp/{domain}` routes. The runtime consumes the configured
 URL verbatim through the official MCP SDK and does not translate paths.
+Development uses one domain-neutral MCP fixture image; its `tools-a` and
+`tools-b` instances expose configured generic tool families over official
+Streamable HTTP and exist only to exercise discovery, allowlists, readiness,
+and tool execution.
 
 Google ADK is the internal execution runtime, not the public control plane. The
 ADK Launcher/REST API is intentionally not exposed. External clients use only

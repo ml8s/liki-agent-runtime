@@ -33,7 +33,7 @@ curl -sS http://127.0.0.1:8085/readyz | jq   # ops listener (AGENT_RUNTIME_OPS_A
 ```
 
 `make dev` is the supported development path: it mounts the deployment and
-skill fixtures, then starts the MCP fixtures (`mcp-tools-a` / `mcp-tools-b` images) with `.env`. `make run` is an advanced host-mode
+skill fixtures, then builds one domain-neutral MCP fixture image and starts `mcp-tools-a` / `mcp-tools-b` instances with `.env`. `make run` is an advanced host-mode
 entry point; because the fixture artifact pins `/skills`, use it only with a
 host-specific artifact whose skill roots are accessible to that process.
 Browser testing uses

@@ -1,36 +1,39 @@
+x-mcp-fixture: &mcp-fixture
+  image: agent-runtime-example/mcp-fixture:local
+  build:
+    context: ..
+    dockerfile: dev/mcp-fixture.Dockerfile
+  restart: "no"
+  init: true
+  deploy:
+    resources:
+      limits:
+        memory: 128M
+        cpus: "0.5"
+
 services:
   mcp-tools-a:
-    image: agent-runtime-example/mcp-tools-a:local
-    entrypoint: ["/usr/local/bin/mcp-tools-a", "--addr", ":8085"]
+    <<: *mcp-fixture
     profiles: ["mcp"]
     expose: ["8085"]
     environment:
       LISTEN_ADDR: :8085
-    restart: "no"
-    init: true
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "1"
+      MCP_FIXTURE_SERVER_NAME: tools-a
+      MCP_FIXTURE_PREFIX: tool_a
+      MCP_FIXTURE_COUNT: "4"
 
   mcp-tools-b:
-    image: agent-runtime-example/mcp-tools-b:local
+    <<: *mcp-fixture
     profiles: ["mcp"]
     expose: ["8086"]
     environment:
-      AGENT_RUNTIME_MCP_UPSTREAM_URL: http://mcp-tools-a:8085/mcp
-      AGENT_RUNTIME_MCP_TIMEOUT: ${AGENT_RUNTIME_MCP_TIMEOUT_SECONDS:-30}
-    restart: "no"
-    init: true
+      LISTEN_ADDR: :8086
+      MCP_FIXTURE_SERVER_NAME: tools-b
+      MCP_FIXTURE_PREFIX: tool_b
+      MCP_FIXTURE_COUNT: "3"
     depends_on:
       mcp-tools-a:
         condition: service_started
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
 
   agent-runtime:
     image: agent-runtime:local
