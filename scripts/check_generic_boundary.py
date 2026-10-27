@@ -15,6 +15,7 @@ PATTERNS = {
     "product name": re.compile(r"\b(?:liki|Liki)\b"),
     "legacy env prefix": re.compile(r"\bLIKI_[A-Z0-9_]+"),
     "legacy metric prefix": re.compile(r"\bliki_agents_"),
+    "legacy security scheme": re.compile(r"\bliki_service_(?:bearer|mtls)"),
     "private callback": re.compile(r"CALLBACK_(?:URL|SECRET)|hk\.liki\.|Standard Webhooks"),
     "private identity header": re.compile(r"X-Liki-(?:User|Tenant)-ID", re.IGNORECASE),
     "legacy fixture service": re.compile(r"\b(?:Engine|Counsel)\b"),

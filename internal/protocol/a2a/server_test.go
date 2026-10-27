@@ -128,7 +128,7 @@ func TestAgentCardDeclaresStandardJSONRPCBinding(t *testing.T) {
 	if !contains(card.DefaultOutputModes, "text/plain") || !contains(card.DefaultOutputModes, "application/json") {
 		t.Fatalf("A2A output modes = %v, want text and structured JSON", card.DefaultOutputModes)
 	}
-	if _, ok := card.SecuritySchemes["liki_service_bearer"]; !ok {
+	if _, ok := card.SecuritySchemes["agent_runtime_service_bearer"]; !ok {
 		t.Fatal("A2A bearer security scheme was not declared")
 	}
 	if len(card.SecurityRequirements) != 1 {
