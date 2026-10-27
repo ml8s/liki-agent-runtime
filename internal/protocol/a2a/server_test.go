@@ -17,13 +17,13 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	a2apush "github.com/a2aproject/a2a-go/v2/a2asrv/push"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
-	"github.com/ml8s/liki-agent-runtime/internal/agent"
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
-	"github.com/ml8s/liki-agent-runtime/internal/protocol/a2a"
-	protocolstate "github.com/ml8s/liki-agent-runtime/internal/protocolstate/sqlite"
-	"github.com/ml8s/liki-agent-runtime/internal/testagent"
+	"github.com/ml8s/agent-runtime/internal/agent"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/protocol/a2a"
+	protocolstate "github.com/ml8s/agent-runtime/internal/protocolstate/sqlite"
+	"github.com/ml8s/agent-runtime/internal/testagent"
 )
 
 type testAuditRecorder struct {
@@ -253,9 +253,9 @@ func TestA2AJSONRPCExecutesRuntimeAndClosesAudit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFromCard() error = %v", err)
 	}
-	result, err := client.SendMessage(ctx, &a2atypes.SendMessageRequest{
-		Message: a2atypes.NewMessage(a2atypes.MessageRoleUser, a2atypes.NewTextPart("hello")),
-	})
+	message := a2atypes.NewMessage(a2atypes.MessageRoleUser, a2atypes.NewTextPart("hello"))
+	message.ContextID = "same_context"
+	result, err := client.SendMessage(ctx, &a2atypes.SendMessageRequest{Message: message})
 	if err != nil {
 		t.Fatalf("SendMessage() error = %v", err)
 	}
@@ -284,6 +284,32 @@ func TestA2AJSONRPCExecutesRuntimeAndClosesAudit(t *testing.T) {
 	}
 	if completed[0].RunID == completed[0].ParentRunID || completed[0].ParentRunID == "" {
 		t.Fatalf("A2A attempt/task IDs = %q/%q, want distinct attempt and task", completed[0].RunID, completed[0].ParentRunID)
+	}
+
+	// A standard ContextID can carry multiple sequential execution attempts.
+	// Attempt state is process-local and attempt-scoped; only the ADK session
+	// is ContextID-scoped.
+	for range 2 {
+		message := a2atypes.NewMessage(a2atypes.MessageRoleUser, a2atypes.NewTextPart("again"))
+		message.ContextID = "same_context"
+		if _, err := client.SendMessage(ctx, &a2atypes.SendMessageRequest{Message: message}); err != nil {
+			t.Fatalf("SendMessage(same context) error = %v", err)
+		}
+	}
+	started = recorder.eventsOfType(audit.EventRunStarted)
+	completed = recorder.eventsOfType(audit.EventRunCompleted)
+	if len(started) != 3 || len(completed) != 3 {
+		t.Fatalf("same-context audit events = %d/%d, want 3/3", len(started), len(completed))
+	}
+	for index := range started {
+		if started[index].ThreadID != "same_context" || completed[index].ThreadID != "same_context" {
+			t.Fatalf("audit attempt %d lost ContextID correlation", index)
+		}
+	}
+	if started[0].RunID == started[1].RunID ||
+		started[1].RunID == started[2].RunID ||
+		started[0].RunID == started[2].RunID {
+		t.Fatalf("attempts did not receive unique IDs: %q/%q/%q", started[0].RunID, started[1].RunID, started[2].RunID)
 	}
 }
 

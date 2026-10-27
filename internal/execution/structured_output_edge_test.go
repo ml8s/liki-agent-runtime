@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/ml8s/liki-agent-runtime/internal/deployment"
+	"github.com/ml8s/agent-runtime/internal/deployment"
 )
 
 func testStructuredDefinition(t *testing.T) *deployment.ResolvedAgentDefinition {

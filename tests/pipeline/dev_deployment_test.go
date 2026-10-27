@@ -3,11 +3,11 @@ package pipeline_test
 import (
 	"testing"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 )
 
 // DevelopmentAgentDeploymentRegistersComplementaryMCPTools keeps the local
-// fixture wired to both deterministic Engine facts and Counsel judgments.
+// fixture wired to two generic MCP tool services.
 func TestDevelopmentAgentDeploymentRegistersComplementaryMCPTools(t *testing.T) {
 	artifact, err := deploymentpkg.LoadAgentDeployment("../../dev/agent-deployment/deployment.json")
 	if err != nil {
@@ -18,25 +18,25 @@ func TestDevelopmentAgentDeploymentRegistersComplementaryMCPTools(t *testing.T) 
 	for _, server := range artifact.Spec.MCPServers {
 		servers[server.Name] = server
 	}
-	// Endpoint and token variables share the LIKI_MCP_<NAME> prefix so a
+	// Endpoint and token variables share the AGENT_RUNTIME_MCP_<NAME> prefix so a
 	// server's binding can be found by name.
-	engine, ok := servers["engine"]
-	if !ok || engine.EndpointEnv != "LIKI_MCP_ENGINE_URL" || engine.TokenEnv != "LIKI_MCP_ENGINE_TOKEN" {
-		t.Fatalf("Engine MCP declaration = %+v", engine)
+	engine, ok := servers["tools-a"]
+	if !ok || engine.EndpointEnv != "AGENT_RUNTIME_MCP_TOOLS_A_URL" || engine.TokenEnv != "AGENT_RUNTIME_MCP_TOOLS_A_TOKEN" {
+		t.Fatalf("Tools A MCP declaration = %+v", engine)
 	}
-	counsel, ok := servers["counsel"]
-	if !ok || counsel.EndpointEnv != "LIKI_MCP_COUNSEL_URL" || counsel.TokenEnv != "LIKI_MCP_COUNSEL_TOKEN" {
-		t.Fatalf("Counsel MCP declaration = %+v", counsel)
+	counsel, ok := servers["tools-b"]
+	if !ok || counsel.EndpointEnv != "AGENT_RUNTIME_MCP_TOOLS_B_URL" || counsel.TokenEnv != "AGENT_RUNTIME_MCP_TOOLS_B_TOKEN" {
+		t.Fatalf("Tools B MCP declaration = %+v", counsel)
 	}
 
 	entrypoint, err := artifact.EntrypointDefinition()
 	if err != nil {
 		t.Fatalf("EntrypointDefinition() error = %v", err)
 	}
-	if got := entrypoint.Tools.Allow["engine"]; len(got) == 0 {
-		t.Fatal("entrypoint has no allowlisted Engine tools")
+	if got := entrypoint.Tools.Allow["tools-a"]; len(got) == 0 {
+		t.Fatal("entrypoint has no allowlisted tools-a tools")
 	}
-	if got := entrypoint.Tools.Allow["counsel"]; len(got) == 0 {
-		t.Fatal("entrypoint has no allowlisted Counsel tools")
+	if got := entrypoint.Tools.Allow["tools-b"]; len(got) == 0 {
+		t.Fatal("entrypoint has no allowlisted tools-b tools")
 	}
 }

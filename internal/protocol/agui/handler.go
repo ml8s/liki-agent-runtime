@@ -11,18 +11,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 
-	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 
 	aguievents "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	aguitypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	aguisse "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/encoding/sse"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
-	"github.com/ml8s/liki-agent-runtime/internal/notify"
-	"github.com/ml8s/liki-agent-runtime/internal/observability"
-	platformconfig "github.com/ml8s/liki-agent-runtime/internal/platform/config"
-	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
+	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/observability"
+	platformconfig "github.com/ml8s/agent-runtime/internal/platform/config"
+	"github.com/ml8s/agent-runtime/internal/platform/identity"
 	"google.golang.org/adk/v2/session"
 )
 
@@ -30,7 +29,6 @@ import (
 type Config struct {
 	RunTimeout time.Duration
 	Metrics    observability.ProtocolMetrics
-	Notifier   CompletionNotifier
 }
 
 // AG-UI request-validation error codes. They are raised before a run starts,
@@ -42,18 +40,11 @@ const (
 	CodeUnsupportedAGUIFeature = "unsupported_agui_feature"
 )
 
-// CompletionNotifier receives one record per terminal product run. It is
-// implemented by *notify.Notifier; nil disables notifications.
-type CompletionNotifier interface {
-	Notify(notify.Record)
-}
-
 // Handler is the AG-UI protocol adapter.
 type Handler struct {
 	runtime    runtime
 	runTimeout time.Duration
 	metrics    observability.ProtocolMetrics
-	notifier   CompletionNotifier
 	entrypoint string
 	writer     *aguisse.SSEWriter
 }
@@ -80,7 +71,6 @@ func New(runtime runtime, config Config) (*Handler, error) {
 		runtime:    runtime,
 		runTimeout: config.RunTimeout,
 		metrics:    config.Metrics,
-		notifier:   config.Notifier,
 		entrypoint: entrypoint.Name,
 		writer:     aguisse.NewSSEWriter(),
 	}, nil
@@ -170,7 +160,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	runCtx, cancelRun := context.WithTimeout(r.Context(), h.runTimeout)
 	defer cancelRun()
-	startedAt := time.Now()
 	result, runErr := h.runtime.Run(runCtx, spec, func(event *session.Event) error {
 		next, outgoing := streamer.consume(event)
 		// Apply the full state transition before publication. SSE is a
@@ -180,7 +169,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		streamer = next
 		return emitAll(outgoing)
 	})
-	finishedAt := time.Now()
 	if runErr == nil {
 		next, outgoing := streamer.finish(result.Text)
 		streamer = next
@@ -207,6 +195,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"definition": result.Definition,
 			"output":     json.RawMessage(result.Output),
 			"answer":     result.Text,
+			"usage":      result.Usage,
 		}
 		next, outgoing := streamer.finishRun(finished)
 		if err := emitAll(outgoing); err != nil {
@@ -218,52 +207,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		message, code := publicError(runErr)
 		_ = emit(aguievents.NewRunErrorEvent(message, aguievents.WithErrorCode(code), aguievents.WithRunID(runID)))
 	}
-	h.notifyCompletion(spec, result, runErr, r.Context().Err(), callerIdentity.MutualTLS, startedAt, finishedAt)
-}
-
-// notifyCompletion delivers one terminal run record to the control plane. The
-// terminal state derives once from the run result and the request context
-// (client disconnect) and reuses the A2A TaskState vocabulary.
-//
-// Only runs that arrived over the mutually authenticated listener notify: the
-// callback is the direct-connect persistence path, while relay runs are
-// persisted by liki-web itself. Notifying relay runs too would write every
-// exchange twice (the relay is the rollback lever and may carry traffic while
-// the callback secret is already configured).
-func (h *Handler) notifyCompletion(
-	spec execution.RunRequest,
-	result execution.RunResult,
-	runErr error,
-	clientErr error,
-	direct bool,
-	startedAt time.Time,
-	finishedAt time.Time,
-) {
-	if h.notifier == nil || !direct {
-		return
-	}
-	status := "completed"
-	switch {
-	case errors.Is(runErr, context.Canceled) || errors.Is(clientErr, context.Canceled):
-		status = "canceled"
-	case runErr != nil:
-		status = "failed"
-	}
-	record := notify.Record{
-		RunID:       spec.RunID,
-		ThreadID:    spec.ThreadID,
-		UserID:      spec.UserID,
-		UserMessage: spec.UserMessage,
-		Status:      status,
-		Answer:      result.Text,
-		Usage:       result.Usage,
-		StartedAt:   startedAt,
-		FinishedAt:  finishedAt,
-	}
-	if status == "failed" && runErr != nil {
-		record.Error = runErr.Error()
-	}
-	h.notifier.Notify(record)
 }
 
 func publicError(err error) (message, code string) {

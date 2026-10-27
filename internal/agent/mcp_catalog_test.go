@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -22,7 +22,7 @@ import (
 func testDeploymentForMCP() *deploymentpkg.AgentDeployment {
 	return &deploymentpkg.AgentDeployment{Spec: deploymentpkg.DeploymentSpec{
 		MCPServers: []deploymentpkg.MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-		Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+		Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
 			Name:  "test-agent",
 			Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
 		}}),
@@ -72,7 +72,7 @@ func (s *catalogStub) callCount() int {
 }
 
 func newCatalogCache(stub *catalogStub, now func() time.Time, metrics execution.Metrics) *cachedToolset {
-	return newCachedToolset("engine", stub, time.Minute, now, metrics)
+	return newCachedToolset("mcp-a", stub, time.Minute, now, metrics)
 }
 
 func catalogClock() func() time.Time {
@@ -201,7 +201,7 @@ func TestMCPCatalogCacheServesStaleWhenRefreshFails(t *testing.T) {
 		t.Fatalf("first Tools() error = %v", err)
 	}
 	stub.mu.Lock()
-	stub.err = errors.New("engine unreachable")
+	stub.err = errors.New("mcp unreachable")
 	stub.mu.Unlock()
 	now = now.Add(2 * time.Minute)
 
@@ -215,7 +215,7 @@ func TestMCPCatalogCacheServesStaleWhenRefreshFails(t *testing.T) {
 }
 
 func TestMCPCatalogCacheFailsClosedWithoutAnyCache(t *testing.T) {
-	discoveryErr := errors.New("engine unreachable")
+	discoveryErr := errors.New("mcp unreachable")
 	stub := &catalogStub{err: discoveryErr}
 	metrics := &stubMetrics{}
 	cache := newCatalogCache(stub, catalogClock(), metrics)
@@ -223,8 +223,8 @@ func TestMCPCatalogCacheFailsClosedWithoutAnyCache(t *testing.T) {
 	if _, err := cache.Tools(nil); !errors.Is(err, discoveryErr) {
 		t.Fatalf("Tools() error = %v, want %v", err, discoveryErr)
 	}
-	if len(metrics.catalog) != 1 || metrics.catalog[0] != "engine/"+mcpCatalogOutcomeError {
-		t.Fatalf("catalog observations = %v, want [engine/%s]", metrics.catalog, mcpCatalogOutcomeError)
+	if len(metrics.catalog) != 1 || metrics.catalog[0] != "mcp-a/"+mcpCatalogOutcomeError {
+		t.Fatalf("catalog observations = %v, want [mcp-a/%s]", metrics.catalog, mcpCatalogOutcomeError)
 	}
 }
 
@@ -241,7 +241,7 @@ func TestMCPCatalogCacheMetricsLifecycle(t *testing.T) {
 		t.Fatalf("hit Tools() error = %v", err)
 	}
 	stub.mu.Lock()
-	stub.err = errors.New("engine unreachable")
+	stub.err = errors.New("mcp unreachable")
 	stub.mu.Unlock()
 	now = now.Add(2 * time.Minute)
 	if _, err := cache.Tools(nil); err != nil {
@@ -249,9 +249,9 @@ func TestMCPCatalogCacheMetricsLifecycle(t *testing.T) {
 	}
 
 	want := []string{
-		"engine/" + mcpCatalogOutcomeRefresh,
-		"engine/" + mcpCatalogOutcomeHit,
-		"engine/" + mcpCatalogOutcomeStale,
+		"mcp-a/" + mcpCatalogOutcomeRefresh,
+		"mcp-a/" + mcpCatalogOutcomeHit,
+		"mcp-a/" + mcpCatalogOutcomeStale,
 	}
 	if len(metrics.catalog) != len(want) {
 		t.Fatalf("catalog observations = %v, want %v", metrics.catalog, want)
@@ -278,7 +278,7 @@ func TestNewMCPToolsetsMemoizeDiscovery(t *testing.T) {
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	server := mcp.NewServer(
-		&mcp.Implementation{Name: "test-engine", Version: "test"},
+		&mcp.Implementation{Name: "test-mcp", Version: "test"},
 		&mcp.ServerOptions{Capabilities: &mcp.ServerCapabilities{
 			Tools: &mcp.ToolCapabilities{},
 		}},

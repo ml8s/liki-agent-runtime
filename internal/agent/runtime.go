@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
-	platformconfig "github.com/ml8s/liki-agent-runtime/internal/platform/config"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
+	platformconfig "github.com/ml8s/agent-runtime/internal/platform/config"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -71,7 +71,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		config.Logger = slog.Default()
 	}
 	if config.AppName == "" {
-		config.AppName = "liki-agent-runtime"
+		config.AppName = "agent-runtime"
 	}
 	if config.Model == "" {
 		return Config{}, domain.NewError(domain.CodeLLMModelMissing, "LLM model is required", domain.ErrInvalidInput)
@@ -112,6 +112,13 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 	}
 	if config.MaxConcurrentRuns <= 0 {
 		config.MaxConcurrentRuns = platformconfig.DefaultMaxConcurrentRuns
+	}
+	if config.MaxConcurrentRuns > platformconfig.MaxConcurrentRunsLimit {
+		return Config{}, domain.NewError(
+			domain.CodeRuntimeInitFailed,
+			fmt.Sprintf("max concurrent runs must not exceed %d", platformconfig.MaxConcurrentRunsLimit),
+			nil,
+		)
 	}
 	config.outboundTransport = newOutboundTransport(config.MaxConcurrentRuns)
 	if config.Now == nil {
@@ -178,8 +185,8 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err := recoverInterruptedAudits(config); err != nil {
 		return nil, err
 	}
-	tracer := config.TracerProvider.Tracer("github.com/ml8s/liki-agent-runtime/agent")
-	// Protocol callers own durable conversation/product history. Each ADK
+	tracer := config.TracerProvider.Tracer("github.com/ml8s/agent-runtime/agent")
+	// Protocol clients own durable conversation/product history. Each ADK
 	// session is deliberately run-scoped working state and must not become a
 	// second durable conversation store.
 	sessionService := session.InMemoryService()
@@ -240,7 +247,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create tool retry plugin", err)
 	}
 	attemptPlugin, err := plugin.New(plugin.Config{
-		Name: "liki.audit_attempt",
+		Name: "agent.runtime.audit_attempt",
 		BeforeRunCallback: func(invocation agent.InvocationContext) (*genai.Content, error) {
 			if attemptID, ok := invocation.Value(auditAttemptKey{}).(string); ok && attemptID != "" {
 				callAuditor.bindInvocation(invocation.Session().ID(), invocation.InvocationID(), attemptID)

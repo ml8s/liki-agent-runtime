@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	platformconfig "github.com/ml8s/liki-agent-runtime/internal/platform/config"
+	platformconfig "github.com/ml8s/agent-runtime/internal/platform/config"
 
 	"google.golang.org/adk/v2/tool"
 )

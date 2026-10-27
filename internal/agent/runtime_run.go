@@ -5,12 +5,12 @@ import (
 	"errors"
 	"strings"
 
-	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -35,6 +35,11 @@ func (r *Runtime) Run(
 	if !r.runs.begin(request.RunID) {
 		return execution.RunResult{}, domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
 	}
+	// Runtime.Run owns a run-scoped session, so the ADK session and attempt IDs
+	// happen to coincide. Keeping the distinction explicit makes the externally
+	// driven A2A path (ContextID != attempt ID) unambiguous.
+	handle := AuditAttemptHandle{ADKSessionID: runSessionID(request.RunID), AttemptID: request.RunID}
+	ctx = WithAuditAttempt(ctx, handle.AttemptID)
 	releaseRun, err := r.acquireRun(ctx)
 	if err != nil {
 		r.runs.finish(request.RunID)
@@ -50,14 +55,14 @@ func (r *Runtime) Run(
 		"agent.run "+r.entrypoint.Name,
 		trace.WithSpanKind(trace.SpanKindServer),
 		trace.WithAttributes(
-			attribute.String("liki.run.id", request.RunID),
-			attribute.String("liki.run.root_id", request.RunID),
-			attribute.String("liki.thread.id", request.ThreadID),
+			attribute.String("agent.runtime.id", request.RunID),
+			attribute.String("agent.runtime.root_id", request.RunID),
+			attribute.String("agent.thread.id", request.ThreadID),
 			attribute.String("gen_ai.agent.name", r.entrypoint.Name),
-			attribute.String("liki.agent.version", r.entrypoint.Version),
-			attribute.String("liki.definition.name", r.definition.Metadata.Name),
-			attribute.String("liki.definition.version", r.definition.Metadata.Version),
-			attribute.String("liki.definition.digest", r.definition.Digest),
+			attribute.String("agent.agent.version", r.entrypoint.Version),
+			attribute.String("agent.definition.name", r.definition.Metadata.Name),
+			attribute.String("agent.definition.version", r.definition.Metadata.Version),
+			attribute.String("agent.definition.digest", r.definition.Digest),
 		),
 	)
 	defer runSpan.End()
@@ -85,14 +90,14 @@ func (r *Runtime) Run(
 	// Aggregate usage is filled in on every exit path (including failure
 	// and cancellation).
 	defer func() { result.Usage = scope.usage() }()
-	if !r.callAuditor.begin(sessionID, scope) {
+	if !r.callAuditor.begin(handle, scope) {
 		runErr = domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
 		return execution.RunResult{}, runErr
 	}
 	if auditErr := r.recordRunAudit(ctx, scope, audit.EventRunStarted, audit.StatusRunning, nil); auditErr != nil {
 		runErr = auditErr
-		auditScope, _ := r.callAuditor.scope(sessionID)
-		r.callAuditor.end(sessionID, runErr)
+		auditScope, _ := r.callAuditor.scope(handle.AttemptID)
+		r.callAuditor.end(handle, runErr)
 		_ = r.delegationAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
 		_ = r.toolAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
 		_ = r.sessions.Delete(context.WithoutCancel(ctx), &session.DeleteRequest{
@@ -117,7 +122,7 @@ func (r *Runtime) Run(
 		// Terminal evidence has been attempted; process state is released
 		// after this point. Cleanup failures are operational noise and do not
 		// change the durably recorded execution outcome.
-		r.callAuditor.forget(sessionID)
+		r.callAuditor.forget(handle)
 		if deleteErr := r.sessions.Delete(auditCtx, &session.DeleteRequest{
 			AppName:   r.config.AppName,
 			UserID:    request.UserID,

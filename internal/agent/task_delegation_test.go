@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/audit"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"

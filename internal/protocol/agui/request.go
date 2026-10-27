@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	aguitypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 )
 
 // validateTextChatProfile rejects capabilities this runtime does not consume.

@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	"go.opentelemetry.io/otel/trace"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
@@ -109,6 +109,10 @@ func newTestScope() *runExecution {
 	}
 }
 
+func ledgerHandle(sessionID string, scope *runExecution) AuditAttemptHandle {
+	return AuditAttemptHandle{ADKSessionID: sessionID, AttemptID: string(scope.identity.RunID)}
+}
+
 func testCtx() *fakeAgentContext {
 	return &fakeAgentContext{sessionID: "session_1", invocationID: "inv_1", agentName: "coordinator"}
 }
@@ -136,7 +140,7 @@ func TestLedgerReconciledTerminalKeepsTrace(t *testing.T) {
 	scope := newTestScope()
 	scope.provenance.TraceID = traceID
 	scope.provenance.SpanID = spanID
-	if !callAuditor.begin("session_trace", scope) {
+	if !callAuditor.begin(ledgerHandle("session_trace", scope), scope) {
 		t.Fatal("begin() returned false")
 	}
 	ctx := &fakeAgentContext{
@@ -150,7 +154,7 @@ func TestLedgerReconciledTerminalKeepsTrace(t *testing.T) {
 	}
 	// Reconciliation runs without a live span (context.Background inside
 	// failActive); the scope-carried trace must survive.
-	callAuditor.end("session_trace", nil)
+	callAuditor.end(ledgerHandle("session_trace", scope), nil)
 	failed := recorder.eventsOfType(audit.EventLLMCallFailed)
 	if len(failed) != 1 {
 		t.Fatalf("failed events = %d, want 1", len(failed))
@@ -163,7 +167,7 @@ func TestLedgerReconciledTerminalKeepsTrace(t *testing.T) {
 func TestLedgerLifecycleCompletesNormally(t *testing.T) {
 	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	if !callAuditor.begin("session_1", scope) {
+	if !callAuditor.begin(ledgerHandle("session_1", scope), scope) {
 		t.Fatal("begin() returned false")
 	}
 	ctx := testCtx()
@@ -184,7 +188,7 @@ func TestLedgerLifecycleCompletesNormally(t *testing.T) {
 	if last.Status != audit.StatusSucceeded {
 		t.Fatalf("status = %s, want succeeded", last.Status)
 	}
-	callAuditor.end("session_1", nil)
+	callAuditor.end(ledgerHandle("session_1", scope), nil)
 	if got := len(recorder.eventsOfType(audit.EventLLMCallFailed)); got != 0 {
 		t.Fatalf("failed events after clean end = %d, want 0", got)
 	}
@@ -193,7 +197,7 @@ func TestLedgerLifecycleCompletesNormally(t *testing.T) {
 func TestLedgerAggregatesRunUsage(t *testing.T) {
 	callAuditor, _ := newTestLedger(t)
 	scope := newTestScope()
-	if !callAuditor.begin("session_1", scope) {
+	if !callAuditor.begin(ledgerHandle("session_1", scope), scope) {
 		t.Fatal("begin() returned false")
 	}
 	ctx := testCtx()
@@ -236,7 +240,7 @@ func TestLedgerRetainsActiveCallWhenTerminalAuditWriteFails(t *testing.T) {
 	recorder := &failOnceAudit{eventType: audit.EventLLMCallCompleted}
 	callAuditor := newLLMCallAuditor(recorder, nil, "test", NewTestDeployment(t), fixedLedgerNow)
 	scope := newTestScope()
-	if !callAuditor.begin("session_1", scope) {
+	if !callAuditor.begin(ledgerHandle("session_1", scope), scope) {
 		t.Fatal("begin() returned false")
 	}
 	ctx := testCtx()
@@ -270,7 +274,7 @@ func TestLedgerRetainsActiveCallWhenTerminalAuditWriteFails(t *testing.T) {
 func TestLedgerLifecycleFailurePath(t *testing.T) {
 	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	callAuditor.begin("session_1", scope)
+	callAuditor.begin(ledgerHandle("session_1", scope), scope)
 	ctx := testCtx()
 	if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
 		t.Fatalf("beforeModel() error = %v", err)
@@ -287,7 +291,7 @@ func TestLedgerLifecycleFailurePath(t *testing.T) {
 	if last.ErrorCode != domain.CodeRuntimeTimeout {
 		t.Fatalf("error_code = %s, want %s", last.ErrorCode, domain.CodeRuntimeTimeout)
 	}
-	callAuditor.end("session_1", nil)
+	callAuditor.end(ledgerHandle("session_1", scope), nil)
 	if got := len(recorder.eventsOfType(audit.EventLLMCallFailed)); got != 1 {
 		t.Fatalf("failed events after end = %d, want 1", got)
 	}
@@ -296,12 +300,12 @@ func TestLedgerLifecycleFailurePath(t *testing.T) {
 func TestLedgerInterruptedRunFailsActiveCalls(t *testing.T) {
 	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	callAuditor.begin("session_1", scope)
+	callAuditor.begin(ledgerHandle("session_1", scope), scope)
 	ctx := testCtx()
 	if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
 		t.Fatalf("beforeModel() error = %v", err)
 	}
-	callAuditor.end("session_1", nil)
+	callAuditor.end(ledgerHandle("session_1", scope), nil)
 	if got := len(recorder.eventsOfType(audit.EventLLMCallFailed)); got != 1 {
 		t.Fatalf("failed events = %d, want 1", got)
 	}
@@ -317,7 +321,7 @@ func TestLedgerInterruptedRunFailsActiveCalls(t *testing.T) {
 func TestLedgerOnModelErrorWithoutStartedRecordsStartedAndFailed(t *testing.T) {
 	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	if !callAuditor.begin("session_1", scope) {
+	if !callAuditor.begin(ledgerHandle("session_1", scope), scope) {
 		t.Fatal("begin() returned false")
 	}
 	ctx := testCtx()
@@ -342,14 +346,16 @@ func TestLedgerOnModelErrorWithoutStartedRecordsStartedAndFailed(t *testing.T) {
 
 func TestLedgerDuplicateBeginRejected(t *testing.T) {
 	callAuditor, _ := newTestLedger(t)
-	if !callAuditor.begin("session_1", newTestScope()) {
+	firstScope := newTestScope()
+	if !callAuditor.begin(ledgerHandle("session_1", firstScope), firstScope) {
 		t.Fatal("first begin should succeed")
 	}
-	if callAuditor.begin("session_1", newTestScope()) {
+	if callAuditor.begin(ledgerHandle("session_1", newTestScope()), newTestScope()) {
 		t.Fatal("second begin should fail")
 	}
-	callAuditor.end("session_1", nil)
-	if !callAuditor.begin("session_1", newTestScope()) {
+	callAuditor.end(ledgerHandle("session_1", firstScope), nil)
+	secondScope := newTestScope()
+	if !callAuditor.begin(ledgerHandle("session_1", secondScope), secondScope) {
 		t.Fatal("begin after end should succeed")
 	}
 }
@@ -357,7 +363,7 @@ func TestLedgerDuplicateBeginRejected(t *testing.T) {
 func TestLedgerConcurrentCallbacksDoNotRace(t *testing.T) {
 	callAuditor, recorder := newTestLedger(t)
 	scope := newTestScope()
-	callAuditor.begin("session_1", scope)
+	callAuditor.begin(ledgerHandle("session_1", scope), scope)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
@@ -374,12 +380,68 @@ func TestLedgerConcurrentCallbacksDoNotRace(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	callAuditor.end("session_1", nil)
+	callAuditor.end(ledgerHandle("session_1", scope), nil)
 	if got := len(recorder.eventsOfType(audit.EventLLMCallStarted)); got != 50 {
 		t.Fatalf("started events = %d, want 50", got)
 	}
 	if got := len(recorder.events); got != 100 {
 		t.Fatalf("audit events = %d, want 100 started/completed-or-failed facts", got)
+	}
+}
+
+func TestLedgerResolvesConcurrentAttemptsInOneSession(t *testing.T) {
+	callAuditor, recorder := newTestLedger(t)
+	const sessionID = "context_1"
+
+	scopeOne := newTestScope()
+	scopeOne.identity.RunID = "attempt_one"
+	scopeOne.attemptKey = string(scopeOne.identity.RunID)
+	handleOne := ledgerHandle(sessionID, scopeOne)
+	if !callAuditor.begin(handleOne, scopeOne) {
+		t.Fatal("begin attempt one should succeed")
+	}
+
+	scopeTwo := newTestScope()
+	scopeTwo.identity.RunID = "attempt_two"
+	scopeTwo.attemptKey = string(scopeTwo.identity.RunID)
+	handleTwo := ledgerHandle(sessionID, scopeTwo)
+	if !callAuditor.begin(handleTwo, scopeTwo) {
+		t.Fatal("begin attempt two should succeed for the same ADK session")
+	}
+
+	// A2A injects the attempt into the executor context before ADK invokes the
+	// model. This mirrors the callback path and ensures the legacy
+	// single-attempt session fallback is not being used by accident.
+	ctx := &fakeAgentContext{
+		sessionID:    sessionID,
+		invocationID: "inv_attempt_two",
+		agentName:    "coordinator",
+		traceContext: WithAuditAttempt(context.Background(), string(scopeTwo.identity.RunID)),
+	}
+	if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
+		t.Fatalf("beforeModel() error = %v", err)
+	}
+	if _, err := callAuditor.afterModel(ctx, &model.LLMResponse{ModelVersion: "test-model"}, nil); err != nil {
+		t.Fatalf("afterModel() error = %v", err)
+	}
+
+	started := recorder.eventsOfType(audit.EventLLMCallStarted)
+	completed := recorder.eventsOfType(audit.EventLLMCallCompleted)
+	if len(started) != 1 || len(completed) != 1 {
+		t.Fatalf("attempt-two events = %d/%d, want 1/1", len(started), len(completed))
+	}
+	if string(started[0].RunID) != string(scopeTwo.identity.RunID) ||
+		string(completed[0].RunID) != string(scopeTwo.identity.RunID) {
+		t.Fatalf("attempt-two events crossed attempts: %#v / %#v", started[0], completed[0])
+	}
+
+	callAuditor.end(handleOne, nil)
+	callAuditor.end(handleTwo, nil)
+	if len(callAuditor.sessionAttempts[sessionID]) != 0 {
+		t.Fatalf("attempt registry leaked: %#v", callAuditor.sessionAttempts[sessionID])
+	}
+	if len(callAuditor.scopes) != 0 {
+		t.Fatalf("attempt scopes leaked: %#v", callAuditor.scopes)
 	}
 }
 
@@ -396,7 +458,7 @@ func TestLedgerUsesInvokingAgentPromptProvenance(t *testing.T) {
 	events := &recordingAudit{}
 	callAuditor := newLLMCallAuditor(events, nil, "test-provider", agentDeployment, fixedLedgerNow)
 	scope := newTestScope()
-	callAuditor.begin("session_worker", scope)
+	callAuditor.begin(ledgerHandle("session_worker", scope), scope)
 	ctx := &fakeAgentContext{
 		sessionID:    "session_worker",
 		invocationID: "inv_worker",

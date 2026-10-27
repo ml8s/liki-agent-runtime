@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 func runtimeError(err error) error {

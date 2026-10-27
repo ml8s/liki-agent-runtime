@@ -20,12 +20,13 @@ The authoritative model is:
 1. Use official A2A Go SDK types and handlers; never create a private wire
    protocol.
 2. A capability may be absent, but if advertised it must be fully usable.
-3. Transport credentials map to an authenticated A2A principal.
-4. Task and push-config ownership is scoped by authenticated principal.
+3. Transport credentials map to an authenticated A2A protocol principal.
+4. Task and push-notification config ownership is scoped by authenticated A2A
+   protocol principal.
 5. Protocol state is not audit evidence and must live in a separate durable
    protocol-state store.
-6. CloudEvents remain a private control-plane integration and never replace an
-   A2A push payload.
+6. Product callbacks, CloudEvents, and Standard Webhooks are caller concerns;
+   they are not runtime capabilities and never replace A2A push.
 7. There are no compatibility aliases for incorrect old behavior.
 
 ## Workstreams
@@ -38,8 +39,7 @@ Requirements:
 
 - Map the transport service credential to `a2asrv.CallContext.User`.
 - Preserve an upstream authenticated user if one is already present.
-- Use the principal for task ownership, push-config ownership, and audit
-  provenance.
+- Use the principal for A2A protocol-state ownership and audit provenance.
 - Return standard A2A unauthenticated/not-found errors rather than leaking
   existence across owners.
 
@@ -73,8 +73,10 @@ Requirements:
 - `INPUT_REQUIRED` / `AUTH_REQUIRED` are non-terminal and can continue.
 - Terminal task states close the attempt but do not delete the context session
   merely because audit ends.
-- Startup marks abandoned non-terminal tasks failed instead of leaving them
-  working forever.
+- Startup marks abandoned process-owned states (`unspecified`, `submitted`,
+  and `working`) failed instead of leaving them working forever.
+  Client-owned `INPUT_REQUIRED` / `AUTH_REQUIRED` states remain resumable
+  against the durable ContextID session.
 
 **Status:** attempt identity, task provenance, pause/cancel evidence, session
 preservation, startup recovery, and ADK InvocationID correlation implemented.
@@ -106,7 +108,7 @@ Requirements:
 
 - Inject official `push.ConfigStore` and `push.Sender`.
 - Advertise `capabilities.pushNotifications` only when both are configured.
-- Support callback registration both inline in `SendMessage` and through the
+- Support push-config registration both inline in `SendMessage` and through the
   four standard config operations.
 - Send the official `a2a.StreamResponse{Event: event}` payload.
 - Do not use CloudEvents, private run events, or ADK metadata as the callback
@@ -128,7 +130,7 @@ separate durable protocol-state database.
 
 1. Add `internal/protocolstate/sqlite`.
 2. Store the complete standard A2A Task aggregate in `a2a_tasks`.
-3. Store standard push callback configs in `a2a_push_configs`.
+3. Store standard push notification configs in `a2a_push_configs`.
 4. Implement the official `taskstore.Store` and `push.ConfigStore` interfaces.
 5. Scope every operation by `(tenant, principal)`.
 6. Return official SDK sentinel errors:
@@ -152,7 +154,7 @@ separate durable protocol-state database.
 
 ### Wiring
 
-- `LIKI_AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH` owns protocol state.
+- `AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH` owns protocol state.
 - The runtime opens it independently from the audit database.
 - The same database is the reference implementation for TaskStore and
   PushConfigStore.
@@ -214,7 +216,7 @@ prohibited.
 - Every Agent Card `true` capability passes official-client conformance tests.
 - Every unsupported capability returns a standard A2A error.
 - Push payloads decode as `a2a.StreamResponse`.
-- Task ownership and callback ownership cannot be crossed.
+- Task ownership and push-config ownership cannot be crossed.
 - `ListTasks` works for an authenticated principal.
 - Restart does not lose registered callbacks or task state.
 - `make check`, race-enabled package tests, and protocol conformance suites

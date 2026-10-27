@@ -15,7 +15,7 @@ const (
 
 	// ContractVersion identifies the AgentDeployment JSON shape. Runtime
 	// releases reject artifacts written for an incompatible contract.
-	ContractVersion = "liki.agent-deployment.v1"
+	ContractVersion = "agent.deployment.v1"
 )
 
 // AgentDeployment is the validated AgentDeployment artifact and its derived digest.
@@ -145,7 +145,7 @@ type ToolAllowlist struct {
 // frontmatter name matches the directory name).
 type SkillsBinding struct {
 	// Root is an absolute path inside the assembly image (/skills or
-	// /expert-packs/liki-<name>/skills).
+	// /expert-packs/<name>/skills).
 	Root string `json:"root"`
 	// Preload is "" (frontmatter), "frontmatter", or "complete".
 	Preload string `json:"preload,omitempty"`

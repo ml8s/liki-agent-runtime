@@ -3,9 +3,34 @@ package agent
 import (
 	"strings"
 
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/execution"
 )
+
+// AuditAttemptHandle separates the identifiers that A2A intentionally keeps
+// distinct: the ADK session is owned by the protocol ContextID, while each
+// execution and its audit lifecycle is owned by a unique attempt ID.
+type AuditAttemptHandle struct {
+	ADKSessionID string
+	AttemptID    string
+}
+
+func (h AuditAttemptHandle) normalize() AuditAttemptHandle {
+	return AuditAttemptHandle{
+		ADKSessionID: strings.TrimSpace(h.ADKSessionID),
+		AttemptID:    strings.TrimSpace(h.AttemptID),
+	}
+}
+
+func (h AuditAttemptHandle) validate() error {
+	if h.ADKSessionID == "" {
+		return domain.NewError(domain.CodeAuditSessionRequired, "audit ADK session identifier is required", domain.ErrInvalidInput)
+	}
+	if h.AttemptID == "" {
+		return domain.NewError(domain.CodeRunIDRequired, "audit attempt identifier is required", domain.ErrInvalidInput)
+	}
+	return nil
+}
 
 func (s RunAuditIdentity) normalize() RunAuditIdentity {
 	return RunAuditIdentity{

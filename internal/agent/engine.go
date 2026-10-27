@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"slices"
 
-	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 
-	"github.com/ml8s/liki-agent-runtime/internal/platform"
-	"github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo"
+	"github.com/ml8s/agent-runtime/internal/platform"
+	"github.com/ml8s/agent-runtime/internal/platform/buildinfo"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/adk/v2/auth"
@@ -78,7 +78,7 @@ func checkMCPDependencyHealth(
 	defer cancel()
 
 	client := mcp.NewClient(
-		&mcp.Implementation{Name: "liki-agent-runtime", Version: buildinfo.Version},
+		&mcp.Implementation{Name: "agent-runtime", Version: buildinfo.Version},
 		nil,
 	)
 	var transport mcp.Transport = newMCPTransport(config, server)

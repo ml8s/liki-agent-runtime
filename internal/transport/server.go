@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/observability"
-	"github.com/ml8s/liki-agent-runtime/internal/platform"
-	"github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo"
-	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
+	"github.com/ml8s/agent-runtime/internal/observability"
+	"github.com/ml8s/agent-runtime/internal/platform"
+	"github.com/ml8s/agent-runtime/internal/platform/buildinfo"
+	"github.com/ml8s/agent-runtime/internal/platform/identity"
 )
 
 // Services bundles the protocol and operational handlers the transport
@@ -178,7 +178,7 @@ func protocolOperation(path, method string) (protocol, operation string, ok bool
 
 func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"service":    "liki-agent-runtime",
+		"service":    "agent-runtime",
 		"version":    buildinfo.Version,
 		"commit":     buildinfo.Commit,
 		"build_time": buildinfo.BuildTime,

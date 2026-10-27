@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/ml8s/liki-agent-runtime/internal/agent"
+	agent "github.com/ml8s/agent-runtime/internal/agent"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 type recordingAudit struct {
@@ -104,31 +104,54 @@ func newAuditRuntimeWithClock(t *testing.T, recorder audit.Recorder, maxConcurre
 	return runtime
 }
 
+func externalAuditHandle(sessionID, attemptID string) agent.AuditAttemptHandle {
+	return agent.AuditAttemptHandle{ADKSessionID: sessionID, AttemptID: attemptID}
+}
+
 func TestExternalAuditRunLifecycleIsExclusive(t *testing.T) {
 	runtime, events := newAuditRuntime(t)
 	scope := agent.RunAuditIdentity{RunID: "run_1", ThreadID: "thread_1", UserID: "user_1"}
 	ctx := context.Background()
-	if err := runtime.BeginAuditRun(ctx, "session_1", scope); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle("session_1", scope.RunID), scope); err != nil {
 		t.Fatalf("BeginAuditRun() error = %v", err)
 	}
-	if err := runtime.BeginAuditRun(ctx, "session_1", scope); err == nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle("session_1", scope.RunID), scope); err == nil {
 		t.Fatal("second BeginAuditRun unexpectedly succeeded")
 	}
 	if got := len(events.eventsOfType(audit.EventRunStarted)); got != 1 {
 		t.Fatalf("started events = %d, want 1", got)
 	}
-	if err := runtime.EndAuditRun(ctx, "session_1", nil); err != nil {
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle("session_1", scope.RunID), nil); err != nil {
 		t.Fatalf("EndAuditRun() error = %v", err)
 	}
 	if got := len(events.eventsOfType(audit.EventRunCompleted)); got != 1 {
 		t.Fatalf("completed events = %d, want 1", got)
 	}
 	scope.RunID = "run_2"
-	if err := runtime.BeginAuditRun(ctx, "session_1", scope); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle("session_1", scope.RunID), scope); err != nil {
 		t.Fatalf("BeginAuditRun after EndAuditRun() error = %v", err)
 	}
-	if err := runtime.EndAuditRun(ctx, "session_1", nil); err != nil {
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle("session_1", scope.RunID), nil); err != nil {
 		t.Fatalf("EndAuditRun after session reuse() error = %v", err)
+	}
+}
+
+func TestRuntimeRejectsConcurrencyAboveSharedLimit(t *testing.T) {
+	recorder := &recordingAudit{}
+	agentDeployment := agent.NewTestDeployment(t)
+	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
+	_, err := agent.NewRuntime(agent.Config{
+		Model:             "test-model",
+		ModelAPIKey:       "test-key",
+		AgentDeployment:   agentDeployment,
+		StructuredOutput:  "json_schema",
+		Provider:          "test-provider",
+		AuditRecorder:     recorder,
+		MaxConcurrentRuns: 1025,
+	})
+	var domainErr *domain.Error
+	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRuntimeInitFailed {
+		t.Fatalf("NewRuntime() error = %v, want %s", err, domain.CodeRuntimeInitFailed)
 	}
 }
 
@@ -142,10 +165,10 @@ func TestExternalAuditRunAllowsMultipleTasksInOneSession(t *testing.T) {
 			UserID:   "user_1",
 			Protocol: "a2a",
 		}
-		if err := runtime.BeginAuditRun(ctx, "context_1", scope); err != nil {
+		if err := runtime.BeginAuditRun(ctx, externalAuditHandle("context_1", scope.RunID), scope); err != nil {
 			t.Fatalf("BeginAuditRun(%s) error = %v", runID, err)
 		}
-		if err := runtime.EndAuditRun(ctx, "context_1", nil); err != nil {
+		if err := runtime.EndAuditRun(ctx, externalAuditHandle("context_1", scope.RunID), nil); err != nil {
 			t.Fatalf("EndAuditRun(%s) error = %v", runID, err)
 		}
 	}
@@ -177,13 +200,13 @@ func TestExternalAuditRunRejectsDuplicateRunID(t *testing.T) {
 		UserID:   "user_1",
 		Protocol: "a2a",
 	}
-	if err := runtime.BeginAuditRun(ctx, "context_1", scope); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle("context_1", scope.RunID), scope); err != nil {
 		t.Fatalf("BeginAuditRun() error = %v", err)
 	}
-	if err := runtime.EndAuditRun(ctx, "context_1", nil); err != nil {
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle("context_1", scope.RunID), nil); err != nil {
 		t.Fatalf("EndAuditRun() error = %v", err)
 	}
-	err := runtime.BeginAuditRun(ctx, "context_2", scope)
+	err := runtime.BeginAuditRun(ctx, externalAuditHandle("context_2", scope.RunID), scope)
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRunIDConflict {
 		t.Fatalf("second BeginAuditRun() error = %v, want %s", err, domain.CodeRunIDConflict)
@@ -204,10 +227,10 @@ func TestExternalAuditRunRecordsDuration(t *testing.T) {
 		UserID:   "user_1",
 		Protocol: "a2a",
 	}
-	if err := runtime.BeginAuditRun(ctx, "context_1", scope); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle("context_1", scope.RunID), scope); err != nil {
 		t.Fatalf("BeginAuditRun() error = %v", err)
 	}
-	if err := runtime.EndAuditRun(ctx, "context_1", nil); err != nil {
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle("context_1", scope.RunID), nil); err != nil {
 		t.Fatalf("EndAuditRun() error = %v", err)
 	}
 	completed := events.eventsOfType(audit.EventRunCompleted)
@@ -221,19 +244,19 @@ func TestExternalAuditRunRetriesTerminalAppendAndReleasesOnce(t *testing.T) {
 	runtime := newAuditRuntimeWith(t, recorder, 1)
 	ctx := context.Background()
 	scope := agent.RunAuditIdentity{RunID: "task_retry", ThreadID: "context_1", UserID: "user_1", Protocol: "a2a"}
-	if err := runtime.BeginAuditRun(ctx, "context_1", scope); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle("context_1", scope.RunID), scope); err != nil {
 		t.Fatalf("BeginAuditRun() error = %v", err)
 	}
 	// The first completion exhausts both append attempts and must not release
 	// the run scope or the single concurrency slot.
-	if err := runtime.EndAuditRun(ctx, "context_1", nil); err == nil {
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle("context_1", scope.RunID), nil); err == nil {
 		t.Fatal("EndAuditRun() unexpectedly succeeded despite terminal append failure")
 	}
 	if got := len(recorder.eventsOfType(audit.EventRunCompleted)); got != 0 {
 		t.Fatalf("completed events after failure = %d, want 0", got)
 	}
 	// The executor's cleanup callback retries the terminal append and succeeds.
-	if err := runtime.EndAuditRun(ctx, "context_1", nil); err != nil {
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle("context_1", scope.RunID), nil); err != nil {
 		t.Fatalf("retry EndAuditRun() error = %v", err)
 	}
 	if got := len(recorder.eventsOfType(audit.EventRunCompleted)); got != 1 {
@@ -242,10 +265,10 @@ func TestExternalAuditRunRetriesTerminalAppendAndReleasesOnce(t *testing.T) {
 	// The slot was released exactly once: a fresh single-slot run acquires it
 	// instead of observing CodeRuntimeBusy (release) or blocking (double release).
 	next := agent.RunAuditIdentity{RunID: "task_next", ThreadID: "context_2", UserID: "user_1", Protocol: "a2a"}
-	if err := runtime.BeginAuditRun(ctx, "context_2", next); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle("context_2", next.RunID), next); err != nil {
 		t.Fatalf("BeginAuditRun() after release error = %v", err)
 	}
-	if err := runtime.EndAuditRun(ctx, "context_2", nil); err != nil {
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle("context_2", next.RunID), nil); err != nil {
 		t.Fatalf("EndAuditRun() after release error = %v", err)
 	}
 }
@@ -264,7 +287,7 @@ func (e *existsAudit) RunExists(_ context.Context, _ domain.ID) (bool, error) {
 func TestExternalAuditRunRejectsDurableDuplicateRunID(t *testing.T) {
 	runtime := newAuditRuntimeWith(t, &existsAudit{exists: true}, 1)
 	scope := agent.RunAuditIdentity{RunID: "run_dup", ThreadID: "thread_1", UserID: "user_1", Protocol: "a2a"}
-	err := runtime.BeginAuditRun(context.Background(), "session_dup", scope)
+	err := runtime.BeginAuditRun(context.Background(), externalAuditHandle("session_dup", scope.RunID), scope)
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRunIDConflict {
 		t.Fatalf("BeginAuditRun() error = %v, want %s", err, domain.CodeRunIDConflict)
@@ -292,10 +315,10 @@ func TestEndAuditRunRecordsPausedAndCanceledAttempts(t *testing.T) {
 		Protocol: "a2a", TaskID: "task_pause", MessageID: "message_pause",
 	}
 	pausedSession := "context_1"
-	if err := runtime.BeginAuditRun(ctx, pausedSession, pausedScope); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle(pausedSession, pausedScope.RunID), pausedScope); err != nil {
 		t.Fatalf("BeginAuditRun(paused) error = %v", err)
 	}
-	if err := runtime.EndAuditRun(ctx, pausedSession, nil,
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle(pausedSession, pausedScope.RunID), nil,
 		agent.WithPausedAttempt(), agent.WithPreservedSession()); err != nil {
 		t.Fatalf("EndAuditRun(paused) error = %v", err)
 	}
@@ -312,10 +335,10 @@ func TestEndAuditRunRecordsPausedAndCanceledAttempts(t *testing.T) {
 		Protocol: "a2a", TaskID: "task_cancel", MessageID: "message_cancel",
 	}
 	canceledSession := "context_2"
-	if err := runtime.BeginAuditRun(ctx, canceledSession, canceledScope); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle(canceledSession, canceledScope.RunID), canceledScope); err != nil {
 		t.Fatalf("BeginAuditRun(canceled) error = %v", err)
 	}
-	if err := runtime.EndAuditRun(ctx, canceledSession, nil,
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle(canceledSession, canceledScope.RunID), nil,
 		agent.WithCanceledAttempt(), agent.WithPreservedSession()); err != nil {
 		t.Fatalf("EndAuditRun(canceled) error = %v", err)
 	}

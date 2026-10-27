@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"testing"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
-	"github.com/ml8s/liki-agent-runtime/internal/testagent"
+	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/testagent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -34,7 +34,7 @@ func TestStructuredMemoParsesOncePerEvent(t *testing.T) {
 	}}
 
 	for part := 0; part < 3; part++ {
-		output, applies, err := server.structuredOutput(event, entrypoint)
+		output, applies, err := server.structuredOutput("attempt", event, entrypoint)
 		if !applies || err != nil {
 			t.Fatalf("part %d structuredOutput() = applies=%v err=%v", part, applies, err)
 		}
@@ -65,11 +65,15 @@ func TestStructuredMemoParsesOncePerEvent(t *testing.T) {
 		}},
 	}
 	event2.Author = entrypoint.Name
-	if _, applies, err := server.structuredOutput(event2, entrypoint); !applies || err != nil {
+	if _, applies, err := server.structuredOutput("attempt", event2, entrypoint); !applies || err != nil {
 		t.Fatalf("second event structuredOutput() = applies=%v err=%v", applies, err)
 	}
 	if parseCount != 2 {
 		t.Fatalf("structured parses after new event = %d, want 2", parseCount)
+	}
+	server.structured.release("attempt")
+	if len(server.structured.attempts) != 0 {
+		t.Fatalf("attempt cache after release = %#v, want empty", server.structured.attempts)
 	}
 }
 
@@ -89,14 +93,14 @@ func TestStructuredMemoMemoizesParseErrors(t *testing.T) {
 		},
 	}}
 	for attempt := 0; attempt < 2; attempt++ {
-		if _, applies, err := server.structuredOutput(event, entrypoint); !applies || err == nil {
+		if _, applies, err := server.structuredOutput("attempt", event, entrypoint); !applies || err == nil {
 			t.Fatalf("attempt %d structuredOutput() = applies=%v err=%v, want parse error", attempt, applies, err)
 		}
 	}
 	if parseCount != 1 {
 		t.Fatalf("failed structured parses = %d, want 1", parseCount)
 	}
-	if _, applies, _ := server.structuredOutput(nil, entrypoint); applies {
+	if _, applies, _ := server.structuredOutput("attempt", nil, entrypoint); applies {
 		t.Fatal("nil event unexpectedly applied the structured branch")
 	}
 }
@@ -357,4 +361,51 @@ func structuredEntrypoint(t *testing.T) *deploymentpkg.ResolvedAgentDefinition {
 		t.Fatal(err)
 	}
 	return entrypoint
+}
+
+func TestStructuredMemoIsolatesAndReleasesAttempts(t *testing.T) {
+	entrypoint := structuredEntrypoint(t)
+	newEvent := func(answer string) *session.Event {
+		event := &session.Event{
+			LLMResponse: model.LLMResponse{
+				Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: answer}}},
+			},
+			Actions: session.EventActions{StateDelta: map[string]any{
+				execution.StructuredOutputStateKey(entrypoint.Name): map[string]any{"answer": answer},
+			}},
+		}
+		event.Author = entrypoint.Name
+		return event
+	}
+	parseCount := 0
+	server := &Server{structured: structuredMemo{
+		parse: func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (execution.OutputResult, error) {
+			parseCount++
+			return execution.ParseStructuredOutput(value, definition)
+		},
+	}}
+
+	for _, attemptID := range []string{"attempt-one", "attempt-two"} {
+		event := newEvent(attemptID)
+		for part := 0; part < 3; part++ {
+			if _, applies, err := server.structuredOutput(attemptID, event, entrypoint); !applies || err != nil {
+				t.Fatalf("%s part %d structuredOutput() = applies=%v err=%v", attemptID, part, applies, err)
+			}
+		}
+	}
+	if parseCount != 2 {
+		t.Fatalf("parse count for two attempts = %d, want 2", parseCount)
+	}
+
+	server.structured.release("attempt-one")
+	if _, exists := server.structured.attempts["attempt-one"]; exists {
+		t.Fatal("released attempt-one cache still exists")
+	}
+	if _, exists := server.structured.attempts["attempt-two"]; !exists {
+		t.Fatal("unrelated attempt-two cache was released")
+	}
+	server.structured.release("attempt-two")
+	if len(server.structured.attempts) != 0 {
+		t.Fatalf("attempt caches after release = %#v, want empty", server.structured.attempts)
+	}
 }

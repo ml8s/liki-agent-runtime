@@ -10,9 +10,7 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-export LIKI_ENV="${LIKI_ENV:-development}"
-export LIKI_LOG_LEVEL="${LIKI_LOG_LEVEL:-debug}"
-# Development-only skills root override: the deployment pins an absolute
-# container path, so the host run rebinds it to the same fixture.
+export AGENT_RUNTIME_ENV="${AGENT_RUNTIME_ENV:-development}"
+export AGENT_RUNTIME_LOG_LEVEL="${AGENT_RUNTIME_LOG_LEVEL:-debug}"
 
-exec go run ./cmd/liki-agent-runtime
+exec go run ./cmd/agent-runtime

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
-	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
+	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/platform/identity"
 )
 
 const (
@@ -129,10 +129,10 @@ func requestSource(remoteAddr string) string {
 func verifiedIdentity(r *http.Request) identity.Identity {
 	// The channel determines the trusted identity header (contract C4):
 	//   mTLS (edge forward_auth injection) → Remote-User;
-	//   plaintext (token-bearing relay caller) → X-Liki-User-ID.
+	//   plaintext (token-bearing relay caller) → X-Agent-User-ID.
 	mtls := mutualTLSVerified(r)
-	header := "X-Liki-User-ID"
-	tenantHeader := "X-Liki-Tenant-ID"
+	header := "X-Agent-User-ID"
+	tenantHeader := "X-Agent-Tenant-ID"
 	if mtls {
 		header = "Remote-User"
 		tenantHeader = "Remote-Tenant"

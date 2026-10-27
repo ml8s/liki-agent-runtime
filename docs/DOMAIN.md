@@ -1,7 +1,7 @@
 # Runtime Domain Model
 
-`liki-agent-runtime` is a generic multi-agent runtime. Prompts, skill workflow, tool
-semantics, domain schemas, and domain evaluation belong to the Liki
+`agent-runtime` is a generic multi-agent runtime. Prompts, skill workflow, tool
+semantics, domain schemas, and domain evaluation belong to the domain content
 skill/project.
 
 ## Core runtime concepts
@@ -17,7 +17,7 @@ skill/project.
 | LLMCall | One auditable model invocation and its lifecycle within a RunExecution |
 | Delegation | A parent Agent delegating a subtask to a sub-expert; a child lifecycle of RunExecution |
 | Audit event | An immutable domain fact containing lifecycle evidence |
-| ADK working session | The run-scoped ADK session (`run:<RunID>`); deleted at terminal state, never carries cross-run history |
+| ADK working session | AG-UI owns a run-scoped session (`run:<RunID>`), deleted at terminal state; A2A ContextID owns the durable ADK session |
 | Skills binding | The artifact-declared skills root plus the built-in skill tools (list/load/resource) |
 
 ## AgentDeployment invariants
@@ -82,7 +82,8 @@ own the append-only persistence invariants.
 1. Only allowlisted MCP tools can be exposed or invoked.
 2. Tool input/output are audited as canonical digests and sizes, never raw payload.
 3. Run, thread, and user identifiers are required; an active RunID is exclusive.
-4. ADK working sessions are run-scoped and removed at terminal execution.
+4. AG-UI working sessions are run-scoped and removed at terminal execution. A2A
+   attempt audit does not delete its ContextID-owned ADK session.
 5. Plain text is the default output mode.
 6. Structured output is optional and validated against the Agent's external
    JSON Schema.
@@ -113,7 +114,7 @@ own the append-only persistence invariants.
 
 ## Ownership boundary
 
-`liki-web` owns users, products, entitlements, quota, and durable conversations.
-The Liki skill/project owns domain behavior and MCP tool semantics.
-`liki-agent-runtime` owns generic execution, protocol adaptation, evidence, and
+Callers own users, products, entitlements, quota, and durable conversations.
+The domain content repository owns domain behavior and MCP tool semantics.
+`agent-runtime` owns generic execution, protocol adaptation, evidence, and
 operations.

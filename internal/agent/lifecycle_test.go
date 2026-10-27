@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 var lifecycleNow = time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)

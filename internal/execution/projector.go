@@ -1,7 +1,7 @@
 package execution
 
 import (
-	deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deployment "github.com/ml8s/agent-runtime/internal/deployment"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )

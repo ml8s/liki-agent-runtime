@@ -4,13 +4,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 )
 
 type runExecution struct {
 	mu                sync.Mutex
 	identity          execution.RunIdentity
 	provenance        execution.RunProvenance
+	sessionID         string
 	attemptKey        string
 	taskID            string
 	startedAt         time.Time

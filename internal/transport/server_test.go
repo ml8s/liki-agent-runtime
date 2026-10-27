@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
-	"github.com/ml8s/liki-agent-runtime/internal/observability"
-	"github.com/ml8s/liki-agent-runtime/internal/platform"
-	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
-	"github.com/ml8s/liki-agent-runtime/internal/transport"
+	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/observability"
+	"github.com/ml8s/agent-runtime/internal/platform"
+	"github.com/ml8s/agent-runtime/internal/platform/identity"
+	"github.com/ml8s/agent-runtime/internal/transport"
 )
 
 type healthy struct{}
@@ -81,7 +81,7 @@ func TestProtocolRequestsAreObserved(t *testing.T) {
 	})
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/.well-known/agent-card.json", nil))
 	request := httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(`{}`))
-	request.Header.Set("X-Liki-User-ID", "user_1")
+	request.Header.Set("X-Agent-User-ID", "user_1")
 	handler.ServeHTTP(httptest.NewRecorder(), request)
 	if len(metrics.requests) != 2 ||
 		metrics.requests[0] != "a2a/agent_card/200" ||
@@ -116,7 +116,7 @@ func TestAGUIRequiresVerifiedIdentity(t *testing.T) {
 	}
 
 	request := httptest.NewRequest(http.MethodPost, "/ag-ui", strings.NewReader(`{}`))
-	request.Header.Set("X-Liki-User-ID", "user_1")
+	request.Header.Set("X-Agent-User-ID", "user_1")
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusAccepted {
@@ -249,7 +249,7 @@ func TestDrainMakesReadinessUnavailableWithoutCancellingRequests(t *testing.T) {
 	}
 
 	request := httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(`{}`))
-	request.Header.Set("X-Liki-User-ID", "user_1")
+	request.Header.Set("X-Agent-User-ID", "user_1")
 	protocol := httptest.NewRecorder()
 	server.ServeHTTP(protocol, request)
 	if protocol.Code != http.StatusAccepted {
@@ -315,7 +315,7 @@ func TestAuthenticationRunsBeforeRequestBodyIsConsumed(t *testing.T) {
 func TestAGUIRejectsOversizedIdentityHeader(t *testing.T) {
 	handler := newServer(t, "")
 	request := httptest.NewRequest(http.MethodPost, "/ag-ui", strings.NewReader(`{}`))
-	request.Header.Set("X-Liki-User-ID", strings.Repeat("u", 129))
+	request.Header.Set("X-Agent-User-ID", strings.Repeat("u", 129))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {
@@ -324,7 +324,7 @@ func TestAGUIRejectsOversizedIdentityHeader(t *testing.T) {
 }
 
 func TestReadyzDoesNotLeakDependencyDetail(t *testing.T) {
-	unhealthy := &unhealthyChecker{name: "engine_mcp", detail: "dial tcp 10.0.0.1:18081: connection refused"}
+	unhealthy := &unhealthyChecker{name: "mcp_a", detail: "dial tcp 10.0.0.1:18081: connection refused"}
 	handler := mustNewServer(t, transport.Services{
 		AgentCard:    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
 		A2A:          http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
@@ -340,7 +340,7 @@ func TestReadyzDoesNotLeakDependencyDetail(t *testing.T) {
 	if strings.Contains(body, "dial tcp") || strings.Contains(body, "connection refused") {
 		t.Fatalf("readyz leaks internal detail: %s", body)
 	}
-	if !strings.Contains(body, "engine_mcp") {
+	if !strings.Contains(body, "mcp_a") {
 		t.Fatalf("readyz should mention dependency name: %s", body)
 	}
 }
@@ -509,7 +509,7 @@ func TestIdentityHeaderOnlyAcceptedOnAGUI(t *testing.T) {
 
 	// A2A must not trust the browser-identity header injected for AG-UI.
 	req := httptest.NewRequest(http.MethodPost, "/a2a", nil)
-	req.Header.Set("X-Liki-User-ID", "alice")
+	req.Header.Set("X-Agent-User-ID", "alice")
 	server.ServeHTTP(httptest.NewRecorder(), req)
 	if !a2aID.IsZero() {
 		t.Fatalf("a2a identity = %+v, want zero (shared-token caller must not spoof users)", a2aID)
@@ -517,7 +517,7 @@ func TestIdentityHeaderOnlyAcceptedOnAGUI(t *testing.T) {
 
 	// AG-UI adopts the verified identity from the header.
 	req2 := httptest.NewRequest(http.MethodPost, "/ag-ui", nil)
-	req2.Header.Set("X-Liki-User-ID", "alice")
+	req2.Header.Set("X-Agent-User-ID", "alice")
 	server.ServeHTTP(httptest.NewRecorder(), req2)
 	if aguiID.IsZero() || aguiID.UserID != "alice" || aguiID.MutualTLS {
 		t.Fatalf("ag-ui identity = %+v, want alice without the mutual-TLS mark", aguiID)
@@ -562,10 +562,10 @@ func TestPlainRequestsIgnoreRemoteUserAndLegacyHeaderOnMutualTLS(t *testing.T) {
 		t.Fatalf("plain Remote-User status = %d, want 401 (only mTLS may inject it)", response.Code)
 	}
 
-	// mTLS 通道不信任旧的中继头（X-Liki-User-ID 只属于带 token 的明文中继）。
+	// mTLS 通道不信任旧的中继头（X-Agent-User-ID 只属于带 token 的明文中继）。
 	legacy := httptest.NewRequest(http.MethodPost, "/ag-ui", strings.NewReader(`{}`))
 	legacy.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{{}}}
-	legacy.Header.Set("X-Liki-User-ID", "alice")
+	legacy.Header.Set("X-Agent-User-ID", "alice")
 	legacyResponse := httptest.NewRecorder()
 	server.ServeHTTP(legacyResponse, legacy)
 	if legacyResponse.Code != http.StatusUnauthorized {

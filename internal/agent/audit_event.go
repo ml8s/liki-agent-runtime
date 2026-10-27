@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 // scopedEvent seeds an audit event with the provenance fields that every

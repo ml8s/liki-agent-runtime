@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 func TestEventValidate(t *testing.T) {
@@ -40,7 +40,7 @@ func TestEventValidate(t *testing.T) {
 			mutate: func(e *Event) {
 				e.Type = EventToolCallCompleted
 				e.ToolCallID = ""
-				e.ToolName = "engine_tool_a"
+				e.ToolName = "tool_a"
 				e.Status = StatusSucceeded
 			},
 			wantCode: CodeToolEventCallIDRequired,
@@ -60,7 +60,7 @@ func TestEventValidate(t *testing.T) {
 			mutate: func(e *Event) {
 				e.Type = EventToolCallFailed
 				e.ToolCallID = "call_1"
-				e.ToolName = "engine_tool_a"
+				e.ToolName = "tool_a"
 				e.ErrorCode = ""
 				e.Status = StatusFailed
 			},

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -35,6 +35,7 @@ type Metrics struct {
 	pushConfigs        *prometheus.CounterVec
 	pushDeliveries     *prometheus.CounterVec
 	pushDelivery       *prometheus.HistogramVec
+	storageRecords     *prometheus.GaugeVec
 }
 
 // New builds a metrics registry with runtime and protocol collectors.
@@ -47,92 +48,96 @@ func New() *Metrics {
 	metrics := &Metrics{
 		registry: registry,
 		protocolRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "liki_agents_protocol_requests_total",
+			Name: "agent_runtime_protocol_requests_total",
 			Help: "Agent protocol requests by protocol, operation, and status.",
 		}, []string{"protocol", "operation", "status"}),
 		protocolLatency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "liki_agents_protocol_request_duration_seconds",
+			Name:    "agent_runtime_protocol_request_duration_seconds",
 			Help:    "Agent protocol request duration.",
 			Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300},
 		}, []string{"protocol", "operation"}),
 		activeStreams: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "liki_agents_protocol_active_streams",
+			Name: "agent_runtime_protocol_active_streams",
 			Help: "Currently active streaming protocol requests.",
 		}, []string{"protocol"}),
 		llmTokens: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "liki_agents_llm_tokens_total",
+			Name: "agent_runtime_llm_tokens_total",
 			Help: "LLM tokens by model and token type.",
 		}, []string{"model", "type"}),
 		llmCalls: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "liki_agents_llm_calls_total",
+			Name: "agent_runtime_llm_calls_total",
 			Help: "LLM calls by model and status.",
 		}, []string{"model", "status"}),
 		llmCallLatency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "liki_agents_llm_call_duration_seconds",
+			Name:    "agent_runtime_llm_call_duration_seconds",
 			Help:    "LLM call duration by model and status.",
 			Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300},
 		}, []string{"model", "status"}),
 		toolCalls: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "liki_agents_tool_calls_total",
+			Name: "agent_runtime_tool_calls_total",
 			Help: "MCP tool calls by agent, tool, and status.",
 		}, []string{"agent", "tool", "status"}),
 		toolLatency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "liki_agents_tool_duration_seconds",
+			Name:    "agent_runtime_tool_duration_seconds",
 			Help:    "MCP tool duration by agent and tool.",
 			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30},
 		}, []string{"agent", "tool"}),
 		delegations: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "liki_agents_delegations_total",
+			Name: "agent_runtime_delegations_total",
 			Help: "Agent delegations by caller, target, and status.",
 		}, []string{"caller", "target", "status"}),
 		delegationLatency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "liki_agents_delegation_duration_seconds",
+			Name:    "agent_runtime_delegation_duration_seconds",
 			Help:    "Agent delegation duration by caller and target.",
 			Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300},
 		}, []string{"caller", "target"}),
 		auditAppends: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "liki_agents_audit_appends_total",
+			Name: "agent_runtime_audit_appends_total",
 			Help: "Audit event appends by outcome.",
 		}, []string{"status"}),
 		auditAppendLatency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "liki_agents_audit_append_duration_seconds",
+			Name:    "agent_runtime_audit_append_duration_seconds",
 			Help:    "Audit event append duration by outcome.",
 			Buckets: []float64{0.0001, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
 		}, []string{"status"}),
 		mcpCatalogRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "liki_agents_mcp_catalog_requests_total",
+			Name: "agent_runtime_mcp_catalog_requests_total",
 			Help: "MCP tool catalog resolutions by server and outcome.",
 		}, []string{"server", "outcome"}),
 		auditBatchEvents: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "liki_agents_audit_batch_events",
+			Name:    "agent_runtime_audit_batch_events",
 			Help:    "Audit events sharing one grouped commit.",
 			Buckets: []float64{1, 2, 4, 8, 16, 32, 64},
 		}, nil),
 		auditQueueDepth: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "liki_agents_audit_queue_depth",
+			Name: "agent_runtime_audit_queue_depth",
 			Help: "Pending audit append requests.",
 		}, nil),
 		runRejections: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "liki_agents_run_rejections_total",
+			Name: "agent_runtime_run_rejections_total",
 			Help: "Runs rejected before execution by reason.",
 		}, []string{"reason"}),
 		pushConfigs: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "liki_agents_a2a_push_config_operations_total",
-			Help: "Standard A2A push callback configuration operations.",
+			Name: "agent_runtime_a2a_push_config_operations_total",
+			Help: "Standard A2A push notification config operations.",
 		}, []string{"operation", "status"}),
 		pushDeliveries: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "liki_agents_a2a_push_deliveries_total",
+			Name: "agent_runtime_a2a_push_deliveries_total",
 			Help: "Standard A2A push notification deliveries.",
 		}, []string{"status"}),
 		pushDelivery: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "liki_agents_a2a_push_delivery_duration_seconds",
+			Name:    "agent_runtime_a2a_push_delivery_duration_seconds",
 			Help:    "Standard A2A push notification delivery duration.",
 			Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30},
 		}, nil),
 		dependencyUp: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "liki_agents_dependency_up",
+			Name: "agent_runtime_dependency_up",
 			Help: "Whether a runtime dependency is ready.",
 		}, []string{"dependency"}),
+		storageRecords: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "agent_runtime_storage_records",
+			Help: "Approximate durable record count by database, record kind, and state.",
+		}, []string{"database", "kind", "state"}),
 	}
 	registry.MustRegister(
 		metrics.protocolRequests,
@@ -155,6 +160,7 @@ func New() *Metrics {
 		metrics.pushConfigs,
 		metrics.pushDeliveries,
 		metrics.pushDelivery,
+		metrics.storageRecords,
 	)
 	return metrics
 }
@@ -210,7 +216,7 @@ func (m *Metrics) ObserveRunRejection(reason string) {
 	m.runRejections.WithLabelValues(reason).Inc()
 }
 
-// ObservePushConfig records one standard A2A callback configuration operation.
+// ObservePushConfig records one standard A2A push notification config operation.
 func (m *Metrics) ObservePushConfig(operation, status string) {
 	m.pushConfigs.WithLabelValues(operation, status).Inc()
 }
@@ -250,4 +256,11 @@ func (m *Metrics) SetDependencyReady(name string, ready bool) {
 		value = 1
 	}
 	m.dependencyUp.WithLabelValues(name).Set(value)
+}
+
+// SetStorageRecords publishes a bounded storage-growth snapshot. Counts are
+// gathered outside request paths and state is empty for tables without a
+// meaningful lifecycle state.
+func (m *Metrics) SetStorageRecords(database, kind, state string, count int64) {
+	m.storageRecords.WithLabelValues(database, kind, state).Set(float64(count))
 }

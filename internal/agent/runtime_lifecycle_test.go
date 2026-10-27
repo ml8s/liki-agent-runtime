@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 func TestAcquireRunObservesRejectionReasons(t *testing.T) {

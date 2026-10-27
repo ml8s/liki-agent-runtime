@@ -17,19 +17,22 @@ import (
 const (
 	DefaultMCPTimeout        = 30 * time.Second
 	DefaultMaxConcurrentRuns = 32
-	DefaultRunTimeout        = 600 * time.Second
-	DefaultShutdownTimeout   = 30 * time.Second
-	DefaultLLMTimeout        = 120 * time.Second
-	DefaultLLMTemperature    = 0.2
-	DefaultPushTimeout       = 10 * time.Second
+	// MaxConcurrentRunsLimit is the process-wide safety bound shared by
+	// environment validation and direct Runtime constructor validation.
+	MaxConcurrentRunsLimit = 1024
+	DefaultRunTimeout      = 600 * time.Second
+	DefaultShutdownTimeout = 30 * time.Second
+	DefaultLLMTimeout      = 120 * time.Second
+	DefaultLLMTemperature  = 0.2
+	DefaultPushTimeout     = 10 * time.Second
 
-	// DefaultProtocolStateDBPath keeps A2A task and callback state out of the
+	// DefaultProtocolStateDBPath keeps A2A task and push-notification config state out of the
 	// append-only audit database.
-	DefaultProtocolStateDBPath = "./data/liki-agent-runtime-protocol-state.db"
+	DefaultProtocolStateDBPath = "./data/agent-runtime-protocol-state.db"
 
 	// DefaultADKSessionDBPath persists official ADK session state separately
 	// from append-only audit evidence.
-	DefaultADKSessionDBPath = "./data/liki-agent-runtime-adk-sessions.db"
+	DefaultADKSessionDBPath = "./data/agent-runtime-adk-sessions.db"
 )
 
 // DefaultAddr is the default HTTP listen address. The server and the
@@ -53,8 +56,6 @@ type Config struct {
 	TLSClientCAFile             string
 	PublicURL                   string
 	InternalToken               string
-	CallbackURL                 string
-	CallbackSecret              string
 	AuditDBPath                 string
 	ProtocolStateDBPath         string
 	ADKSessionDBPath            string
@@ -75,6 +76,7 @@ type Config struct {
 	LogFormat                   string
 	LogLevel                    string
 	A2ATenant                   string
+	A2APrincipal                string
 	A2APushEnabled              bool
 	A2APushTimeout              time.Duration
 	A2APushAllowPrivateNetworks bool
@@ -98,66 +100,65 @@ const (
 // Load reads configuration from the environment and validates it.
 func Load() (Config, error) {
 	cfg := Config{
-		Env:                 getEnv("LIKI_ENV", "development"),
-		Topology:            Topology(strings.ToLower(strings.TrimSpace(getEnv("LIKI_AGENT_RUNTIME_TOPOLOGY", string(TopologySingle))))),
-		ProtocolAddr:        getEnv("LIKI_AGENT_RUNTIME_PROTOCOL_ADDR", DefaultAddr),
-		OpsAddr:             getEnv("LIKI_AGENT_RUNTIME_OPS_ADDR", DefaultOpsAddr),
-		TLSAddr:             getEnv("LIKI_AGENT_RUNTIME_TLS_ADDR", ""),
-		TLSCertFile:         getEnv("LIKI_AGENT_RUNTIME_TLS_CERT", ""),
-		TLSKeyFile:          getEnv("LIKI_AGENT_RUNTIME_TLS_KEY", ""),
-		TLSClientCAFile:     getEnv("LIKI_AGENT_RUNTIME_TLS_CLIENT_CA", ""),
-		PublicURL:           getEnv("LIKI_AGENT_RUNTIME_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
-		InternalToken:       getEnv("LIKI_AGENT_RUNTIME_INTERNAL_TOKEN", ""),
-		CallbackURL:         getEnv("LIKI_AGENT_RUNTIME_CALLBACK_URL", ""),
-		CallbackSecret:      getEnv("LIKI_AGENT_RUNTIME_CALLBACK_SECRET", ""),
-		AuditDBPath:         getEnv("LIKI_AGENT_RUNTIME_AUDIT_DB_PATH", "./data/liki-agent-runtime-audit.db"),
-		ProtocolStateDBPath: getEnv("LIKI_AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH", DefaultProtocolStateDBPath),
-		ADKSessionDBPath:    getEnv("LIKI_AGENT_RUNTIME_ADK_SESSION_DB_PATH", DefaultADKSessionDBPath),
-		A2ATenant:           getEnv("LIKI_AGENT_RUNTIME_A2A_TENANT", ""),
-		DeploymentFile:      getEnv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", ""),
-		LLMBaseURL:          getEnv("LIKI_AGENT_RUNTIME_LLM_BASE_URL", ""),
-		LLMAPIKey:           getEnv("LIKI_AGENT_RUNTIME_LLM_API_KEY", ""),
-		LLMModel:            getEnv("LIKI_AGENT_RUNTIME_LLM_MODEL", ""),
-		LLMProvider:         getEnv("LIKI_AGENT_RUNTIME_LLM_PROVIDER", ""),
-		LLMStructuredOutput: getEnv("LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", ""),
-		LogFormat:           getEnv("LIKI_LOG_FORMAT", "json"),
-		LogLevel:            getEnv("LIKI_LOG_LEVEL", "info"),
+		Env:                 getEnv("AGENT_RUNTIME_ENV", "development"),
+		Topology:            Topology(strings.ToLower(strings.TrimSpace(getEnv("AGENT_RUNTIME_TOPOLOGY", string(TopologySingle))))),
+		ProtocolAddr:        getEnv("AGENT_RUNTIME_PROTOCOL_ADDR", DefaultAddr),
+		OpsAddr:             getEnv("AGENT_RUNTIME_OPS_ADDR", DefaultOpsAddr),
+		TLSAddr:             getEnv("AGENT_RUNTIME_TLS_ADDR", ""),
+		TLSCertFile:         getEnv("AGENT_RUNTIME_TLS_CERT", ""),
+		TLSKeyFile:          getEnv("AGENT_RUNTIME_TLS_KEY", ""),
+		TLSClientCAFile:     getEnv("AGENT_RUNTIME_TLS_CLIENT_CA", ""),
+		PublicURL:           getEnv("AGENT_RUNTIME_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
+		InternalToken:       getEnv("AGENT_RUNTIME_INTERNAL_TOKEN", ""),
+		AuditDBPath:         getEnv("AGENT_RUNTIME_AUDIT_DB_PATH", "./data/agent-runtime-audit.db"),
+		ProtocolStateDBPath: getEnv("AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH", DefaultProtocolStateDBPath),
+		ADKSessionDBPath:    getEnv("AGENT_RUNTIME_ADK_SESSION_DB_PATH", DefaultADKSessionDBPath),
+		A2ATenant:           getEnv("AGENT_RUNTIME_A2A_TENANT", ""),
+		A2APrincipal:        getEnv("AGENT_RUNTIME_A2A_PRINCIPAL", "agent-runtime"),
+		DeploymentFile:      getEnv("AGENT_RUNTIME_DEPLOYMENT_FILE", ""),
+		LLMBaseURL:          getEnv("AGENT_RUNTIME_LLM_BASE_URL", ""),
+		LLMAPIKey:           getEnv("AGENT_RUNTIME_LLM_API_KEY", ""),
+		LLMModel:            getEnv("AGENT_RUNTIME_LLM_MODEL", ""),
+		LLMProvider:         getEnv("AGENT_RUNTIME_LLM_PROVIDER", ""),
+		LLMStructuredOutput: getEnv("AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", ""),
+		LogFormat:           getEnv("AGENT_RUNTIME_LOG_FORMAT", "json"),
+		LogLevel:            getEnv("AGENT_RUNTIME_LOG_LEVEL", "info"),
 	}
 	if cfg.LLMStructuredOutput == "none" {
 		cfg.LLMStructuredOutput = ""
 	}
 	var err error
-	if cfg.MCPTimeout, err = getDuration("LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS", DefaultMCPTimeout); err != nil {
+	if cfg.MCPTimeout, err = getDuration("AGENT_RUNTIME_MCP_TIMEOUT_SECONDS", DefaultMCPTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.MCPHealthTimeout, err = getOptionalDuration("LIKI_AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS"); err != nil {
+	if cfg.MCPHealthTimeout, err = getOptionalDuration("AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS"); err != nil {
 		return Config{}, err
 	}
-	if cfg.A2APushEnabled, err = getBool("LIKI_AGENT_RUNTIME_A2A_PUSH_ENABLED", false); err != nil {
+	if cfg.A2APushEnabled, err = getBool("AGENT_RUNTIME_A2A_PUSH_ENABLED", false); err != nil {
 		return Config{}, err
 	}
-	if cfg.A2APushTimeout, err = getDuration("LIKI_AGENT_RUNTIME_A2A_PUSH_TIMEOUT_SECONDS", DefaultPushTimeout); err != nil {
+	if cfg.A2APushTimeout, err = getDuration("AGENT_RUNTIME_A2A_PUSH_TIMEOUT_SECONDS", DefaultPushTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.A2APushAllowPrivateNetworks, err = getBool("LIKI_AGENT_RUNTIME_A2A_PUSH_ALLOW_PRIVATE_NETWORKS", false); err != nil {
+	if cfg.A2APushAllowPrivateNetworks, err = getBool("AGENT_RUNTIME_A2A_PUSH_ALLOW_PRIVATE_NETWORKS", false); err != nil {
 		return Config{}, err
 	}
-	if cfg.MaxConcurrentRuns, err = getInt("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS", DefaultMaxConcurrentRuns); err != nil {
+	if cfg.MaxConcurrentRuns, err = getInt("AGENT_RUNTIME_MAX_CONCURRENT_RUNS", DefaultMaxConcurrentRuns); err != nil {
 		return Config{}, err
 	}
-	if cfg.RunTimeout, err = getDuration("LIKI_AGENT_RUNTIME_RUN_TIMEOUT_SECONDS", DefaultRunTimeout); err != nil {
+	if cfg.RunTimeout, err = getDuration("AGENT_RUNTIME_RUN_TIMEOUT_SECONDS", DefaultRunTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.ShutdownTimeout, err = getDuration("LIKI_AGENT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS", DefaultShutdownTimeout); err != nil {
+	if cfg.ShutdownTimeout, err = getDuration("AGENT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS", DefaultShutdownTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMTimeout, err = getDuration("LIKI_AGENT_RUNTIME_LLM_TIMEOUT_SECONDS", DefaultLLMTimeout); err != nil {
+	if cfg.LLMTimeout, err = getDuration("AGENT_RUNTIME_LLM_TIMEOUT_SECONDS", DefaultLLMTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMMaxOutputTokens, err = getOptionalPositiveInt("LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS"); err != nil {
+	if cfg.LLMMaxOutputTokens, err = getOptionalPositiveInt("AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS"); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMTemperature, err = getFloat("LIKI_AGENT_RUNTIME_LLM_TEMPERATURE", DefaultLLMTemperature); err != nil {
+	if cfg.LLMTemperature, err = getFloat("AGENT_RUNTIME_LLM_TEMPERATURE", DefaultLLMTemperature); err != nil {
 		return Config{}, err
 	}
 	return validate(cfg)
@@ -167,137 +168,124 @@ func validate(cfg Config) (Config, error) {
 	switch cfg.Env {
 	case "development", "production":
 	default:
-		return Config{}, fmt.Errorf("LIKI_ENV is unsupported: %q (expected development or production)", cfg.Env)
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_ENV is unsupported: %q (expected development or production)", cfg.Env)
 	}
 	isDevelopment := cfg.Env == "development"
 
 	if !isDevelopment && cfg.InternalToken == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_INTERNAL_TOKEN is required outside development")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_INTERNAL_TOKEN is required outside development")
 	}
 	if cfg.TLSAddr != "" {
 		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.TLSClientCAFile == "" {
-			return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_TLS_CERT, LIKI_AGENT_RUNTIME_TLS_KEY and LIKI_AGENT_RUNTIME_TLS_CLIENT_CA are required when LIKI_AGENT_RUNTIME_TLS_ADDR is set")
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_TLS_CERT, AGENT_RUNTIME_TLS_KEY and AGENT_RUNTIME_TLS_CLIENT_CA are required when AGENT_RUNTIME_TLS_ADDR is set")
 		}
 	} else if cfg.TLSCertFile != "" || cfg.TLSKeyFile != "" || cfg.TLSClientCAFile != "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_TLS_ADDR is required when TLS certificate files are configured")
-	}
-	if cfg.CallbackSecret != "" && cfg.CallbackURL == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_CALLBACK_URL is required when LIKI_AGENT_RUNTIME_CALLBACK_SECRET is set")
-	}
-	if cfg.CallbackURL != "" && cfg.CallbackSecret == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_CALLBACK_SECRET is required when LIKI_AGENT_RUNTIME_CALLBACK_URL is set")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_TLS_ADDR is required when TLS certificate files are configured")
 	}
 	if cfg.OpsAddr == cfg.ProtocolAddr || (cfg.TLSAddr != "" && (cfg.TLSAddr == cfg.ProtocolAddr || cfg.TLSAddr == cfg.OpsAddr)) {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PROTOCOL_ADDR, LIKI_AGENT_RUNTIME_OPS_ADDR and LIKI_AGENT_RUNTIME_TLS_ADDR must be distinct listen addresses")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_PROTOCOL_ADDR, AGENT_RUNTIME_OPS_ADDR and AGENT_RUNTIME_TLS_ADDR must be distinct listen addresses")
 	}
 	if !isDevelopment && cfg.LLMAPIKey == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_API_KEY is required outside development")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_API_KEY is required outside development")
 	}
 	if cfg.LLMBaseURL == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_BASE_URL is required")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_BASE_URL is required")
 	}
 	if cfg.LLMModel == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_MODEL is required")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_MODEL is required")
 	}
 	if cfg.LLMProvider == "" {
 		// The provider vocabulary is open: the value is the audit provenance
 		// label and the structured-output mode hint, not a protocol switch.
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_PROVIDER is required")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_PROVIDER is required")
 	}
 	if cfg.DeploymentFile == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE is required")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_DEPLOYMENT_FILE is required")
 	}
 	if cfg.ProtocolStateDBPath == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH is required")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH is required")
 	}
 	if cfg.ADKSessionDBPath == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_ADK_SESSION_DB_PATH is required")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_ADK_SESSION_DB_PATH is required")
+	}
+	if cfg.A2APrincipal == "" {
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_A2A_PRINCIPAL is required")
 	}
 	switch cfg.Topology {
 	case TopologySingle:
 	case TopologyMulti:
 		return Config{}, fmt.Errorf(
-			"LIKI_AGENT_RUNTIME_TOPOLOGY=multi is not supported yet; it requires shared ADK session storage, a database-backed A2A task store, transactional audit/run ownership, deployment digest pinning, and explicit task routing",
+			"AGENT_RUNTIME_TOPOLOGY=multi is not supported yet; it requires shared ADK session storage, a database-backed A2A task store, transactional audit/run ownership, deployment digest pinning, and explicit task routing",
 		)
 	case "":
 		cfg.Topology = TopologySingle
 	default:
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_TOPOLOGY is unsupported: %q", cfg.Topology)
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_TOPOLOGY is unsupported: %q", cfg.Topology)
 	}
 	switch strings.ToLower(cfg.LogLevel) {
 	case "debug", "info", "warn", "error":
 	default:
-		return Config{}, fmt.Errorf("LIKI_LOG_LEVEL is unsupported: %q (expected debug, info, warn, or error)", cfg.LogLevel)
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LOG_LEVEL is unsupported: %q (expected debug, info, warn, or error)", cfg.LogLevel)
 	}
 	switch strings.ToLower(cfg.LogFormat) {
 	case "json", "text":
 	default:
-		return Config{}, fmt.Errorf("LIKI_LOG_FORMAT is unsupported: %q (expected json or text)", cfg.LogFormat)
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LOG_FORMAT is unsupported: %q (expected json or text)", cfg.LogFormat)
 	}
 	switch cfg.LLMStructuredOutput {
 	case "", "none", "json_schema", "json_object":
 	default:
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT is unsupported: %q", cfg.LLMStructuredOutput)
-	}
-	switch strings.ToLower(cfg.LogLevel) {
-	case "debug", "info", "warn", "error":
-	default:
-		return Config{}, fmt.Errorf("LIKI_LOG_LEVEL is unsupported: %q (expected debug, info, warn, or error)", cfg.LogLevel)
-	}
-	switch strings.ToLower(cfg.LogFormat) {
-	case "json", "text":
-	default:
-		return Config{}, fmt.Errorf("LIKI_LOG_FORMAT is unsupported: %q (expected json or text)", cfg.LogFormat)
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT is unsupported: %q", cfg.LLMStructuredOutput)
 	}
 	if cfg.RunTimeout <= 0 {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_RUN_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_RUN_TIMEOUT_SECONDS must be greater than zero")
 	}
 	if cfg.MCPTimeout <= 0 {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_MCP_TIMEOUT_SECONDS must be greater than zero")
 	}
 	if cfg.MaxConcurrentRuns <= 0 {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS must be greater than zero")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_MAX_CONCURRENT_RUNS must be greater than zero")
 	}
-	if cfg.MaxConcurrentRuns > 1024 {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS must not exceed 1024")
+	if cfg.MaxConcurrentRuns > MaxConcurrentRunsLimit {
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_MAX_CONCURRENT_RUNS must not exceed %d", MaxConcurrentRunsLimit)
 	}
 	if cfg.LLMTimeout <= 0 {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_TIMEOUT_SECONDS must be greater than zero")
 	}
 	if cfg.LLMTemperature < 0 || cfg.LLMTemperature > 2 ||
 		math.IsNaN(cfg.LLMTemperature) || math.IsInf(cfg.LLMTemperature, 0) {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_TEMPERATURE must be between 0 and 2")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_TEMPERATURE must be between 0 and 2")
 	}
 	if _, err := url.Parse(cfg.PublicURL); err != nil {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PUBLIC_URL is invalid: %w", err)
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_PUBLIC_URL is invalid: %w", err)
 	}
 	if cfg.ShutdownTimeout <= 0 {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS must be greater than zero")
 	}
 	publicURL, err := url.Parse(cfg.PublicURL)
 	if err != nil || publicURL.Scheme != "http" && publicURL.Scheme != "https" || publicURL.Host == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PUBLIC_URL must be an absolute HTTP(S) URL")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_PUBLIC_URL must be an absolute HTTP(S) URL")
 	}
 	if publicURL.User != nil {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PUBLIC_URL must not contain embedded credentials")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_PUBLIC_URL must not contain embedded credentials")
 	}
 	if !isDevelopment {
 		if host := publicURL.Hostname(); host == "localhost" || host == "127.0.0.1" || host == "::1" {
 			return Config{}, fmt.Errorf(
-				"LIKI_AGENT_RUNTIME_PUBLIC_URL must be a deployment-reachable address outside development, got loopback %q",
+				"AGENT_RUNTIME_PUBLIC_URL must be a deployment-reachable address outside development, got loopback %q",
 				host,
 			)
 		}
 	}
 	llmURL, err := url.Parse(cfg.LLMBaseURL)
 	if err != nil || llmURL.Scheme != "http" && llmURL.Scheme != "https" || llmURL.Host == "" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_BASE_URL must be an absolute HTTP(S) URL")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_BASE_URL must be an absolute HTTP(S) URL")
 	}
 	if llmURL.User != nil {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_BASE_URL must not contain embedded credentials")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_BASE_URL must not contain embedded credentials")
 	}
 	if !isDevelopment && llmURL.Scheme != "https" {
-		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_LLM_BASE_URL must use HTTPS outside development")
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_BASE_URL must use HTTPS outside development")
 	}
 	return cfg, nil
 }

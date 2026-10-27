@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
+	"github.com/ml8s/agent-runtime/internal/platform/identity"
 )
 
 func TestA2AServiceIdentityPropagation(t *testing.T) {

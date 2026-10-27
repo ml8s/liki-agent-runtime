@@ -16,7 +16,7 @@ import (
 	// Blank import registers the pure-Go SQLite database/sql driver used only
 	// through database/sql in this adapter.
 	_ "github.com/glebarez/sqlite"
-	"github.com/ml8s/liki-agent-runtime/internal/platform"
+	"github.com/ml8s/agent-runtime/internal/platform"
 	"github.com/pressly/goose/v3"
 )
 

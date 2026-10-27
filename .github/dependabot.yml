@@ -1,5 +1,5 @@
-# Follow the official latest: Dependabot opens one grouped weekly PR when a
-# GitHub action ships a new version (SHA pins are bumped in the same PR).
+# Weekly dependency refreshes are grouped by ecosystem so one review covers a
+# compatible update set instead of a noisy stream of single-dependency PRs.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -8,5 +8,29 @@ updates:
       interval: weekly
     groups:
       github-actions:
+        patterns:
+          - "*"
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-modules:
+        patterns:
+          - "*"
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-development:
+        patterns:
+          - "*"
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      container-images:
         patterns:
           - "*"

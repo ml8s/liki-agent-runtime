@@ -1,4 +1,4 @@
-package agent
+package sqlite
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 
 func TestSQLiteSessionServicePersistsAcrossReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.db")
-	service, err := OpenSQLiteSessionService(path)
+	service, err := Open(path)
 	if err != nil {
 		t.Fatalf("OpenSQLiteSessionService() error = %v", err)
 	}
 	created, err := service.SessionService().Create(context.Background(), &session.CreateRequest{
-		AppName:   "liki-agent-runtime",
+		AppName:   "agent-runtime",
 		UserID:    "user-1",
 		SessionID: "context-1",
 		State:     map[string]any{"attempt": "attempt-1"},
@@ -28,13 +28,13 @@ func TestSQLiteSessionServicePersistsAcrossReopen(t *testing.T) {
 		t.Fatalf("Close() error = %v", err)
 	}
 
-	reopened, err := OpenSQLiteSessionService(path)
+	reopened, err := Open(path)
 	if err != nil {
 		t.Fatalf("reopen OpenSQLiteSessionService() error = %v", err)
 	}
 	t.Cleanup(func() { _ = reopened.Close() })
 	got, err := reopened.SessionService().Get(context.Background(), &session.GetRequest{
-		AppName:   "liki-agent-runtime",
+		AppName:   "agent-runtime",
 		UserID:    "user-1",
 		SessionID: "context-1",
 	})
@@ -53,7 +53,7 @@ func TestSQLiteSessionServiceOfficialSuite(t *testing.T) {
 	sessiontestsuite.RunServiceTests(t, sessiontestsuite.SuiteOptions{
 		SupportsUserProvidedSessionID: true,
 	}, func(t *testing.T) session.Service {
-		service, err := OpenSQLiteSessionService(filepath.Join(t.TempDir(), "sessions.db"))
+		service, err := Open(filepath.Join(t.TempDir(), "sessions.db"))
 		if err != nil {
 			t.Fatalf("OpenSQLiteSessionService() error = %v", err)
 		}

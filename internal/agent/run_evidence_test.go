@@ -7,9 +7,9 @@ import (
 	"sync"
 	"testing"
 
-	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/audit"
 )
 
 // scriptedAuditEvents 按事件类型注入记录失败，其余照常记录。
@@ -91,7 +91,7 @@ func TestCloseRunEvidenceEncodesCompensationFailureAndPersistsTerminal(t *testin
 	scope := RunAuditIdentity{RunID: "run_e1", ThreadID: "thread_e1", UserID: "user_e1"}
 	sessionID := runSessionID(scope.RunID)
 	ctx := context.Background()
-	if err := runtime.BeginAuditRun(ctx, sessionID, scope); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle(sessionID, scope.RunID), scope); err != nil {
 		t.Fatalf("BeginAuditRun() error = %v", err)
 	}
 	// 制造未决委派（started 已持久化，补偿在终态时发生）。
@@ -104,7 +104,7 @@ func TestCloseRunEvidenceEncodesCompensationFailureAndPersistsTerminal(t *testin
 	}
 
 	// 契约钉子：补偿失败已编码进终态事件并成功持久化 → 返回 nil。
-	if err := runtime.EndAuditRun(ctx, sessionID, nil); err != nil {
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle(sessionID, scope.RunID), nil); err != nil {
 		t.Fatalf("EndAuditRun() error = %v；补偿残差应编码进终态事件而非返回", err)
 	}
 

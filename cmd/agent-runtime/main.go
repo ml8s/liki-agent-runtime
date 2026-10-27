@@ -1,6 +1,6 @@
 package main
 
-import "github.com/ml8s/liki-agent-runtime/internal/deployment"
+import "github.com/ml8s/agent-runtime/internal/deployment"
 
 import (
 	"context"
@@ -11,78 +11,46 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	a2apush "github.com/a2aproject/a2a-go/v2/a2asrv/push"
-	agentruntime "github.com/ml8s/liki-agent-runtime/internal/agent"
-	"github.com/ml8s/liki-agent-runtime/internal/audit/sqlite"
-	"github.com/ml8s/liki-agent-runtime/internal/notify"
-	"github.com/ml8s/liki-agent-runtime/internal/observability/otel"
-	"github.com/ml8s/liki-agent-runtime/internal/observability/prometheus"
-	"github.com/ml8s/liki-agent-runtime/internal/platform"
-	"github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo"
-	"github.com/ml8s/liki-agent-runtime/internal/platform/config"
-	"github.com/ml8s/liki-agent-runtime/internal/platform/tlsconf"
-	a2aadapter "github.com/ml8s/liki-agent-runtime/internal/protocol/a2a"
-	aguiadapter "github.com/ml8s/liki-agent-runtime/internal/protocol/agui"
-	protocolstate "github.com/ml8s/liki-agent-runtime/internal/protocolstate/sqlite"
-	"github.com/ml8s/liki-agent-runtime/internal/transport"
+	adksqlite "github.com/ml8s/agent-runtime/internal/adksession/sqlite"
+	agentruntime "github.com/ml8s/agent-runtime/internal/agent"
+	"github.com/ml8s/agent-runtime/internal/audit/sqlite"
+	"github.com/ml8s/agent-runtime/internal/observability/otel"
+	"github.com/ml8s/agent-runtime/internal/observability/prometheus"
+	"github.com/ml8s/agent-runtime/internal/platform"
+	"github.com/ml8s/agent-runtime/internal/platform/buildinfo"
+	"github.com/ml8s/agent-runtime/internal/platform/config"
+	"github.com/ml8s/agent-runtime/internal/platform/tlsconf"
+	a2aadapter "github.com/ml8s/agent-runtime/internal/protocol/a2a"
+	aguiadapter "github.com/ml8s/agent-runtime/internal/protocol/agui"
+	protocolstate "github.com/ml8s/agent-runtime/internal/protocolstate/sqlite"
+	"github.com/ml8s/agent-runtime/internal/transport"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "validate" {
 		if err := validate(os.Args[2:]); err != nil {
-			slog.Error("liki-agent-runtime deployment validation failed", "error", err)
+			slog.Error("agent-runtime deployment validation failed", "error", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		if err := healthcheck(); err != nil {
-			slog.Error("liki-agent-runtime healthcheck failed", "error", err)
+			slog.Error("agent-runtime healthcheck failed", "error", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if err := run(); err != nil {
-		slog.Error("liki-agent-runtime exited", "error", err)
+		slog.Error("agent-runtime exited", "error", err)
 		os.Exit(1)
 	}
-}
-
-// newRunCallbackNotifier 装配运行完成回调通知器：secret 为空即禁用
-// （URL 已配置时输出 run_callback_disabled 告警——静默禁用在此显式化），
-// 返回 nil 通知器与 nil 关闭函数；装配失败返回错误。
-func newRunCallbackNotifier(cfg config.Config, logger *slog.Logger, profile string) (*notify.Notifier, func(), error) {
-	if cfg.CallbackSecret == "" {
-		if cfg.CallbackURL != "" {
-			logger.Warn("run_callback_disabled",
-				"reason", "LIKI_AGENT_RUNTIME_CALLBACK_URL is set but LIKI_AGENT_RUNTIME_CALLBACK_SECRET is empty; run-completion callbacks stay disabled")
-		}
-		return nil, nil, nil
-	}
-	notifier, err := notify.New(notify.Config{
-		URL:     cfg.CallbackURL,
-		Secret:  cfg.CallbackSecret,
-		Source:  "spiffe://liki/runtime/" + profile,
-		Profile: profile,
-		Logger:  logger,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("init run callback notifier: %w", err)
-	}
-	drain := func(shutdownTimeout time.Duration) func() {
-		return func() {
-			closeCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-			defer cancel()
-			if err := notifier.Close(closeCtx); err != nil {
-				logger.Warn("run callback drain incomplete", "error", err)
-			}
-		}
-	}
-	return notifier, drain(cfg.ShutdownTimeout), nil
 }
 
 func run() (err error) {
@@ -95,7 +63,7 @@ func run() (err error) {
 
 	tracerProvider, err := otel.NewTracerProvider(
 		context.Background(),
-		"liki-agent-runtime",
+		"agent-runtime",
 		buildinfo.Version,
 		cfg.Env,
 	)
@@ -103,8 +71,15 @@ func run() (err error) {
 		return err
 	}
 	otel.InstallGlobalPropagator()
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		if shutdownErr := tracerProvider.Shutdown(shutdownCtx); shutdownErr != nil {
+			logger.Warn("otel_tracer_provider_shutdown_failed", "error", shutdownErr)
+		}
+	}()
 
-	sessionDB, err := agentruntime.OpenSQLiteSessionService(cfg.ADKSessionDBPath)
+	sessionDB, err := adksqlite.Open(cfg.ADKSessionDBPath)
 	if err != nil {
 		return err
 	}
@@ -127,6 +102,11 @@ func run() (err error) {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if closeErr := protocolDB.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close protocol state database: %w", closeErr)
+		}
+	}()
 	recovered, err := protocolDB.RecoverAbandonedTasks(context.Background(), time.Now().UTC())
 	if err != nil {
 		return err
@@ -134,11 +114,6 @@ func run() (err error) {
 	if recovered > 0 {
 		logger.Warn("a2a_abandoned_tasks_recovered", "count", recovered)
 	}
-	defer func() {
-		if closeErr := protocolDB.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("close protocol state database: %w", closeErr)
-		}
-	}()
 	metricsCollector := prometheus.New()
 	auditRecorder, err := sqlite.NewAuditRecorder(store, sqlite.WithRecorderMetrics(metricsCollector))
 	if err != nil {
@@ -155,7 +130,7 @@ func run() (err error) {
 		return err
 	}
 	runtime, err := agentruntime.NewRuntime(agentruntime.Config{
-		AppName:           "liki-agent-runtime",
+		AppName:           "agent-runtime",
 		Model:             cfg.LLMModel,
 		ModelBaseURL:      cfg.LLMBaseURL,
 		ModelAPIKey:       cfg.LLMAPIKey,
@@ -186,7 +161,7 @@ func run() (err error) {
 		RunTimeout:       cfg.RunTimeout,
 		Logger:           logger,
 		Metrics:          metricsCollector,
-		ServicePrincipal: "liki-a2a",
+		ServicePrincipal: cfg.A2APrincipal,
 		Security: a2aadapter.SecurityConfig{
 			Bearer:    cfg.InternalToken != "",
 			MutualTLS: cfg.TLSAddr != "",
@@ -206,18 +181,7 @@ func run() (err error) {
 	if err != nil {
 		return err
 	}
-	// 运行完成回调（direct-connect 控制面）：仅当配置了 webhook secret 时启用。
-	completionNotifier, closeCompletionNotifier, err := newRunCallbackNotifier(cfg, logger, deployment.Metadata.Name)
-	if err != nil {
-		return err
-	}
-	if completionNotifier != nil {
-		defer closeCompletionNotifier()
-	}
 	aguiConfig := aguiadapter.Config{RunTimeout: cfg.RunTimeout, Metrics: metricsCollector}
-	if completionNotifier != nil {
-		aguiConfig.Notifier = completionNotifier
-	}
 	aguiHandler, err := aguiadapter.New(runtime, aguiConfig)
 	if err != nil {
 		return err
@@ -233,7 +197,7 @@ func run() (err error) {
 		Dependencies:  metricsCollector,
 		MetricsTarget: metricsCollector.Handler(),
 		InternalToken: cfg.InternalToken,
-		A2APrincipal:  "liki-a2a",
+		A2APrincipal:  cfg.A2APrincipal,
 		A2ATenant:     cfg.A2ATenant,
 		Logger:        logger,
 	})
@@ -241,7 +205,7 @@ func run() (err error) {
 		return err
 	}
 
-	httpHandler := otelhttp.NewHandler(protocolServer, "liki-agent-runtime",
+	httpHandler := otelhttp.NewHandler(protocolServer, "agent-runtime",
 		otelhttp.WithTracerProvider(tracerProvider.Provider()),
 		otelhttp.WithPropagators(otel.Propagator()),
 	)
@@ -258,16 +222,10 @@ func run() (err error) {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-		defer cancel()
-		if err := tracerProvider.Shutdown(shutdownCtx); err != nil {
-			logger.Warn("otel_tracer_provider_shutdown_failed", "error", err)
-		}
-	}()
+	go collectStorageMetrics(ctx, metricsCollector, store, protocolDB)
 	errCh := make(chan error, len(servers))
 	go func() {
-		logger.Info("liki-agent-runtime listening",
+		logger.Info("agent-runtime listening",
 			"addr", cfg.ProtocolAddr,
 			"ops_addr", cfg.OpsAddr,
 			"public_url", cfg.PublicURL,
@@ -282,7 +240,7 @@ func run() (err error) {
 	}()
 	if tlsServer != nil {
 		go func() {
-			logger.Info("liki-agent-runtime mutual TLS listening", "addr", cfg.TLSAddr)
+			logger.Info("agent-runtime mutual TLS listening", "addr", cfg.TLSAddr)
 			// 证书由 TLSConfig 提供（RequireAndVerifyClientCert）。
 			errCh <- tlsServer.ListenAndServeTLS("", "")
 		}()
@@ -290,13 +248,48 @@ func run() (err error) {
 
 	select {
 	case <-ctx.Done():
-		logger.Info("liki-agent-runtime draining", "shutdown_timeout", cfg.ShutdownTimeout)
+		logger.Info("agent-runtime draining", "shutdown_timeout", cfg.ShutdownTimeout)
 		return shutdownServers(servers, protocolServer, cfg.ShutdownTimeout)
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
-		return err
+		shutdownErr := shutdownServers(servers, protocolServer, cfg.ShutdownTimeout)
+		return errors.Join(err, shutdownErr)
+	}
+}
+
+// collectStorageMetrics publishes bounded durable-state snapshots outside the
+// request path so retention growth is observable before capacity becomes an
+// incident.
+func collectStorageMetrics(
+	ctx context.Context,
+	metrics *prometheus.Metrics,
+	auditStore *sqlite.DB,
+	protocolDB *protocolstate.DB,
+) {
+	update := func() {
+		if stats, err := auditStore.Stats(ctx); err == nil {
+			metrics.SetStorageRecords("audit", "event", "", stats.Events)
+		}
+		if stats, err := protocolDB.Stats(ctx); err == nil {
+			for state, count := range stats.TaskCounts {
+				metrics.SetStorageRecords("a2a_protocol", "task", state, count)
+			}
+			metrics.SetStorageRecords("a2a_protocol", "push_config", "", stats.PushConfigs)
+		}
+	}
+
+	update()
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			update()
+		}
 	}
 }
 
@@ -335,19 +328,32 @@ func newHTTPServers(cfg config.Config, protocolServer *transport.Server, protoco
 	return servers, nil
 }
 
-// shutdownServers 排水（readiness 置为 draining）并按超时逐一 Shutdown，
-// 返回首个退出错误。
+// shutdownServers drains readiness and shuts down every listener concurrently
+// so a slow endpoint cannot consume the whole budget before later listeners
+// begin draining. It returns joined shutdown errors.
 func shutdownServers(servers []*http.Server, protocolServer *transport.Server, shutdownTimeout time.Duration) error {
 	protocolServer.Drain()
 	drainCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	var firstErr error
+	results := make(chan error, len(servers))
+	var wg sync.WaitGroup
 	for _, server := range servers {
-		if err := server.Shutdown(drainCtx); err != nil && firstErr == nil {
-			firstErr = err
+		server := server
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results <- server.Shutdown(drainCtx)
+		}()
+	}
+	wg.Wait()
+	close(results)
+	var shutdownErrs []error
+	for err := range results {
+		if err != nil {
+			shutdownErrs = append(shutdownErrs, err)
 		}
 	}
-	return firstErr
+	return errors.Join(shutdownErrs...)
 }
 
 func mcpServerNames(deployment *deployment.AgentDeployment) []string {

@@ -13,7 +13,7 @@ func testDeploymentForEdge() *AgentDeployment {
 		Metadata:      DeploymentMetadata{Name: "test", Version: "1.0.0"},
 		Spec: DeploymentSpec{
 			MCPServers: []MCPServerDefinition{
-				{Name: "engine", EndpointEnv: "ENGINE_URL"},
+				{Name: "mcp-a", EndpointEnv: "MCP_A_URL"},
 			},
 			Agents: ResolvedAgentDefinitions([]AgentDefinition{
 				{
@@ -24,7 +24,7 @@ func testDeploymentForEdge() *AgentDeployment {
 						{Name: "child"},
 					},
 					Tools: ToolAllowlist{Allow: map[string][]string{
-						"engine": {"tool_a"},
+						"mcp-a": {"tool_a"},
 					}},
 				},
 				{
@@ -32,7 +32,7 @@ func testDeploymentForEdge() *AgentDeployment {
 					Version: "1.0.0",
 					Mode:    AgentModeChat,
 					Tools: ToolAllowlist{Allow: map[string][]string{
-						"engine": {"tool_b"},
+						"mcp-a": {"tool_b"},
 					}},
 				},
 			}),
@@ -130,7 +130,7 @@ func TestValidateAgentRechecksInvariants(t *testing.T) {
 }
 
 func TestMCPServerDefinitionValidation(t *testing.T) {
-	valid := &MCPServerDefinition{Name: "engine", EndpointEnv: "ENGINE_URL"}
+	valid := &MCPServerDefinition{Name: "mcp-a", EndpointEnv: "MCP_A_URL"}
 	if err := valid.validate(); err != nil {
 		t.Fatalf("validate() error = %v", err)
 	}
@@ -141,8 +141,8 @@ func TestMCPServerDefinitionValidation(t *testing.T) {
 	}{
 		{name: "", endpoint: "URL"},
 		{name: " padded ", endpoint: "URL"},
-		{name: "engine", endpoint: ""},
-		{name: "engine", endpoint: " padded "},
+		{name: "mcp-a", endpoint: ""},
+		{name: "mcp-a", endpoint: " padded "},
 	}
 	for _, testCase := range testCases {
 		server := &MCPServerDefinition{Name: testCase.name, EndpointEnv: testCase.endpoint}
@@ -160,7 +160,7 @@ func TestMCPServerDefinitionValidation(t *testing.T) {
 		{token: " padded ", valid: false},
 	}
 	for _, testCase := range tokenCases {
-		server := &MCPServerDefinition{Name: "engine", EndpointEnv: "URL", TokenEnv: testCase.token}
+		server := &MCPServerDefinition{Name: "mcp-a", EndpointEnv: "URL", TokenEnv: testCase.token}
 		err := server.validate()
 		if testCase.valid && err != nil {
 			t.Fatalf("validate(TokenEnv=%q) error = %v", testCase.token, err)

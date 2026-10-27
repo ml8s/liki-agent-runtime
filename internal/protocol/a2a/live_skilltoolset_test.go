@@ -16,14 +16,14 @@ import (
 
 // TestLiveA2ASkillToolsetTrace drives a real LLM run against a running
 // assembly stack to observe skilltoolset progressive loading. Skipped unless
-// LIKI_A2A_LIVE=1 and LIKI_A2A_HOST is set (e.g. 172.20.0.5:8083).
+// AGENT_RUNTIME_A2A_LIVE=1 and AGENT_RUNTIME_A2A_HOST is set (e.g. 172.20.0.5:8083).
 func TestLiveA2ASkillToolsetTrace(t *testing.T) {
-	if os.Getenv("LIKI_A2A_LIVE") != "1" {
-		t.Skip("set LIKI_A2A_LIVE=1 to run against a live assembly stack")
+	if os.Getenv("AGENT_RUNTIME_A2A_LIVE") != "1" {
+		t.Skip("set AGENT_RUNTIME_A2A_LIVE=1 to run against a live assembly stack")
 	}
-	host := os.Getenv("LIKI_A2A_HOST")
+	host := os.Getenv("AGENT_RUNTIME_A2A_HOST")
 	if host == "" {
-		t.Fatal("LIKI_A2A_HOST required")
+		t.Fatal("AGENT_RUNTIME_A2A_HOST required")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
@@ -47,12 +47,12 @@ func TestLiveA2ASkillToolsetTrace(t *testing.T) {
 	for i := range card.SupportedInterfaces {
 		card.SupportedInterfaces[i].URL = "http://" + host + "/a2a"
 	}
-	hc := &http.Client{Transport: &bearerTransport{token: os.Getenv("LIKI_A2A_TOKEN")}}
+	hc := &http.Client{Transport: &bearerTransport{token: os.Getenv("AGENT_RUNTIME_A2A_TOKEN")}}
 	client, err := a2aclient.NewFromCard(ctx, &card, a2aclient.WithJSONRPCTransport(hc))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
-	question := os.Getenv("LIKI_A2A_QUESTION")
+	question := os.Getenv("AGENT_RUNTIME_A2A_QUESTION")
 	if question == "" {
 		question = "我1990年3月5日早上8点出生，帮我看事业财运"
 	}

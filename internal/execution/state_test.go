@@ -10,7 +10,7 @@ import (
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 
-	deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deployment "github.com/ml8s/agent-runtime/internal/deployment"
 )
 
 func loadedTestDeployment(t testing.TB) *deployment.AgentDeployment {
@@ -18,7 +18,7 @@ func loadedTestDeployment(t testing.TB) *deployment.AgentDeployment {
 	root := t.TempDir()
 	files := map[string]string{
 		"agent-deployment.json": `{
-			"schema_version": "liki.agent-deployment.v1",
+			"schema_version": "agent.deployment.v1",
 			"metadata": {"name": "test-agent", "version": "1.0.0"},
 			"spec": {
 				"mcpServers": [],

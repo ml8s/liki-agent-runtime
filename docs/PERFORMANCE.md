@@ -19,7 +19,7 @@ every number in it:
 
 - Audit evidence stays append-only, synchronous-durable on `Record` return, and
   terminal before any process run state is released.
-- Every Engine tool call remains allowlisted; filtering is application
+- Every MCP tool call remains allowlisted; filtering is application
   authorization applied after standard MCP discovery.
 - Stable event names and error codes never change for performance reasons.
 - `internal/domain` stays free of transport, provider, adapter, and storage
@@ -46,15 +46,15 @@ every number in it:
 | Audit single-writer recorder with grouped multi-row commits | −29% mean parallel append latency, 200ms+ SQLITE_BUSY spikes eliminated, −55% bytes/op; FIFO order, per-event conflict isolation, and synchronous durability preserved | `internal/audit/sqlite/recorder.go`, benchmarks in `event_repository_bench_test.go` |
 | A2A entrypoint capture per part instead of deep clone | Allocation only | `internal/protocol/a2a/server.go` |
 | MCP tool catalog memoization (60s TTL, singleflight, stale-on-error) | One `tools/list` round per server per minute instead of one per agent flow; allowlist order unchanged | `internal/agent/mcp_catalog.go`, `TestNewMCPToolsetsMemoizeDiscovery` |
-| Structured-output single decode | Event-delta consumption replaces the per-run session read-back; A2A parses once per event instead of once per part and reuses the decoded document; canonical JSON bytes unchanged | `internal/agent/run_state.go`, `internal/protocol/a2a/server.go`, `TestStructuredMemoParsesOncePerEvent`, `BenchmarkParseStructuredOutput` |
+| Structured-output single decode | Event-delta consumption replaces the per-run session read-back; A2A parses once per event instead of once per part and reuses the decoded document; canonical JSON bytes unchanged | `internal/execution/structured_output.go`, `internal/protocol/a2a/server.go`, `TestStructuredMemoParsesOncePerEvent`, `BenchmarkParseStructuredOutput` |
 | Zero-copy JSON decode input (`bytes.NewReader` instead of a `string` copy) | One full-document copy removed per structured parse | `decodeJSONDocument` |
-| Shared projector index | Per-run event projection reuses the immutable deployment lookup built once at runtime construction | `internal/agent/event_projector.go` |
-| Writer observability closure | `liki_agents_audit_batch_events`, `liki_agents_audit_queue_depth`, `liki_agents_run_rejections_total{reason}` verify group-commit and capacity behavior in production | `internal/audit/sqlite/recorder.go`, `internal/agent/runtime.go` |
+| Shared projector index | Per-run event projection reuses the immutable deployment lookup built once at runtime construction | `internal/execution/projector.go` |
+| Writer observability closure | `agent_runtime_audit_batch_events`, `agent_runtime_audit_queue_depth`, `agent_runtime_run_rejections_total{reason}` verify group-commit and capacity behavior in production | `internal/audit/sqlite/recorder.go`, `internal/agent/runtime.go` |
 | Recovery scan window (7 days) | Startup orphan scan stays index-bounded as the audit ledger grows; every prior startup already closed older orphans | `TestAuditEventRepositoryRecoverySkipsEventsOutsideWindow` |
 | Audit secondary-index trim (8 → 3) | Insert path maintains three secondary B-trees instead of eight; sequential appends −20%, parallel grouped appends −20–30% vs the untrimmed recorder. Retained: `run_id` (idempotency), `event_type+occurred_at` (recovery), `trace_id` (incident correlation). Dropped dimensions (root run, agent, tool, tool call, definition) remain queryable via table scans; their aggregate questions are answered by Prometheus counters | `migrations/00004_trim_audit_indexes.sql`, `TestAuditEventIndexSetMatchesWritePathContract` |
 | Native multi-turn Contents | Caller history is seeded as run-scoped session events instead of a JSON array inside one user message: chronological user/model turns, latest message last, no JSON framing overhead, and a stable prefix every later turn can reuse through provider prefix caching. Wire contracts unchanged; the session stays run-scoped and caller-owned history stays authoritative | `internal/agent/history_seed.go`, `TestRunSeedsHistoryAsNativeMultiTurnContents` |
-| Runtime load benchmark (`BenchmarkRuntimeRun`) | End-to-end per-run measurement at concurrency 1/8/32 with seeded 20-message history, MCP tool call, and the real audit recorder — the evidence base for the allocation findings below | `internal/agent/runtime_bench_test.go` |
-| Event projector explicit pure state | Count visible parts before constructing a replacement, and return a new partial-text state instead of mutating the previous one. A fully visible final event remains ~25–27ns/0 allocs. A fully visible partial delta (including projector construction) is ~690ns/2 allocs on the benchmark host; the allocation is the accepted cost of non-mutating state. Visibility, partial-duplicate suppression, tool facts, and state-only events are unchanged | `internal/agent/event_projector.go`, `BenchmarkEventProjectorFinalText`, `BenchmarkEventProjectorPartialText` |
+| Runtime load benchmark (`BenchmarkRuntimeRun`) | End-to-end per-run measurement at concurrency 1/8/32 with seeded 20-message history, an MCP tool call, and an in-memory audit recorder; SQLite append cost is measured separately by the audit benchmarks — the evidence base for the allocation findings below | `internal/agent/runtime_bench_test.go`, `internal/audit/sqlite/event_repository_bench_test.go` |
+| Event projector explicit pure state | Count visible parts before constructing a replacement, and return a new partial-text state instead of mutating the previous one. A fully visible final event remains ~25–27ns/0 allocs. A fully visible partial delta (including projector construction) is ~690ns/2 allocs on the benchmark host; the allocation is the accepted cost of non-mutating state. Visibility, partial-duplicate suppression, tool facts, and state-only events are unchanged | `internal/execution/projector.go`, `BenchmarkEventProjectorFinalText`, `BenchmarkEventProjectorPartialText` |
 | Load-profile findings (measured, c=32) | Runtime framework overhead ≈ 0.2–1.2ms per run. Dominant remaining costs are external-library internals: the MCP SDK's JSON codec (~67% of allocations, scales with tool-result volume), ADK's per-call content clone (13.6% CPU, scales with thread length), and GC (~50% CPU samples at full concurrency). Own-code paths (seeding, audit event build, projection) are single-digit percentages | `go test -bench BenchmarkRuntimeRun -cpuprofile/-memprofile` |
 | Outbound TLS session cache + fan-out-sized idle pool | Parallel tool calls multiply outbound fan-out beyond the old `2×concurrency` pool, forcing TCP+TLS handshakes per burst; the pool is now sized for fan-out (`8×concurrency`, capped) and TLS session tickets are cached so fresh connections resume in fewer round trips | `newOutboundTransport` |
 | MCP catalog startup warmup | The first run after a restart no longer pays lazy cold start (session initialize + `tools/list` per server); warmup is best-effort, bounded, and failures fall through to the on-demand stale/error path | `internal/agent/warmup.go` |
@@ -62,7 +62,7 @@ every number in it:
 
 ## Deferred (needs cross-repo alignment)
 
-- Audit retention/archival policy (ownership with `liki-deploy`).
+- Audit retention/archival policy (ownership with `deployment system`).
 - Run concurrency and HPA tuning after the audit writer is validated in
   production.
 - GC tuning under CPU limits: at full concurrency GC consumes ~50% of CPU
@@ -70,5 +70,5 @@ every number in it:
   `GOGC=200` neutral here). Under container CPU limits, `GOGC`/`GOMEMLIMIT`
   (standard Go env, deploy-owned) are expected to return most of that headroom.
 - MCP tool-result slimming: the SDK's JSON decode allocations scale with tool
-  result volume; the lever is server-side payload size (Engine/Counsel repos),
+  result volume; the lever is server-side payload size (external MCP tool services repos),
   not the runtime.

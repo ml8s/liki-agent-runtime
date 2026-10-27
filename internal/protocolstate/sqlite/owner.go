@@ -6,7 +6,7 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
-	"github.com/ml8s/liki-agent-runtime/internal/platform/identity"
+	"github.com/ml8s/agent-runtime/internal/platform/identity"
 )
 
 // principal is the durable ownership scope. A2A tenant plus authenticated

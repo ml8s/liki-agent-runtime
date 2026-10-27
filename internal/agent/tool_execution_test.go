@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -59,7 +59,8 @@ func newToolAuditor(t *testing.T) (*ToolExecutionAuditor, *recordingAudit, *stub
 		agentDeployment,
 		ledger.auditScope,
 	)
-	ledger.begin("session_1", newTestScope())
+	scope := newTestScope()
+	ledger.begin(ledgerHandle("session_1", scope), scope)
 
 	traceProvider := sdktrace.NewTracerProvider()
 	tracer := traceProvider.Tracer("tool-audit-test")
@@ -224,7 +225,7 @@ func TestToolAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 		ledger.auditScope,
 	)
 	scope := newTestScope()
-	ledger.begin("session_1", scope)
+	ledger.begin(ledgerHandle("session_1", scope), scope)
 	ctx := &fakeAgentContext{
 		sessionID:      "session_1",
 		invocationID:   "inv_1",
@@ -260,7 +261,8 @@ func TestToolAuditorFailPendingRetainsRecordForRetry(t *testing.T) {
 	metrics := &stubMetrics{}
 	ledger := newLLMCallAuditor(recorder, metrics, "test-provider", agentDeployment, fixedLedgerNow)
 	auditor := newToolExecutionAuditor(recorder, nil, fixedLedgerNow, "test-provider", agentDeployment, ledger.auditScope)
-	ledger.begin("session_retry", newTestScope())
+	scope := newTestScope()
+	ledger.begin(ledgerHandle("session_retry", scope), scope)
 	ctx := &fakeAgentContext{
 		sessionID:      "session_retry",
 		invocationID:   "inv_retry",

@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 )
 
 func mustRuntimeAgentDefinition(t testing.TB, resolved deploymentpkg.ResolvedAgentDefinition) RuntimeAgentDefinition {

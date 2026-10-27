@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/ml8s/liki-agent-runtime/internal/platform"
+	"github.com/ml8s/agent-runtime/internal/platform"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -82,7 +82,7 @@ func newHealthTestRuntime(t *testing.T, options *mcp.ServerOptions, toolName str
 	probe := &healthProbe{}
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	server := mcp.NewServer(
-		&mcp.Implementation{Name: "test-engine", Version: "test"},
+		&mcp.Implementation{Name: "test-mcp", Version: "test"},
 		options,
 	)
 	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
@@ -126,7 +126,7 @@ func newHealthTestRuntime(t *testing.T, options *mcp.ServerOptions, toolName str
 		},
 		AgentDeployment: &deploymentpkg.AgentDeployment{Spec: deploymentpkg.DeploymentSpec{
 			MCPServers: []deploymentpkg.MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-			Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+			Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
 				Name:  "test-agent",
 				Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {toolName}}},
 			}}),
@@ -156,7 +156,7 @@ func TestCheckHealthValidatesEveryAgentAllowlist(t *testing.T) {
 	_, runtime := newHealthTestRuntime(t, &mcp.ServerOptions{}, "available_tool")
 	runtime.config.AgentDeployment = &deploymentpkg.AgentDeployment{Spec: deploymentpkg.DeploymentSpec{
 		MCPServers: []deploymentpkg.MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-		Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{
+		Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{
 			{Name: "entrypoint", Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"available_tool"}}}},
 			{Name: "worker", Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"missing_tool"}}}},
 		}),

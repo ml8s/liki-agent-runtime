@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/audit"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )

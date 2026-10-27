@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -148,6 +148,10 @@ type failingDeleteSessionService struct {
 	session.Service
 }
 
+func externalAuditHandle(sessionID, attemptID string) AuditAttemptHandle {
+	return AuditAttemptHandle{ADKSessionID: sessionID, AttemptID: attemptID}
+}
+
 func (s *failingDeleteSessionService) Delete(context.Context, *session.DeleteRequest) error {
 	return errors.New("session backend unavailable")
 }
@@ -173,10 +177,10 @@ func TestExternalSessionCleanupFailureDoesNotFlipSuccessfulRun(t *testing.T) {
 	scope := RunAuditIdentity{
 		RunID: "external_cleanup_failure", ThreadID: "external_context", UserID: "user_1", Protocol: "a2a",
 	}
-	if err := runtime.BeginAuditRun(context.Background(), "external_context", scope); err != nil {
+	if err := runtime.BeginAuditRun(context.Background(), externalAuditHandle("external_context", scope.RunID), scope); err != nil {
 		t.Fatalf("BeginAuditRun() error = %v", err)
 	}
-	err = runtime.EndAuditRun(context.Background(), "external_context", nil)
+	err = runtime.EndAuditRun(context.Background(), externalAuditHandle("external_context", scope.RunID), nil)
 	if err != nil {
 		t.Fatalf("EndAuditRun() error = %v, want successful execution despite cleanup failure", err)
 	}
@@ -197,10 +201,10 @@ func TestExternalAuditRunDeletesExternalSession(t *testing.T) {
 		UserID:   "user_1",
 		Protocol: "a2a",
 	}
-	if err := runtime.BeginAuditRun(ctx, "a2a_context", scope); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle("a2a_context", scope.RunID), scope); err != nil {
 		t.Fatalf("BeginAuditRun() error = %v", err)
 	}
-	if err := runtime.EndAuditRun(ctx, "a2a_context", nil); err != nil {
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle("a2a_context", scope.RunID), nil); err != nil {
 		t.Fatalf("EndAuditRun() error = %v", err)
 	}
 	response, err := runtime.sessions.Get(ctx, &session.GetRequest{

@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/genai"
 )
@@ -48,7 +48,8 @@ func newDelegationAuditorForTest(t *testing.T, branch string) (*DelegationAudito
 		"coordinator",
 		ledger.auditScope,
 	)
-	ledger.begin("session_1", newTestScope())
+	scope := newTestScope()
+	ledger.begin(ledgerHandle("session_1", scope), scope)
 	ctx := &fakeAgentContext{
 		sessionID:      "session_1",
 		invocationID:   "inv_worker",
@@ -116,7 +117,8 @@ func TestDelegationAuditorFailsPending(t *testing.T) {
 	ledger := newLLMCallAuditor(events, metrics, "test-provider", NewTestDeployment(t), func() time.Time {
 		return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	})
-	ledger.begin("session_1", newTestScope())
+	scope := newTestScope()
+	ledger.begin(ledgerHandle("session_1", scope), scope)
 	if _, err := auditor.BeforeAgent(ctx); err != nil {
 		t.Fatalf("BeforeAgent() error = %v", err)
 	}
@@ -159,7 +161,7 @@ func TestDelegationAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T
 	}
 	scope := newTestScope()
 	ledger := newLLMCallAuditor(events, nil, "test-provider", agentDeployment, fixedLedgerNow)
-	ledger.begin("session_1", scope)
+	ledger.begin(ledgerHandle("session_1", scope), scope)
 	auditor := newDelegationAuditor(events, nil, fixedLedgerNow, agentDeployment, "coordinator", ledger.auditScope)
 	ctx := &fakeAgentContext{
 		sessionID:    "session_1",

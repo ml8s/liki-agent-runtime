@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"os"
 
-	deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deployment "github.com/ml8s/agent-runtime/internal/deployment"
 )
 
 func validate(args []string) error {
-	flags := flag.NewFlagSet("liki-agent-runtime validate", flag.ContinueOnError)
+	flags := flag.NewFlagSet("agent-runtime validate", flag.ContinueOnError)
 	path := flags.String(
 		"deployment",
-		os.Getenv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE"),
+		os.Getenv("AGENT_RUNTIME_DEPLOYMENT_FILE"),
 		"AgentDeployment artifact path",
 	)
 	if err := flags.Parse(args); err != nil {

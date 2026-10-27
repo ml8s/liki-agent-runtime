@@ -7,14 +7,14 @@ import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { Readable } from "node:stream";
 
-const agentURL = new URL(process.env.LIKI_AGENT_RUNTIME_URL ?? "http://127.0.0.1:8083");
+const agentURL = new URL(process.env.AGENT_RUNTIME_URL ?? "http://127.0.0.1:8083");
 const [listenHost, listenPortText] = (
-  process.env.LIKI_CHAT_UI_ADDR ?? "127.0.0.1:8084"
+  process.env.AGENT_RUNTIME_CHAT_UI_ADDR ?? "127.0.0.1:8084"
 ).split(":");
 const listenPort = Number(listenPortText);
 
 if (!listenHost || !Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {
-  console.error(`invalid chat UI address: ${process.env.LIKI_CHAT_UI_ADDR}`);
+  console.error(`invalid chat UI address: ${process.env.AGENT_RUNTIME_CHAT_UI_ADDR}`);
   process.exit(1);
 }
 
@@ -62,7 +62,7 @@ async function proxyAGUI(req, res) {
   });
 
   const headers = {};
-  for (const name of ["authorization", "content-type", "x-liki-user-id"]) {
+  for (const name of ["authorization", "content-type", "x-agent-user-id"]) {
     const value = req.headers[name];
     if (typeof value === "string") headers[name] = value;
   }
@@ -96,5 +96,5 @@ createServer((req, res) => {
   sendFile(res, url.pathname);
 }).listen(listenPort, listenHost, () => {
   const displayHost = listenHost === "0.0.0.0" ? "127.0.0.1" : listenHost;
-  console.log(`liki-agent-runtime development chat UI: http://${displayHost}:${listenPort}`);
+  console.log(`agent-runtime development chat UI: http://${displayHost}:${listenPort}`);
 });

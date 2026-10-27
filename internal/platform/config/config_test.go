@@ -5,23 +5,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/platform/config"
+	"github.com/ml8s/agent-runtime/internal/platform/config"
 )
 
 func baseEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("LIKI_ENV", "development")
-	t.Setenv("LIKI_AGENT_RUNTIME_PUBLIC_URL", "https://agent.internal")
-	t.Setenv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", "/tmp/agent-deployment.json")
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_PROVIDER", "zhipu")
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", "json_object")
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_BASE_URL", "https://open.bigmodel.cn/api/v1")
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_MODEL", "glm-5.3-flash")
+	t.Setenv("AGENT_RUNTIME_ENV", "development")
+	t.Setenv("AGENT_RUNTIME_PUBLIC_URL", "https://agent.internal")
+	t.Setenv("AGENT_RUNTIME_DEPLOYMENT_FILE", "/tmp/agent-deployment.json")
+	t.Setenv("AGENT_RUNTIME_LLM_PROVIDER", "zhipu")
+	t.Setenv("AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", "json_object")
+	t.Setenv("AGENT_RUNTIME_LLM_BASE_URL", "https://open.bigmodel.cn/api/v1")
+	t.Setenv("AGENT_RUNTIME_LLM_MODEL", "glm-5.3-flash")
 }
 
 func TestLoadValidConfiguration(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", "none")
+	t.Setenv("AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", "none")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -35,7 +35,7 @@ func TestLoadValidConfiguration(t *testing.T) {
 	if cfg.Topology != config.TopologySingle {
 		t.Fatalf("topology = %q, want single", cfg.Topology)
 	}
-	t.Setenv("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS", "7")
+	t.Setenv("AGENT_RUNTIME_MAX_CONCURRENT_RUNS", "7")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(max concurrent runs) error = %v", err)
@@ -45,7 +45,7 @@ func TestLoadValidConfiguration(t *testing.T) {
 	}
 	// The provider vocabulary is open: the value is an audit provenance
 	// label and a structured-output hint, not a protocol switch.
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_PROVIDER", "anthropic")
+	t.Setenv("AGENT_RUNTIME_LLM_PROVIDER", "anthropic")
 	if _, err = config.Load(); err != nil {
 		t.Fatalf("Load(open provider vocabulary) error = %v", err)
 	}
@@ -58,29 +58,29 @@ func TestLoadRejectsInvalidSettings(t *testing.T) {
 		value   string
 		wantErr string
 	}{
-		{name: "missing deployment", key: "LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", value: "", wantErr: "LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE is required"},
-		{name: "unsupported environment", key: "LIKI_ENV", value: "staging", wantErr: "LIKI_ENV is unsupported"},
-		{name: "missing llm base url", key: "LIKI_AGENT_RUNTIME_LLM_BASE_URL", value: "", wantErr: "LIKI_AGENT_RUNTIME_LLM_BASE_URL is required"},
-		{name: "missing llm model", key: "LIKI_AGENT_RUNTIME_LLM_MODEL", value: "", wantErr: "LIKI_AGENT_RUNTIME_LLM_MODEL is required"},
-		{name: "multi topology is fail-closed", key: "LIKI_AGENT_RUNTIME_TOPOLOGY", value: "multi", wantErr: "LIKI_AGENT_RUNTIME_TOPOLOGY=multi is not supported yet"},
-		{name: "invalid topology", key: "LIKI_AGENT_RUNTIME_TOPOLOGY", value: "cluster", wantErr: "LIKI_AGENT_RUNTIME_TOPOLOGY is unsupported"},
-		{name: "missing provider", key: "LIKI_AGENT_RUNTIME_LLM_PROVIDER", value: "", wantErr: "LIKI_AGENT_RUNTIME_LLM_PROVIDER is required"},
-		{name: "unsupported structured output", key: "LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", value: "yaml", wantErr: "LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT is unsupported"},
-		{name: "invalid public url", key: "LIKI_AGENT_RUNTIME_PUBLIC_URL", value: "agent.internal", wantErr: "LIKI_AGENT_RUNTIME_PUBLIC_URL must be an absolute HTTP(S) URL"},
-		{name: "invalid llm url", key: "LIKI_AGENT_RUNTIME_LLM_BASE_URL", value: "api.example", wantErr: "LIKI_AGENT_RUNTIME_LLM_BASE_URL must be an absolute HTTP(S) URL"},
-		{name: "invalid duration", key: "LIKI_AGENT_RUNTIME_RUN_TIMEOUT_SECONDS", value: "abc", wantErr: "LIKI_AGENT_RUNTIME_RUN_TIMEOUT_SECONDS is not a valid integer"},
-		{name: "zero MCP timeout", key: "LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS", value: "0", wantErr: "LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS must be greater than zero"},
-		{name: "zero concurrent runs", key: "LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS", value: "0", wantErr: "LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS must be greater than zero"},
-		{name: "invalid concurrent runs", key: "LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS", value: "many", wantErr: "LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS is not a valid integer"},
-		{name: "zero LLM timeout", key: "LIKI_AGENT_RUNTIME_LLM_TIMEOUT_SECONDS", value: "0", wantErr: "LIKI_AGENT_RUNTIME_LLM_TIMEOUT_SECONDS must be greater than zero"},
-		{name: "zero max output tokens", key: "LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", value: "0", wantErr: "LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS must be greater than zero"},
-		{name: "negative max output tokens", key: "LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", value: "-1", wantErr: "LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS must be greater than zero"},
-		{name: "invalid max output tokens", key: "LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", value: "many", wantErr: "LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS is not a valid integer"},
-		{name: "negative temperature", key: "LIKI_AGENT_RUNTIME_LLM_TEMPERATURE", value: "-0.1", wantErr: "LIKI_AGENT_RUNTIME_LLM_TEMPERATURE must be between 0 and 2"},
-		{name: "high temperature", key: "LIKI_AGENT_RUNTIME_LLM_TEMPERATURE", value: "2.1", wantErr: "LIKI_AGENT_RUNTIME_LLM_TEMPERATURE must be between 0 and 2"},
-		{name: "unsupported log level", key: "LIKI_LOG_LEVEL", value: "trace", wantErr: "LIKI_LOG_LEVEL is unsupported"},
-		{name: "unsupported log format", key: "LIKI_LOG_FORMAT", value: "yaml", wantErr: "LIKI_LOG_FORMAT is unsupported"},
-		{name: "zero health timeout", key: "LIKI_AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS", value: "0", wantErr: "LIKI_AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS must be greater than zero"},
+		{name: "missing deployment", key: "AGENT_RUNTIME_DEPLOYMENT_FILE", value: "", wantErr: "AGENT_RUNTIME_DEPLOYMENT_FILE is required"},
+		{name: "unsupported environment", key: "AGENT_RUNTIME_ENV", value: "staging", wantErr: "AGENT_RUNTIME_ENV is unsupported"},
+		{name: "missing llm base url", key: "AGENT_RUNTIME_LLM_BASE_URL", value: "", wantErr: "AGENT_RUNTIME_LLM_BASE_URL is required"},
+		{name: "missing llm model", key: "AGENT_RUNTIME_LLM_MODEL", value: "", wantErr: "AGENT_RUNTIME_LLM_MODEL is required"},
+		{name: "multi topology is fail-closed", key: "AGENT_RUNTIME_TOPOLOGY", value: "multi", wantErr: "AGENT_RUNTIME_TOPOLOGY=multi is not supported yet"},
+		{name: "invalid topology", key: "AGENT_RUNTIME_TOPOLOGY", value: "cluster", wantErr: "AGENT_RUNTIME_TOPOLOGY is unsupported"},
+		{name: "missing provider", key: "AGENT_RUNTIME_LLM_PROVIDER", value: "", wantErr: "AGENT_RUNTIME_LLM_PROVIDER is required"},
+		{name: "unsupported structured output", key: "AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", value: "yaml", wantErr: "AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT is unsupported"},
+		{name: "invalid public url", key: "AGENT_RUNTIME_PUBLIC_URL", value: "agent.internal", wantErr: "AGENT_RUNTIME_PUBLIC_URL must be an absolute HTTP(S) URL"},
+		{name: "invalid llm url", key: "AGENT_RUNTIME_LLM_BASE_URL", value: "api.example", wantErr: "AGENT_RUNTIME_LLM_BASE_URL must be an absolute HTTP(S) URL"},
+		{name: "invalid duration", key: "AGENT_RUNTIME_RUN_TIMEOUT_SECONDS", value: "abc", wantErr: "AGENT_RUNTIME_RUN_TIMEOUT_SECONDS is not a valid integer"},
+		{name: "zero MCP timeout", key: "AGENT_RUNTIME_MCP_TIMEOUT_SECONDS", value: "0", wantErr: "AGENT_RUNTIME_MCP_TIMEOUT_SECONDS must be greater than zero"},
+		{name: "zero concurrent runs", key: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS", value: "0", wantErr: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS must be greater than zero"},
+		{name: "invalid concurrent runs", key: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS", value: "many", wantErr: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS is not a valid integer"},
+		{name: "zero LLM timeout", key: "AGENT_RUNTIME_LLM_TIMEOUT_SECONDS", value: "0", wantErr: "AGENT_RUNTIME_LLM_TIMEOUT_SECONDS must be greater than zero"},
+		{name: "zero max output tokens", key: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", value: "0", wantErr: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS must be greater than zero"},
+		{name: "negative max output tokens", key: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", value: "-1", wantErr: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS must be greater than zero"},
+		{name: "invalid max output tokens", key: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", value: "many", wantErr: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS is not a valid integer"},
+		{name: "negative temperature", key: "AGENT_RUNTIME_LLM_TEMPERATURE", value: "-0.1", wantErr: "AGENT_RUNTIME_LLM_TEMPERATURE must be between 0 and 2"},
+		{name: "high temperature", key: "AGENT_RUNTIME_LLM_TEMPERATURE", value: "2.1", wantErr: "AGENT_RUNTIME_LLM_TEMPERATURE must be between 0 and 2"},
+		{name: "unsupported log level", key: "AGENT_RUNTIME_LOG_LEVEL", value: "trace", wantErr: "AGENT_RUNTIME_LOG_LEVEL is unsupported"},
+		{name: "unsupported log format", key: "AGENT_RUNTIME_LOG_FORMAT", value: "yaml", wantErr: "AGENT_RUNTIME_LOG_FORMAT is unsupported"},
+		{name: "zero health timeout", key: "AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS", value: "0", wantErr: "AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS must be greater than zero"},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -96,9 +96,9 @@ func TestLoadRejectsInvalidSettings(t *testing.T) {
 
 func TestProductionConfigurationHardening(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("LIKI_ENV", "production")
-	t.Setenv("LIKI_AGENT_RUNTIME_INTERNAL_TOKEN", "production-service-token")
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_API_KEY", "production-model-key")
+	t.Setenv("AGENT_RUNTIME_ENV", "production")
+	t.Setenv("AGENT_RUNTIME_INTERNAL_TOKEN", "production-service-token")
+	t.Setenv("AGENT_RUNTIME_LLM_API_KEY", "production-model-key")
 
 	_, err := config.Load()
 	if err != nil {
@@ -111,11 +111,11 @@ func TestProductionConfigurationHardening(t *testing.T) {
 		value   string
 		wantErr string
 	}{
-		{name: "llm endpoint must be HTTPS", key: "LIKI_AGENT_RUNTIME_LLM_BASE_URL", value: "http://127.0.0.1:8080/v1", wantErr: "LIKI_AGENT_RUNTIME_LLM_BASE_URL must use HTTPS outside development"},
-		{name: "public URL credentials rejected", key: "LIKI_AGENT_RUNTIME_PUBLIC_URL", value: "https://user:secret@agent.internal", wantErr: "LIKI_AGENT_RUNTIME_PUBLIC_URL must not contain embedded credentials"},
-		{name: "public URL loopback outside development", key: "LIKI_AGENT_RUNTIME_PUBLIC_URL", value: "http://127.0.0.1:8083", wantErr: "LIKI_AGENT_RUNTIME_PUBLIC_URL must be a deployment-reachable address outside development"},
-		{name: "LLM URL credentials rejected", key: "LIKI_AGENT_RUNTIME_LLM_BASE_URL", value: "https://key:secret@model.internal/v1", wantErr: "LIKI_AGENT_RUNTIME_LLM_BASE_URL must not contain embedded credentials"},
-		{name: "concurrent runs bounded", key: "LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS", value: "1025", wantErr: "LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS must not exceed 1024"},
+		{name: "llm endpoint must be HTTPS", key: "AGENT_RUNTIME_LLM_BASE_URL", value: "http://127.0.0.1:8080/v1", wantErr: "AGENT_RUNTIME_LLM_BASE_URL must use HTTPS outside development"},
+		{name: "public URL credentials rejected", key: "AGENT_RUNTIME_PUBLIC_URL", value: "https://user:secret@agent.internal", wantErr: "AGENT_RUNTIME_PUBLIC_URL must not contain embedded credentials"},
+		{name: "public URL loopback outside development", key: "AGENT_RUNTIME_PUBLIC_URL", value: "http://127.0.0.1:8083", wantErr: "AGENT_RUNTIME_PUBLIC_URL must be a deployment-reachable address outside development"},
+		{name: "LLM URL credentials rejected", key: "AGENT_RUNTIME_LLM_BASE_URL", value: "https://key:secret@model.internal/v1", wantErr: "AGENT_RUNTIME_LLM_BASE_URL must not contain embedded credentials"},
+		{name: "concurrent runs bounded", key: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS", value: "1025", wantErr: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS must not exceed 1024"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -130,7 +130,7 @@ func TestProductionConfigurationHardening(t *testing.T) {
 
 func TestLoadDerivesPublicURLFromDefaultAddress(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("LIKI_AGENT_RUNTIME_PUBLIC_URL", "")
+	t.Setenv("AGENT_RUNTIME_PUBLIC_URL", "")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -149,7 +149,7 @@ func TestLoadMaxOutputTokens(t *testing.T) {
 	if cfg.LLMMaxOutputTokens != 0 {
 		t.Fatalf("unset max output tokens = %d, want 0 (no output cap)", cfg.LLMMaxOutputTokens)
 	}
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", "2048")
+	t.Setenv("AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", "2048")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(max output tokens) error = %v", err)
@@ -161,7 +161,7 @@ func TestLoadMaxOutputTokens(t *testing.T) {
 
 func TestDevelopmentAllowsLocalHTTPAndUnpinnedDeployment(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("LIKI_AGENT_RUNTIME_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
+	t.Setenv("AGENT_RUNTIME_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load(local HTTP development) error = %v", err)
@@ -173,13 +173,13 @@ func TestDevelopmentAllowsLocalHTTPAndUnpinnedDeployment(t *testing.T) {
 
 func TestLoadMTLSConfiguration(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("LIKI_AGENT_RUNTIME_TLS_ADDR", ":8084")
-	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "LIKI_AGENT_RUNTIME_TLS_CERT") {
+	t.Setenv("AGENT_RUNTIME_TLS_ADDR", ":8084")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_TLS_CERT") {
 		t.Fatalf("Load() error = %v, want a TLS certificate requirement", err)
 	}
-	t.Setenv("LIKI_AGENT_RUNTIME_TLS_CERT", "/pki/server.crt")
-	t.Setenv("LIKI_AGENT_RUNTIME_TLS_KEY", "/pki/server.key")
-	t.Setenv("LIKI_AGENT_RUNTIME_TLS_CLIENT_CA", "/pki/ca.pem")
+	t.Setenv("AGENT_RUNTIME_TLS_CERT", "/pki/server.crt")
+	t.Setenv("AGENT_RUNTIME_TLS_KEY", "/pki/server.key")
+	t.Setenv("AGENT_RUNTIME_TLS_CLIENT_CA", "/pki/ca.pem")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load(mTLS) error = %v", err)
@@ -190,8 +190,8 @@ func TestLoadMTLSConfiguration(t *testing.T) {
 	}
 
 	// 证书文件没有 TLS 地址：配置错误必须显式失败（fail-closed）。
-	t.Setenv("LIKI_AGENT_RUNTIME_TLS_ADDR", "")
-	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "LIKI_AGENT_RUNTIME_TLS_ADDR") {
+	t.Setenv("AGENT_RUNTIME_TLS_ADDR", "")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_TLS_ADDR") {
 		t.Fatalf("Load(certs without addr) error = %v, want a TLS addr requirement", err)
 	}
 }
@@ -205,7 +205,7 @@ func TestOpsAddrDefaultsAndOverrides(t *testing.T) {
 	if cfg.OpsAddr != ":8085" {
 		t.Fatalf("OpsAddr = %q, want :8085", cfg.OpsAddr)
 	}
-	t.Setenv("LIKI_AGENT_RUNTIME_OPS_ADDR", "127.0.0.1:9090")
+	t.Setenv("AGENT_RUNTIME_OPS_ADDR", "127.0.0.1:9090")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(ops addr) error = %v", err)
@@ -215,30 +215,14 @@ func TestOpsAddrDefaultsAndOverrides(t *testing.T) {
 	}
 }
 
-func TestLoadCallbackConfiguration(t *testing.T) {
-	baseEnv(t)
-	t.Setenv("LIKI_AGENT_RUNTIME_CALLBACK_SECRET", "whsec_MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
-	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "LIKI_AGENT_RUNTIME_CALLBACK_URL") {
-		t.Fatalf("Load() error = %v, want a callback URL requirement", err)
-	}
-	t.Setenv("LIKI_AGENT_RUNTIME_CALLBACK_URL", "http://web:8081/api/internal/runs/completed")
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("Load(callback) error = %v", err)
-	}
-	if cfg.CallbackURL == "" || cfg.CallbackSecret == "" {
-		t.Fatalf("callback config = %q/%q", cfg.CallbackURL, cfg.CallbackSecret)
-	}
-}
-
 // After the migration window closed, the pre-rename names are no longer
 // read: an old name alone must not configure the runtime.
 func TestLegacyConfigNamesAreIgnored(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("LIKI_RUN_TIMEOUT_SECONDS", "77")
-	t.Setenv("LIKI_MAX_CONCURRENT_RUNS", "9")
-	t.Setenv("LIKI_AGENT_RUNTIME_ADDR", ":9083")
-	t.Setenv("LIKI_LLM_MODEL", "legacy-model")
+	t.Setenv("LEGACY_RUN_TIMEOUT_SECONDS", "77")
+	t.Setenv("LEGACY_MAX_CONCURRENT_RUNS", "9")
+	t.Setenv("AGENT_RUNTIME_ADDR", ":9083")
+	t.Setenv("LEGACY_LLM_MODEL", "legacy-model")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -266,7 +250,7 @@ func TestMCPHealthTimeoutFollowsToolBudget(t *testing.T) {
 	if cfg.MCPHealthTimeout != 0 {
 		t.Fatalf("unset health timeout = %v, want 0 (follows the tool budget)", cfg.MCPHealthTimeout)
 	}
-	t.Setenv("LIKI_AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS", "45")
+	t.Setenv("AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS", "45")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(health timeout) error = %v", err)

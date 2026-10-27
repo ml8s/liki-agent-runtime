@@ -292,14 +292,21 @@ func TestSQLiteProtocolStateHealth(t *testing.T) {
 func TestRecoverAbandonedTasks(t *testing.T) {
 	db, tasks, _ := openStore(t)
 	ctx := callerContext(context.Background(), "alice")
-	activeStates := []a2a.TaskState{
+	processOwnedStates := []a2a.TaskState{
 		a2a.TaskStateSubmitted,
 		a2a.TaskStateWorking,
+	}
+	waitingStates := []a2a.TaskState{
 		a2a.TaskStateInputRequired,
 		a2a.TaskStateAuthRequired,
 	}
-	for index, state := range activeStates {
+	for index, state := range processOwnedStates {
 		if _, err := tasks.Create(ctx, testTask(fmt.Sprintf("active-%d", index), "context", state)); err != nil {
+			t.Fatalf("Create(%s) error = %v", state, err)
+		}
+	}
+	for index, state := range waitingStates {
+		if _, err := tasks.Create(ctx, testTask(fmt.Sprintf("waiting-%d", index), "context", state)); err != nil {
 			t.Fatalf("Create(%s) error = %v", state, err)
 		}
 	}
@@ -312,10 +319,10 @@ func TestRecoverAbandonedTasks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecoverAbandonedTasks() error = %v", err)
 	}
-	if recovered != len(activeStates) {
-		t.Fatalf("RecoverAbandonedTasks() = %d, want %d", recovered, len(activeStates))
+	if recovered != len(processOwnedStates) {
+		t.Fatalf("RecoverAbandonedTasks() = %d, want %d", recovered, len(processOwnedStates))
 	}
-	for index := range activeStates {
+	for index := range processOwnedStates {
 		got, err := tasks.Get(ctx, a2a.TaskID(fmt.Sprintf("active-%d", index)))
 		if err != nil {
 			t.Fatalf("Get(active-%d) error = %v", index, err)
@@ -327,11 +334,48 @@ func TestRecoverAbandonedTasks(t *testing.T) {
 			t.Fatalf("active-%d recovered at = %#v", index, got.Task.Status.Timestamp)
 		}
 	}
+	for index, state := range waitingStates {
+		taskID := a2a.TaskID(fmt.Sprintf("waiting-%d", index))
+		got, err := tasks.Get(ctx, taskID)
+		if err != nil {
+			t.Fatalf("Get(waiting %s) error = %v", state, err)
+		}
+		if got.Task.Status.State != state {
+			t.Fatalf("waiting task %s = %s, want preserved", taskID, got.Task.Status.State)
+		}
+	}
 	got, err := tasks.Get(ctx, "terminal")
 	if err != nil {
 		t.Fatalf("Get(terminal) error = %v", err)
 	}
 	if got.Task.Status.State != a2a.TaskStateCompleted {
 		t.Fatalf("terminal state = %s, want completed", got.Task.Status.State)
+	}
+}
+
+func TestProtocolStateStats(t *testing.T) {
+	db, tasks, callbacks := openStore(t)
+	ctx := callerContext(context.Background(), "alice")
+	if _, err := tasks.Create(ctx, testTask("stats-working", "context", a2a.TaskStateWorking)); err != nil {
+		t.Fatalf("Create(working) error = %v", err)
+	}
+	if _, err := tasks.Create(ctx, testTask("stats-completed", "context", a2a.TaskStateCompleted)); err != nil {
+		t.Fatalf("Create(completed) error = %v", err)
+	}
+	if _, err := callbacks.Save(ctx, "stats-working", &a2a.PushConfig{URL: "https://receiver.example/callback"}); err != nil {
+		t.Fatalf("Save(push config) error = %v", err)
+	}
+
+	stats, err := db.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats() error = %v", err)
+	}
+	if stats.TaskCounts[string(a2a.TaskStateWorking)] != 1 ||
+		stats.TaskCounts[string(a2a.TaskStateCompleted)] != 1 ||
+		len(stats.TaskCounts) != 2 {
+		t.Fatalf("Stats() task counts = %#v, want one working and one completed", stats.TaskCounts)
+	}
+	if stats.PushConfigs != 1 {
+		t.Fatalf("Stats() push configs = %d, want 1", stats.PushConfigs)
 	}
 }

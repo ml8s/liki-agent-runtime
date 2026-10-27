@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 // succeedToolCall returns the succeeded terminal form of a started tool call.

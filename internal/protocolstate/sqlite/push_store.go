@@ -45,7 +45,7 @@ func (db *DB) NewPushConfigStore(config PushConfigStoreConfig) *PushConfigStore 
 
 var _ push.ConfigStore = (*PushConfigStore)(nil)
 
-// Save creates or updates a callback config within the caller's scope.
+// Save creates or updates a push notification config within the protocol client's scope.
 func (s *PushConfigStore) Save(ctx context.Context, taskID a2a.TaskID, config *a2a.PushConfig) (*a2a.PushConfig, error) {
 	if config == nil {
 		return nil, fmt.Errorf("%w: push config is required", a2a.ErrInvalidParams)
@@ -102,7 +102,7 @@ func (s *PushConfigStore) Save(ctx context.Context, taskID a2a.TaskID, config *a
 	return copyPushConfig(config)
 }
 
-// Get returns one callback config owned by the authenticated caller.
+// Get returns one push notification config owned by the authenticated protocol client.
 func (s *PushConfigStore) Get(ctx context.Context, taskID a2a.TaskID, configID string) (*a2a.PushConfig, error) {
 	config, _, err := s.getOwned(ctx, taskID, configID)
 	return config, err
@@ -143,7 +143,7 @@ func (s *PushConfigStore) getOwned(ctx context.Context, taskID a2a.TaskID, confi
 	return &config, storedOwner, nil
 }
 
-// List returns every callback config for a task in the caller's scope.
+// List returns every push notification config for a task in the protocol client's scope.
 func (s *PushConfigStore) List(ctx context.Context, taskID a2a.TaskID) ([]*a2a.PushConfig, error) {
 	owner, err := principalFromContext(ctx)
 	if err != nil {
@@ -187,7 +187,7 @@ func (s *PushConfigStore) List(ctx context.Context, taskID a2a.TaskID) ([]*a2a.P
 	return configs, nil
 }
 
-// Delete removes one callback config in the caller's scope.
+// Delete removes one push notification config in the protocol client's scope.
 func (s *PushConfigStore) Delete(ctx context.Context, taskID a2a.TaskID, configID string) error {
 	owner, err := principalFromContext(ctx)
 	if err != nil {
@@ -210,7 +210,7 @@ func (s *PushConfigStore) Delete(ctx context.Context, taskID a2a.TaskID, configI
 	return nil
 }
 
-// DeleteAll removes every callback config for a task in the caller's scope.
+// DeleteAll removes every push notification config for a task in the protocol client's scope.
 func (s *PushConfigStore) DeleteAll(ctx context.Context, taskID a2a.TaskID) error {
 	owner, err := principalFromContext(ctx)
 	if err != nil {

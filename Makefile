@@ -8,21 +8,14 @@ export RELEASE_VERSION
 
 GO ?= go
 NPM ?= npm
-NODE_BIN := $(HOME)/.nvm/versions/node/v$(shell cat .nvmrc)/bin
-PYTHON_BIN := $(HOME)/app/python3.12.14/bin
-GOPATH := $(HOME)/app/go-tools
-GOBIN := $(GOPATH)/bin
-GOMODCACHE := $(GOPATH)/pkg/mod
-GOCACHE := $(GOPATH)/build-cache
-GOLANGCI_LINT_CACHE := $(GOPATH)/golangci-lint-cache
-export PATH := $(PYTHON_BIN):$(HOME)/app/go/bin:$(GOBIN):$(NODE_BIN):$(PATH)
-export GOPATH GOBIN GOMODCACHE GOCACHE GOLANGCI_LINT_CACHE
+GOLANGCI_LINT ?= golangci-lint
+PYTHON ?= python3
 export GOTOOLCHAIN ?= go1.26.10
 VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo local)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-GOPROXY ?= https://goproxy.cn,direct
-LDFLAGS ?= -s -w -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.Version=$(VERSION) -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.Commit=$(COMMIT) -X github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo.BuildTime=$(BUILD_TIME)
+GOPROXY ?= https://proxy.golang.org,direct
+LDFLAGS ?= -s -w -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.Version=$(VERSION) -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.Commit=$(COMMIT) -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.BuildTime=$(BUILD_TIME)
 
 TEST_PACKAGES ?= ./...
 BENCH_PACKAGES ?= ./internal/audit/sqlite/... ./internal/agent/...
@@ -36,8 +29,8 @@ help:
 	@echo "make test     - run tests with race detection and the coverage floor"
 	@echo "make bench    - run focused performance benchmarks"
 	@echo "make gate     - run the full pre-push source gate"
-	@echo "make smoke    - smoke the local liki-agent-runtime image"
-	@echo "make build    - build ./bin/liki-agent-runtime"
+	@echo "make smoke    - smoke the local agent-runtime image"
+	@echo "make build    - build ./bin/agent-runtime"
 	@echo "make image    - build a local image (tag from git)"
 	@echo "make dev      - run the development Agent and MCP containers in the foreground"
 	@echo "make dev-down - remove the development Agent workload"
@@ -56,24 +49,26 @@ bench: ## Run focused performance benchmarks with allocation stats
 
 check: ## Run static checks.
 	$(NPM) run lint:docs
-	golangci-lint fmt --diff ./...
-	golangci-lint run ./...
+	$(PYTHON) scripts/check_docs_paths.py
+	$(PYTHON) scripts/check_generic_boundary.py
+	$(GOLANGCI_LINT) fmt --diff ./...
+	$(GOLANGCI_LINT) run ./...
 	$(GO) vet ./...
-	$(GO) run ./cmd/liki-agent-runtime validate -deployment $(if $(LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE),$(LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE),./dev/agent-deployment/deployment.json)
-	python3 scripts/check_actions_pinned.py
+	$(GO) run ./cmd/agent-runtime validate -deployment $(if $(AGENT_RUNTIME_DEPLOYMENT_FILE),$(AGENT_RUNTIME_DEPLOYMENT_FILE),./dev/agent-deployment/deployment.json)
+	$(PYTHON) scripts/check_actions_pinned.py
 
-build: ## Build the local liki-agent-runtime binary.
-	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/liki-agent-runtime ./cmd/liki-agent-runtime
+build: ## Build the local agent-runtime binary.
+	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/agent-runtime ./cmd/agent-runtime
 
 # ── 镜像 ──
-# make image/smoke 只构建本地镜像；部署由 liki-deploy 按 sha 组装。
-IMAGE_REGISTRY ?= liki-local
+# make image/smoke 只构建本地镜像；部署由 deployment system 按 sha 组装。
+IMAGE_REGISTRY ?= agent-runtime-local
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)
 
 image: ## Build a local image for development
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_TIME=$(BUILD_TIME) \
 		--build-arg GOPROXY=$(GOPROXY) \
-		-t $(IMAGE_REGISTRY)/liki-agent-runtime:$(IMAGE_TAG) .
+		-t $(IMAGE_REGISTRY)/agent-runtime:$(IMAGE_TAG) .
 
 smoke: image ## Smoke the local runtime image with the development deployment
 	IMAGE_TAG=$(IMAGE_TAG) scripts/smoke-image.sh

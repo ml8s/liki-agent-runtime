@@ -7,10 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/session"
 )
 
@@ -83,8 +83,9 @@ func (l *runLifecycle) finish(runID string) {
 
 // BeginAuditRun attaches protocol identity to model callbacks when an official
 // protocol executor drives the shared ADK runtime directly.
-func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope RunAuditIdentity) error {
+func (r *Runtime) BeginAuditRun(ctx context.Context, handle AuditAttemptHandle, scope RunAuditIdentity) error {
 	scope = scope.normalize()
+	handle = handle.normalize()
 	identity, err := scope.runIdentity()
 	if err != nil {
 		return err
@@ -92,8 +93,8 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 	if err := r.ensureDurableRunID(ctx, scope.RunID); err != nil {
 		return err
 	}
-	if sessionID == "" {
-		return domain.NewError(domain.CodeAuditSessionRequired, "audit session identifier is required", domain.ErrInvalidInput)
+	if err := handle.validate(); err != nil {
+		return err
 	}
 	if !r.runs.begin(scope.RunID) {
 		return domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
@@ -113,6 +114,7 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 			MessageID: scope.MessageID,
 		},
 		attemptKey:        scope.RunID,
+		sessionID:         handle.ADKSessionID,
 		taskID:            scope.TaskID,
 		model:             r.entrypoint.EffectiveModel(r.config.Model),
 		instructionDigest: r.entrypoint.InstructionDigest,
@@ -123,7 +125,7 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 		releaseRun:        releaseRun,
 		activeCalls:       make(map[string]llmCallRuntime),
 	}
-	if !r.callAuditor.begin(sessionID, ledgerScope) {
+	if !r.callAuditor.begin(handle, ledgerScope) {
 		releaseRun()
 		r.runs.finish(scope.RunID)
 		return domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
@@ -131,7 +133,7 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 	event := r.runEvent(ctx, ledgerScope, audit.EventRunStarted, audit.StatusRunning, nil)
 	if err := r.recordAuditWithRetry(ctx, &event); err != nil {
 		r.runs.finish(scope.RunID)
-		r.callAuditor.end(sessionID, err)
+		r.callAuditor.end(handle, err)
 		_ = r.delegationAuditor.FailPending(ctx, ledgerScope)
 		_ = r.toolAuditor.FailPending(ctx, ledgerScope)
 		releaseRun()
@@ -175,16 +177,17 @@ func WithPreservedSession() AuditEndOption {
 // scope or the concurrency slot, so the executor's cleanup callback retries the
 // terminal append rather than stranding an orphaned started event. Startup
 // recovery remains the last resort if the process exits before a retry succeeds.
-func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr error, options ...AuditEndOption) error {
+func (r *Runtime) EndAuditRun(ctx context.Context, handle AuditAttemptHandle, runErr error, options ...AuditEndOption) error {
 	var opts auditEndOptions
 	for _, option := range options {
 		option(&opts)
 	}
 	ctx = context.WithoutCancel(ctx)
-	if sessionID == "" {
-		return nil
+	handle = handle.normalize()
+	if err := handle.validate(); err != nil {
+		return err
 	}
-	scope, existed := r.callAuditor.scope(sessionID)
+	scope, existed := r.callAuditor.scope(handle.AttemptID)
 	if !existed {
 		return nil
 	}
@@ -213,7 +216,7 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 		if deleteErr := r.sessions.Delete(ctx, &session.DeleteRequest{
 			AppName:   r.config.AppName,
 			UserID:    scope.identity.UserID,
-			SessionID: sessionID,
+			SessionID: handle.ADKSessionID,
 		}); deleteErr != nil {
 			r.config.Logger.WarnContext(ctx, "external_run_session_cleanup_failed",
 				"run_id", string(scope.identity.RunID),
@@ -221,8 +224,7 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 			)
 		}
 	}
-	r.callAuditor.forget(sessionID)
-	r.callAuditor.forgetAttempt(string(scope.identity.RunID))
+	r.callAuditor.forgetAttempt(handle)
 	if scope.releaseRun != nil {
 		scope.releaseRun()
 	}

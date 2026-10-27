@@ -7,37 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ml8s/liki-agent-runtime/internal/testagent"
+	"github.com/ml8s/agent-runtime/internal/testagent"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 )
-
-func TestValidateSkillToolsetAllow(t *testing.T) {
-	cases := []struct {
-		name    string
-		tools   []string
-		wantErr string
-	}{
-		{"exact set", []string{"list_skills", "load_skill", "load_skill_resource"}, ""},
-		{"missing one", []string{"list_skills", "load_skill"}, "missing builtin tool"},
-		{"empty", nil, "missing builtin tool"},
-		{"unknown extra", []string{"list_skills", "load_skill", "load_skill_resource", "extra"}, "unknown builtin tool"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := validateSkillToolsetAllow(tc.tools)
-			if tc.wantErr == "" {
-				if err != nil {
-					t.Fatalf("error = %v, want nil", err)
-				}
-				return
-			}
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("error = %v, want containing %q", err, tc.wantErr)
-			}
-		})
-	}
-}
 
 func minimalSkillAgent() *deploymentpkg.AgentDefinition {
 	return &deploymentpkg.AgentDefinition{
@@ -233,7 +206,7 @@ func TestDevDeploymentSkillsPinsContainerPath(t *testing.T) {
 	if definition.Skills == nil || definition.Skills.Root != "/skills" {
 		t.Fatalf("dev fixture skills = %+v, want root /skills", definition.Skills)
 	}
-	if _, err := os.Stat(filepath.Join(devRoot, "skills", "liki", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(devRoot, "skills", "generic", "SKILL.md")); err != nil {
 		t.Fatalf("dev skills fixture: %v", err)
 	}
 	if _, statErr := os.Stat("/skills"); statErr != nil {

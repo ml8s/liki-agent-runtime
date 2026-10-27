@@ -47,7 +47,7 @@ func captureStdout(t *testing.T, run func() error) (string, error) {
 }
 
 func TestValidateRequiresDeploymentPath(t *testing.T) {
-	t.Setenv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", "")
+	t.Setenv("AGENT_RUNTIME_DEPLOYMENT_FILE", "")
 	err := validate(nil)
 	if err == nil || !strings.Contains(err.Error(), "deployment path is required") {
 		t.Fatalf("error = %v, want deployment path is required", err)
@@ -55,7 +55,7 @@ func TestValidateRequiresDeploymentPath(t *testing.T) {
 }
 
 func TestValidateRejectsPositionalArguments(t *testing.T) {
-	t.Setenv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", canonicalDeploymentPath(t))
+	t.Setenv("AGENT_RUNTIME_DEPLOYMENT_FILE", canonicalDeploymentPath(t))
 	err := validate([]string{"unexpected"})
 	if err == nil || !strings.Contains(err.Error(), "positional arguments") {
 		t.Fatalf("error = %v, want positional arguments rejected", err)
@@ -63,14 +63,14 @@ func TestValidateRejectsPositionalArguments(t *testing.T) {
 }
 
 func TestValidateRejectsUnknownFlag(t *testing.T) {
-	t.Setenv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", canonicalDeploymentPath(t))
+	t.Setenv("AGENT_RUNTIME_DEPLOYMENT_FILE", canonicalDeploymentPath(t))
 	if err := validate([]string{"-no-such-flag"}); err == nil {
 		t.Fatal("expected flag parse error")
 	}
 }
 
 func TestValidateRejectsMissingDeploymentFile(t *testing.T) {
-	t.Setenv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", "")
+	t.Setenv("AGENT_RUNTIME_DEPLOYMENT_FILE", "")
 	err := validate([]string{"-deployment", filepath.Join(t.TempDir(), "absent.json")})
 	if err == nil {
 		t.Fatal("expected error for missing deployment file")
@@ -78,14 +78,14 @@ func TestValidateRejectsMissingDeploymentFile(t *testing.T) {
 }
 
 func TestValidateAcceptsFlagPath(t *testing.T) {
-	t.Setenv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", "")
+	t.Setenv("AGENT_RUNTIME_DEPLOYMENT_FILE", "")
 	output, err := captureStdout(t, func() error {
 		return validate([]string{"-deployment", canonicalDeploymentPath(t)})
 	})
 	if err != nil {
 		t.Fatalf("validate() error = %v", err)
 	}
-	if !strings.Contains(output, "name=liki-agent-runtime-deployment") {
+	if !strings.Contains(output, "name=agent-runtime-deployment") {
 		t.Fatalf("output missing deployment name: %q", output)
 	}
 	if !strings.Contains(output, "entrypoint=main") {
@@ -97,12 +97,12 @@ func TestValidateAcceptsFlagPath(t *testing.T) {
 }
 
 func TestValidateUsesEnvironmentDefault(t *testing.T) {
-	t.Setenv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", canonicalDeploymentPath(t))
+	t.Setenv("AGENT_RUNTIME_DEPLOYMENT_FILE", canonicalDeploymentPath(t))
 	output, err := captureStdout(t, func() error { return validate(nil) })
 	if err != nil {
 		t.Fatalf("validate() error = %v", err)
 	}
-	if !strings.Contains(output, "name=liki-agent-runtime-deployment") {
+	if !strings.Contains(output, "name=agent-runtime-deployment") {
 		t.Fatalf("output missing deployment name: %q", output)
 	}
 }

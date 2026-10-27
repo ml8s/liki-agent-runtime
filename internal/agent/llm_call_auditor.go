@@ -5,11 +5,11 @@ import (
 	"sync"
 	"time"
 
-	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/execution"
 	"google.golang.org/adk/v2/agent"
 )
 
@@ -45,13 +45,15 @@ func newLLMCallAuditor(recorder audit.Recorder, metrics execution.Metrics, provi
 	return ledger
 }
 
-func (l *llmCallAuditor) begin(sessionID string, scope *runExecution) bool {
+func (l *llmCallAuditor) begin(handle AuditAttemptHandle, scope *runExecution) bool {
+	handle = handle.normalize()
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	primaryID := scope.attemptKey
-	if primaryID == "" {
-		primaryID = sessionID
+	if err := handle.validate(); err != nil {
+		return false
 	}
+	primaryID := handle.AttemptID
+	scope.attemptKey = primaryID
 	if _, exists := l.scopes[primaryID]; exists {
 		return false
 	}
@@ -60,10 +62,11 @@ func (l *llmCallAuditor) begin(sessionID string, scope *runExecution) bool {
 	}
 	l.scopes[primaryID] = scope
 	l.scopes[string(scope.identity.RunID)] = scope
-	if l.sessionAttempts[sessionID] == nil {
-		l.sessionAttempts[sessionID] = make(map[string]struct{})
+	scope.sessionID = handle.ADKSessionID
+	if l.sessionAttempts[handle.ADKSessionID] == nil {
+		l.sessionAttempts[handle.ADKSessionID] = make(map[string]struct{})
 	}
-	l.sessionAttempts[sessionID][primaryID] = struct{}{}
+	l.sessionAttempts[handle.ADKSessionID][primaryID] = struct{}{}
 	return true
 }
 
@@ -81,34 +84,36 @@ func (l *llmCallAuditor) closeActive(scope *runExecution, runErr error) error {
 	return l.failActive(scope, failure, l.now())
 }
 
-func (l *llmCallAuditor) forget(sessionID string) {
+func (l *llmCallAuditor) forget(handle AuditAttemptHandle) {
+	handle = handle.normalize()
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for primaryID := range l.sessionAttempts[sessionID] {
+	for primaryID := range l.sessionAttempts[handle.ADKSessionID] {
 		if scope, exists := l.scopes[primaryID]; exists {
 			delete(l.scopes, string(scope.identity.RunID))
 		}
 		delete(l.scopes, primaryID)
 	}
-	delete(l.sessionAttempts, sessionID)
+	delete(l.sessionAttempts, handle.ADKSessionID)
 }
 
-func (l *llmCallAuditor) forgetAttempt(attemptID string) {
+func (l *llmCallAuditor) forgetAttempt(handle AuditAttemptHandle) {
+	handle = handle.normalize()
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	scope, exists := l.scopes[attemptID]
+	scope, exists := l.scopes[handle.AttemptID]
 	if !exists {
 		return
 	}
 	delete(l.scopes, string(scope.identity.RunID))
-	delete(l.scopes, attemptID)
-	if attempts := l.sessionAttempts[scope.attemptKey]; attempts != nil {
-		delete(attempts, attemptID)
+	delete(l.scopes, handle.AttemptID)
+	if attempts := l.sessionAttempts[handle.ADKSessionID]; attempts != nil {
+		delete(attempts, handle.AttemptID)
 		if len(attempts) == 0 {
-			delete(l.sessionAttempts, scope.attemptKey)
+			delete(l.sessionAttempts, handle.ADKSessionID)
 		}
 	}
-	l.unbindAttemptLocked(attemptID)
+	l.unbindAttemptLocked(handle.AttemptID)
 }
 
 func (l *llmCallAuditor) unbindAttemptLocked(attemptID string) {
@@ -119,13 +124,14 @@ func (l *llmCallAuditor) unbindAttemptLocked(attemptID string) {
 	}
 }
 
-func (l *llmCallAuditor) end(sessionID string, runErr error) {
-	scope, exists := l.scope(sessionID)
+func (l *llmCallAuditor) end(handle AuditAttemptHandle, runErr error) {
+	handle = handle.normalize()
+	scope, exists := l.scope(handle.AttemptID)
 	if !exists {
 		return
 	}
 	_ = l.closeActive(scope, runErr)
-	l.forget(sessionID)
+	l.forgetAttempt(handle)
 }
 
 func (l *llmCallAuditor) scope(sessionID string) (*runExecution, bool) {

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
-	"github.com/ml8s/liki-agent-runtime/internal/protocol/agui"
+	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/protocol/agui"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"

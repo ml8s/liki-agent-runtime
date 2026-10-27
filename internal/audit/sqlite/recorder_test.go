@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 var (
@@ -337,7 +337,7 @@ func TestAuditRecorderBatchInsertMatchesDirectPath(t *testing.T) {
 	directEvent.TargetAgent = "target"
 	directEvent.DelegationDepth = 2
 	directEvent.ToolCallID = "call_1"
-	directEvent.ToolName = "engine_tool"
+	directEvent.ToolName = "tool"
 	directEvent.DurationMS = 1234
 	directEvent.Payload = map[string]any{"key": "value", "count": 2}
 	if err := recorder.repository.Record(ctx, &directEvent); err != nil {
@@ -483,4 +483,25 @@ func TestAuditStoreInMemoryMode(t *testing.T) {
 
 func ptrEvent(event audit.Event) *audit.Event {
 	return &event
+}
+
+func TestAuditStorageStats(t *testing.T) {
+	store, recorder := newRecorderStore(t)
+	ctx := context.Background()
+	started := recorderEvent("stats-run", false)
+	completed := recorderEvent("stats-run", true)
+	if err := recorder.Record(ctx, &started); err != nil {
+		t.Fatalf("Record(started) error = %v", err)
+	}
+	if err := recorder.Record(ctx, &completed); err != nil {
+		t.Fatalf("Record(completed) error = %v", err)
+	}
+
+	stats, err := store.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats() error = %v", err)
+	}
+	if stats.Events != 2 {
+		t.Fatalf("Stats() events = %d, want 2", stats.Events)
+	}
 }

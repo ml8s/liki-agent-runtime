@@ -1,4 +1,7 @@
-package agent
+// Package sqlite configures the official ADK relational session service with a
+// safe local SQLite deployment. Database technology remains in this adapter;
+// runtime composition consumes only the official ADK session port.
+package sqlite
 
 import (
 	"context"
@@ -10,24 +13,24 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"github.com/ml8s/liki-agent-runtime/internal/platform"
+	"github.com/ml8s/agent-runtime/internal/platform"
 	"google.golang.org/adk/v2/session"
 	adksession "google.golang.org/adk/v2/session/database"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-// SQLiteSessionService owns the official ADK relational session service and
+// SessionService owns the official ADK relational session service and
 // its underlying database handle. Runtime composition closes it on shutdown.
-type SQLiteSessionService struct {
+type SessionService struct {
 	service session.Service
 	db      *sql.DB
 }
 
-// OpenSQLiteSessionService opens the official ADK relational session service
+// Open opens the official ADK relational session service
 // backed by SQLite. The service and its schema come from ADK; this adapter only
 // configures a safe SQLite deployment.
-func OpenSQLiteSessionService(path string) (*SQLiteSessionService, error) {
+func Open(path string) (*SessionService, error) {
 	if path == "" {
 		return nil, fmt.Errorf("sqlite path is required")
 	}
@@ -85,11 +88,11 @@ func OpenSQLiteSessionService(path string) (*SQLiteSessionService, error) {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("migrate ADK sessions: %w", err)
 	}
-	return &SQLiteSessionService{service: service, db: sqlDB}, nil
+	return &SessionService{service: service, db: sqlDB}, nil
 }
 
 // SessionService returns the official ADK service.
-func (s *SQLiteSessionService) SessionService() session.Service {
+func (s *SessionService) SessionService() session.Service {
 	if s == nil {
 		return nil
 	}
@@ -97,7 +100,7 @@ func (s *SQLiteSessionService) SessionService() session.Service {
 }
 
 // CheckHealth reports whether ADK session storage is reachable.
-func (s *SQLiteSessionService) CheckHealth(ctx context.Context) platform.DependencyHealth {
+func (s *SessionService) CheckHealth(ctx context.Context) platform.DependencyHealth {
 	health := platform.DependencyHealth{Name: "adk_session_state", OK: true}
 	if s == nil || s.db == nil {
 		health.OK = false
@@ -114,7 +117,7 @@ func (s *SQLiteSessionService) CheckHealth(ctx context.Context) platform.Depende
 }
 
 // Close releases the underlying database.
-func (s *SQLiteSessionService) Close() error {
+func (s *SessionService) Close() error {
 	if s == nil || s.db == nil {
 		return nil
 	}

@@ -6,14 +6,14 @@ import (
 	"sync"
 	"testing"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 
-	"github.com/ml8s/liki-agent-runtime/internal/testagent"
+	"github.com/ml8s/agent-runtime/internal/testagent"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/audit"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -135,7 +135,7 @@ func newTestRuntimeWithLimit(
 ) *Runtime {
 	t.Helper()
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	server := mcp.NewServer(&mcp.Implementation{Name: "stub-engine", Version: "test"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "stub-mcp", Version: "test"}, nil)
 	server.AddTool(
 		&mcp.Tool{Name: "test_tool", InputSchema: &jsonschema.Schema{Type: "object"}},
 		func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {

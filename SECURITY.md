@@ -1,11 +1,11 @@
 # Security Policy
 
-`liki-agent-runtime` is an internal runtime and must not be exposed directly to the
+`agent-runtime` is an internal runtime and must not be exposed directly to the
 public internet.
 
 Required controls:
 
-- Internal bearer token between the gateway and `liki-agent-runtime` outside local
+- Internal bearer token between the gateway and `agent-runtime` outside local
   development.
 - The same internal token for protocol calls and `/metrics`.
 - Verified user context supplied by the gateway for AG-UI.
@@ -14,7 +14,7 @@ Required controls:
 - Internet-facing request rate limiting is owned by the gateway; the runtime's
   internal per-source limiter only resists token brute force.
 - Bounded per-source throttling of invalid bearer or identity attempts.
-- Deployment integrity is owned by liki-deploy, which assembles the images by
+- Deployment integrity is owned by deployment system, which assembles the images by
   commit sha; the runtime keeps no duplicate artifact pin.
 - HTTPS-only LLM endpoints outside development and no credentials embedded in
   configured URLs.

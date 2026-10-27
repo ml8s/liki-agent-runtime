@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Start the locally built runtime image with the development deployment and
 # verify its operational and public A2A surfaces. MCP dependency health needs
-# real engine/counsel upstreams and is covered by assembly E2E.
+# real MCP upstreams and is covered by assembly E2E.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE_TAG="${IMAGE_TAG:-$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo local)}"
-IMAGE="${IMAGE:-${LIKI_AGENT_RUNTIME_IMAGE:-liki-local/liki-agent-runtime:$IMAGE_TAG}}"
+IMAGE="${IMAGE:-${AGENT_RUNTIME_IMAGE:-agent-runtime-local/agent-runtime:$IMAGE_TAG}}"
 PORT="${AGENTS_SMOKE_PORT:-18083}"
 OPS_PORT="${AGENTS_SMOKE_OPS_PORT:-18085}"
-NAME="liki-agent-runtime-smoke-$$"
+NAME="agent-runtime-smoke-$$"
 
 cleanup() {
   docker rm -f "$NAME" >/dev/null 2>&1 || true
@@ -23,21 +23,21 @@ docker run -d --name "$NAME" \
   -v "$ROOT/dev/agent-deployment:/agent-deployment:ro" \
   -v "$ROOT/dev/agent-deployment/skills:/skills:ro" \
   --tmpfs /data:uid=65532,gid=65532 \
-  -e LIKI_ENV=development \
-  -e LIKI_AGENT_RUNTIME_TOPOLOGY=single \
-  -e LIKI_AGENT_RUNTIME_PROTOCOL_ADDR=:8083 \
-  -e LIKI_AGENT_RUNTIME_OPS_ADDR=:8085 \
-  -e LIKI_AGENT_RUNTIME_PUBLIC_URL=http://127.0.0.1:8083 \
-  -e LIKI_AGENT_RUNTIME_AUDIT_DB_PATH=/data/liki-agent-runtime-audit.db \
-  -e LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE=/agent-deployment/deployment.json \
-  -e LIKI_MCP_ENGINE_URL=http://127.0.0.1:9/mcp \
-  -e LIKI_MCP_COUNSEL_URL=http://127.0.0.1:9/mcp/bazi \
-  -e LIKI_MCP_ENGINE_TOKEN=smoke-not-used \
-  -e LIKI_MCP_COUNSEL_TOKEN=smoke-not-used \
-  -e LIKI_AGENT_RUNTIME_LLM_BASE_URL=http://127.0.0.1:9/v1 \
-  -e LIKI_AGENT_RUNTIME_LLM_API_KEY=smoke-not-used \
-  -e LIKI_AGENT_RUNTIME_LLM_MODEL=smoke \
-  -e LIKI_AGENT_RUNTIME_LLM_PROVIDER=openai \
+  -e AGENT_RUNTIME_ENV=development \
+  -e AGENT_RUNTIME_TOPOLOGY=single \
+  -e AGENT_RUNTIME_PROTOCOL_ADDR=:8083 \
+  -e AGENT_RUNTIME_OPS_ADDR=:8085 \
+  -e AGENT_RUNTIME_PUBLIC_URL=http://127.0.0.1:8083 \
+  -e AGENT_RUNTIME_AUDIT_DB_PATH=/data/agent-runtime-audit.db \
+  -e AGENT_RUNTIME_DEPLOYMENT_FILE=/agent-deployment/deployment.json \
+  -e AGENT_RUNTIME_MCP_TOOLS_A_URL=http://127.0.0.1:9/mcp \
+  -e AGENT_RUNTIME_MCP_TOOLS_B_URL=http://127.0.0.1:9/mcp \
+  -e AGENT_RUNTIME_MCP_TOOLS_A_TOKEN=smoke-not-used \
+  -e AGENT_RUNTIME_MCP_TOOLS_B_TOKEN=smoke-not-used \
+  -e AGENT_RUNTIME_LLM_BASE_URL=http://127.0.0.1:9/v1 \
+  -e AGENT_RUNTIME_LLM_API_KEY=smoke-not-used \
+  -e AGENT_RUNTIME_LLM_MODEL=smoke \
+  -e AGENT_RUNTIME_LLM_PROVIDER=openai \
   "$IMAGE" >/dev/null
 
 ready=false
@@ -53,11 +53,11 @@ for _ in $(seq 1 30); do
 done
 
 if [ "$ready" != true ]; then
-  echo "❌ liki-agent-runtime image did not become ready" >&2
+  echo "❌ agent-runtime image did not become ready" >&2
   docker logs "$NAME" >&2 || true
   exit 1
 fi
 
 curl -fsS "http://127.0.0.1:$OPS_PORT/version" | grep -q 'version'
 curl -fsS "http://127.0.0.1:$PORT/.well-known/agent-card.json" | grep -q '"protocolBinding":"JSONRPC"'
-echo "✅ liki-agent-runtime image smoke passed"
+echo "✅ agent-runtime image smoke passed"

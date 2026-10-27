@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"time"
 
-	deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deployment "github.com/ml8s/agent-runtime/internal/deployment"
 
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 // structuredOutputStateKeyPrefix matches llmagent.Config.OutputKey. ADK parses
@@ -66,10 +66,10 @@ type RunResult struct {
 // RunUsage aggregates model usage for one run (counters summed across every
 // finished model call).
 type RunUsage struct {
-	LLMCalls         int
-	PromptTokens     int
-	CompletionTokens int
-	ThoughtTokens    int
+	LLMCalls         int `json:"llm_calls"`
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	ThoughtTokens    int `json:"thought_tokens"`
 }
 
 // StructuredOutputStateKey returns the ADK session-state key that holds an

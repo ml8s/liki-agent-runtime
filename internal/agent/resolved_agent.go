@@ -3,7 +3,7 @@ package agent
 import (
 	"fmt"
 
-	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 
 	"google.golang.org/genai"
 )
@@ -50,13 +50,4 @@ func NewRuntimeAgentDefinition(
 		GenaiOutputSchema: genaiSchema,
 		RawOutputSchema:   resolved.RawOutputSchema,
 	}, nil
-}
-
-func resolvedAgentDefinitions(definitions []agentdeployment.AgentDefinition) []agentdeployment.ResolvedAgentDefinition {
-	resolved := make([]agentdeployment.ResolvedAgentDefinition, 0, len(definitions))
-	for index := range definitions {
-		definition := &definitions[index]
-		resolved = append(resolved, agentdeployment.ResolvedAgentDefinition{AgentDefinition: *definition})
-	}
-	return resolved
 }

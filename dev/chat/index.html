@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>liki-agent-runtime dev chat</title>
+  <title>agent-runtime dev chat</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
     body { margin: 0 auto; max-width: 860px; padding: 1rem; }
@@ -22,7 +22,7 @@
   </style>
 </head>
 <body>
-  <h1>liki-agent-runtime development chat</h1>
+  <h1>agent-runtime development chat</h1>
   <form>
     <div class="settings">
       <input id="token" type="password" placeholder="Internal bearer token (optional in dev)" autocomplete="off">
@@ -50,7 +50,7 @@
     const userId = document.querySelector("#userId");
     const token = document.querySelector("#token");
 
-    threadId.value = localStorage.getItem("liki-agent-runtime-dev-thread") ?? crypto.randomUUID();
+    threadId.value = localStorage.getItem("agent-runtime-dev-thread") ?? crypto.randomUUID();
     let history = [];
     let running = false;
     let currentAgent;
@@ -84,7 +84,7 @@
     }
 
     function persistThread() {
-      localStorage.setItem("liki-agent-runtime-dev-thread", threadId.value);
+      localStorage.setItem("agent-runtime-dev-thread", threadId.value);
     }
 
     async function sendMessage() {
@@ -100,7 +100,7 @@
       const agent = new HttpAgent({
         headers: {
           ...(token.value ? { Authorization: `Bearer ${token.value}` } : {}),
-          "X-Liki-User-ID": userId.value,
+          "X-Agent-User-ID": userId.value,
         },
         initialMessages: structuredClone(history),
         threadId: threadId.value,

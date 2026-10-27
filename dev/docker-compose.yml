@@ -1,7 +1,7 @@
 services:
-  engine-mcp:
-    image: liki-engine:local
-    entrypoint: ["/usr/local/bin/engine-mcp", "--addr", ":8085"]
+  mcp-tools-a:
+    image: agent-runtime-example/mcp-tools-a:local
+    entrypoint: ["/usr/local/bin/mcp-tools-a", "--addr", ":8085"]
     profiles: ["mcp"]
     expose: ["8085"]
     environment:
@@ -14,17 +14,17 @@ services:
           memory: 256M
           cpus: "1"
 
-  counsel-mcp:
-    image: liki-counsel:local
+  mcp-tools-b:
+    image: agent-runtime-example/mcp-tools-b:local
     profiles: ["mcp"]
     expose: ["8086"]
     environment:
-      LIKI_MCP_URL: http://engine-mcp:8085/mcp
-      LIKI_MCP_TIMEOUT: ${LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS:-30}
+      AGENT_RUNTIME_MCP_UPSTREAM_URL: http://mcp-tools-a:8085/mcp
+      AGENT_RUNTIME_MCP_TIMEOUT: ${AGENT_RUNTIME_MCP_TIMEOUT_SECONDS:-30}
     restart: "no"
     init: true
     depends_on:
-      engine-mcp:
+      mcp-tools-a:
         condition: service_started
     deploy:
       resources:
@@ -32,34 +32,34 @@ services:
           memory: 256M
           cpus: "0.5"
 
-  liki-agent-runtime:
-    image: liki-agent-runtime:local
+  agent-runtime:
+    image: agent-runtime:local
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${LIKI_AGENT_RUNTIME_VERSION:-local}
-        COMMIT: ${LIKI_AGENT_RUNTIME_COMMIT:-unknown}
-        BUILD_TIME: ${LIKI_AGENT_RUNTIME_BUILD_TIME:-unknown}
+        VERSION: ${AGENT_RUNTIME_VERSION:-local}
+        COMMIT: ${AGENT_RUNTIME_COMMIT:-unknown}
+        BUILD_TIME: ${AGENT_RUNTIME_BUILD_TIME:-unknown}
     environment:
-      LIKI_ENV: development
-      LIKI_AGENT_RUNTIME_TOPOLOGY: ${LIKI_AGENT_RUNTIME_TOPOLOGY:-single}
-      LIKI_AGENT_RUNTIME_INTERNAL_TOKEN: ${LIKI_AGENT_RUNTIME_INTERNAL_TOKEN:-dev-agent-token}
-      LIKI_AGENT_RUNTIME_PUBLIC_URL: ${LIKI_AGENT_RUNTIME_PUBLIC_URL:-http://127.0.0.1:8083}
-      LIKI_MCP_ENGINE_URL: http://engine-mcp:8085/mcp
-      LIKI_MCP_COUNSEL_URL: http://counsel-mcp:8086/mcp/bazi
-      LIKI_MCP_ENGINE_TOKEN: ${LIKI_MCP_ENGINE_TOKEN:-}
-      LIKI_MCP_COUNSEL_TOKEN: ${LIKI_MCP_COUNSEL_TOKEN:-}
-      LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS: ${LIKI_AGENT_RUNTIME_MCP_TIMEOUT_SECONDS:-30}
-      LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS: ${LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS:-32}
-      LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE: /agent-deployment/deployment.json
-      LIKI_AGENT_RUNTIME_LLM_BASE_URL: ${LIKI_AGENT_RUNTIME_LLM_BASE_URL:?LIKI_AGENT_RUNTIME_LLM_BASE_URL is required}
-      LIKI_AGENT_RUNTIME_LLM_API_KEY: ${LIKI_AGENT_RUNTIME_LLM_API_KEY}
-      LIKI_AGENT_RUNTIME_LLM_MODEL: ${LIKI_AGENT_RUNTIME_LLM_MODEL:?LIKI_AGENT_RUNTIME_LLM_MODEL is required}
-      LIKI_AGENT_RUNTIME_LLM_TEMPERATURE: ${LIKI_AGENT_RUNTIME_LLM_TEMPERATURE:-0.2}
-      LIKI_AGENT_RUNTIME_LLM_PROVIDER: ${LIKI_AGENT_RUNTIME_LLM_PROVIDER:?LIKI_AGENT_RUNTIME_LLM_PROVIDER is required}
-      LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT: ${LIKI_AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT:-}
-      LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS: ${LIKI_AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS:-}
+      AGENT_RUNTIME_ENV: development
+      AGENT_RUNTIME_TOPOLOGY: ${AGENT_RUNTIME_TOPOLOGY:-single}
+      AGENT_RUNTIME_INTERNAL_TOKEN: ${AGENT_RUNTIME_INTERNAL_TOKEN:-dev-agent-token}
+      AGENT_RUNTIME_PUBLIC_URL: ${AGENT_RUNTIME_PUBLIC_URL:-http://127.0.0.1:8083}
+      AGENT_RUNTIME_MCP_TOOLS_A_URL: http://mcp-tools-a:8085/mcp
+      AGENT_RUNTIME_MCP_TOOLS_B_URL: http://mcp-tools-b:8086/mcp
+      AGENT_RUNTIME_MCP_TOOLS_A_TOKEN: ${AGENT_RUNTIME_MCP_TOOLS_A_TOKEN:-}
+      AGENT_RUNTIME_MCP_TOOLS_B_TOKEN: ${AGENT_RUNTIME_MCP_TOOLS_B_TOKEN:-}
+      AGENT_RUNTIME_MCP_TIMEOUT_SECONDS: ${AGENT_RUNTIME_MCP_TIMEOUT_SECONDS:-30}
+      AGENT_RUNTIME_MAX_CONCURRENT_RUNS: ${AGENT_RUNTIME_MAX_CONCURRENT_RUNS:-32}
+      AGENT_RUNTIME_DEPLOYMENT_FILE: /agent-deployment/deployment.json
+      AGENT_RUNTIME_LLM_BASE_URL: ${AGENT_RUNTIME_LLM_BASE_URL:?AGENT_RUNTIME_LLM_BASE_URL is required}
+      AGENT_RUNTIME_LLM_API_KEY: ${AGENT_RUNTIME_LLM_API_KEY}
+      AGENT_RUNTIME_LLM_MODEL: ${AGENT_RUNTIME_LLM_MODEL:?AGENT_RUNTIME_LLM_MODEL is required}
+      AGENT_RUNTIME_LLM_TEMPERATURE: ${AGENT_RUNTIME_LLM_TEMPERATURE:-0.2}
+      AGENT_RUNTIME_LLM_PROVIDER: ${AGENT_RUNTIME_LLM_PROVIDER:?AGENT_RUNTIME_LLM_PROVIDER is required}
+      AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT: ${AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT:-}
+      AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS: ${AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS:-}
     ports:
       - "8083:8083"
       - "8085:8085"
@@ -73,7 +73,7 @@ services:
     init: true
     stop_grace_period: 35s
     healthcheck:
-      test: ["CMD", "/liki-agent-runtime", "healthcheck"]
+      test: ["CMD", "/agent-runtime", "healthcheck"]
       interval: 30s
       timeout: 3s
       start_period: 10s

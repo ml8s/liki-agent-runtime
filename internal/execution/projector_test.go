@@ -3,7 +3,7 @@ package execution
 import (
 	"testing"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"

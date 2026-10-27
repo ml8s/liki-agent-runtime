@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 )
 
 // FourAgentArtifactIsLoadable proves the generic runtime can describe a
@@ -13,7 +13,7 @@ import (
 func TestFourAgentArtifactIsLoadable(t *testing.T) {
 	root := t.TempDir()
 	manifest := `{
-		"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "generic-four-agents", "version": "1.0.0"},
+		"schema_version": "agent.deployment.v1", "metadata": {"name": "generic-four-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
 			"agents": [
@@ -41,7 +41,7 @@ func TestFourAgentArtifactIsLoadable(t *testing.T) {
 					"mode": "task",
 					"sub_agents": [{"name": "reviewer"}],
 					"instruction": {"path": "instruction.md"},
-					"skills": {"root": "/skills"}, "tools": {"allow": {"test": ["engine_tool"], "skilltoolset": ["list_skills", "load_skill", "load_skill_resource"]}}
+					"skills": {"root": "/skills"}, "tools": {"allow": {"test": ["generic_tool"], "skilltoolset": ["list_skills", "load_skill", "load_skill_resource"]}}
 				},
 				{
 					"name": "reviewer", "version": "1.0.0",

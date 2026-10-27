@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/platform/tlsconf"
+	"github.com/ml8s/agent-runtime/internal/platform/tlsconf"
 )
 
 type testPKI struct {
@@ -42,7 +42,7 @@ func newTestPKI(t *testing.T) testPKI {
 	}
 	caTemplate := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "liki-test-ca"},
+		Subject:               pkix.Name{CommonName: "agent-runtime-test-ca"},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		IsCA:                  true,
@@ -112,8 +112,8 @@ func newTestPKI(t *testing.T) testPKI {
 	}
 
 	serverCertFile, serverKeyFile, serverPair := writeLeaf(
-		"server", "spiffe://liki/runtime/test", []net.IP{net.ParseIP("127.0.0.1")}, 2)
-	_, _, clientPair := writeLeaf("web", "spiffe://liki/web", nil, 3)
+		"server", "spiffe://agent-runtime/runtime/test", []net.IP{net.ParseIP("127.0.0.1")}, 2)
+	_, _, clientPair := writeLeaf("web", "spiffe://agent-runtime/web", nil, 3)
 
 	return testPKI{
 		caFile:         caFile,

@@ -6,7 +6,8 @@ rule is:
 1. use an existing external standard when one exists;
 2. use that standard's official/reference Go implementation when one exists;
 3. use an established ecosystem library for a standardized format;
-4. implement private logic only for Liki-owned business rules, behind a port;
+4. implement product/domain-specific behavior in the caller or deployment content,
+   not in the generic runtime;
 5. never invent a private wire protocol or redefine standard protocol fields.
 
 ## Protocol matrix
@@ -18,6 +19,7 @@ rule is:
 | A2A extensions | Agent Card `AgentExtension` with a published URI specification | none advertised | Keep the no-extension policy unless an extension has a published specification and an SDK-supported compatibility suite. |
 | Frontend agent events | [AG-UI events](https://docs.ag-ui.com/concepts/events) | `github.com/ag-ui-protocol/ag-ui/sdks/community/go` | Keep official event objects and lifecycle rules. |
 | Tool access | [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) | `github.com/modelcontextprotocol/go-sdk` | Keep official `tools/list` and `tools/call`; filtering is application authorization after standard discovery. Discovery results are memoized per server (60s TTL, stale-on-error) without changing the wire protocol or the authorization order. Readiness accepts any SDK-supported protocol revision reached through negotiation (`2025-03-26` and later), not only the newest one. Stand-alone SSE delivery is disabled: the tool surface is deployment-fixed at startup. |
+| A2A protocol state | A2A Task, TaskVersion, and push-config semantics | `github.com/a2aproject/a2a-go/v2` official store ports | Keep. This is protocol state only; it must not be treated as product conversation history. |
 | Typed output | JSON Schema 2020-12 | `github.com/google/jsonschema-go/jsonschema` | Keep. |
 | Output text location | RFC 6901 JSON Pointer | `github.com/qri-io/jsonpointer` plus static JSON Schema traversal | Keep. Pointer parsing must use the RFC library; only schema traversal is local. |
 | Content integrity | SHA-256 (`crypto/sha256`) with a lower-case `sha256:<64-hex>` value | Go standard library | Keep. Deployment pinning is configuration trust, not protocol. |
@@ -53,7 +55,7 @@ The service is deliberately **single-process/single-replica**:
 - audit evidence is in a local SQLite file;
 - MCP toolsets and the ADK graph are process-local.
 
-`LIKI_AGENT_RUNTIME_TOPOLOGY` makes that mode explicit. Its default and only
+`AGENT_RUNTIME_TOPOLOGY` makes that mode explicit. Its default and only
 supported value is `single`; `multi` is recognized but fails closed so an
 orchestrator cannot accidentally scale an unsafe process.
 
@@ -63,17 +65,23 @@ shared by multiple nodes.
 
 ### Idempotent run boundary
 
-The runtime keeps run semantics idempotent and stateless: a given RunID
-executes at most once, the ADK session is run-scoped and deleted at terminal
-execution, and crashes are never resumed — startup recovery only appends
-`runtime_interrupted` terminal evidence. Multi-turn dialogue is owned by the
-caller (`liki-web`), which persists history and carries it into a new run.
+The runtime keeps an execution attempt idempotent: a given attempt/RunID
+executes at most once and crashes are never resumed. Startup recovery only
+appends `runtime_interrupted` terminal evidence.
 
-A2A same-TaskID pause-and-resume (`input-required` / long-running tools) is
-therefore out of scope for this stateless runtime: it requires cross-run
-recoverable session state, shared task/session storage, and transactional
-audit/run ownership — the phase 2 shared-state prerequisites above. The runtime
-does not claim to support it on the standard RPC surface today.
+The two protocol profiles own session state differently:
+
+- **AG-UI** uses a run-scoped ADK session (`run:<RunID>`) that is deleted at
+  terminal execution. Durable multi-turn history remains owned by `caller`.
+- **A2A** uses the official ADK mapping in which ContextID owns the ADK
+  session. An attempt audit can end while the ContextID session remains
+  usable by later standard operations.
+
+At startup, process-owned task states (`unspecified`, `submitted`, and
+`working`) are marked failed because their in-process execution cannot resume.
+Client-owned wait states (`input-required` and `auth-required`) are preserved
+against the durable ContextID session. This is still single-replica: SQLite is
+not shared, and `multi` remains fail-closed.
 
 ### Configuration ownership
 

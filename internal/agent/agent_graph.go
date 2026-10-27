@@ -7,14 +7,14 @@ import
 // duplicate construction; the building set detects delegation cycles. MCP
 // servers not covered by an Agent's allowlist never enter that Agent's
 // toolset (deny-by-default).
-agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 
 import (
 	"fmt"
 
-	"github.com/ml8s/liki-agent-runtime/internal/execution"
+	"github.com/ml8s/agent-runtime/internal/execution"
 
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"

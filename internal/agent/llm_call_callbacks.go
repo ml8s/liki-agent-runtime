@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/liki-agent-runtime/internal/audit"
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
@@ -17,7 +17,7 @@ func (l *llmCallAuditor) beforeModel(ctx agent.Context, request *model.LLMReques
 	if request == nil {
 		return nil, domain.NewError(domain.CodeLLMRequestInvalid, "LLM request is required", domain.ErrInvalidInput)
 	}
-	scope, ok := l.scope(ctx.SessionID())
+	scope, ok := l.auditScope(ctx)
 	if !ok || l.recorder == nil {
 		return nil, domain.NewError(
 			domain.CodeAuditScopeMissing,
@@ -75,7 +75,7 @@ func (l *llmCallAuditor) beforeModel(ctx agent.Context, request *model.LLMReques
 }
 
 func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMResponse, responseErr error) (*model.LLMResponse, error) {
-	scope, ok := l.scope(ctx.SessionID())
+	scope, ok := l.auditScope(ctx)
 	if !ok {
 		return response, responseErr
 	}
@@ -158,7 +158,7 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 }
 
 func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMRequest, requestErr error) (*model.LLMResponse, error) {
-	scope, ok := l.scope(ctx.SessionID())
+	scope, ok := l.auditScope(ctx)
 	if !ok || requestErr == nil {
 		return nil, requestErr
 	}

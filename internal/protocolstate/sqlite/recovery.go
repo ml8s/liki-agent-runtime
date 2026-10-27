@@ -9,10 +9,12 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
-// RecoverAbandonedTasks deterministically closes non-terminal protocol tasks
-// left active by a previous process. A single-process runtime cannot resume
+// RecoverAbandonedTasks deterministically closes tasks left in process-owned
+// active states by a previous process. A single-process runtime cannot resume
 // their in-memory ADK work, so A2A's standard failed state is the truthful
-// terminal transition. This runs before the server accepts traffic.
+// terminal transition. Client-owned wait states (input-required and
+// auth-required) remain resumable against the durable ContextID session. This
+// runs before the server accepts traffic.
 func (db *DB) RecoverAbandonedTasks(ctx context.Context, now time.Time) (int, error) {
 	if db == nil || db.sql == nil {
 		return 0, fmt.Errorf("protocol state database is closed")
@@ -20,13 +22,11 @@ func (db *DB) RecoverAbandonedTasks(ctx context.Context, now time.Time) (int, er
 	rows, err := db.sql.QueryContext(ctx, `
 		SELECT task_id, tenant, principal, owner_key, version, task_json
 		FROM a2a_tasks
-		WHERE state IN (?, ?, ?, ?, ?)
-		ORDER BY task_id`,
+			WHERE state IN (?, ?, ?)
+			ORDER BY task_id`,
 		string(a2a.TaskStateUnspecified),
 		string(a2a.TaskStateSubmitted),
 		string(a2a.TaskStateWorking),
-		string(a2a.TaskStateInputRequired),
-		string(a2a.TaskStateAuthRequired),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("find abandoned tasks: %w", err)
@@ -83,11 +83,10 @@ func (db *DB) RecoverAbandonedTasks(ctx context.Context, now time.Time) (int, er
 			UPDATE a2a_tasks
 			SET state = ?, status_at_unix = ?, updated_at_unix = ?, version = ?, task_json = ?
 			WHERE task_id = ? AND owner_key = ? AND version = ?
-			  AND state IN (?, ?, ?, ?, ?)`,
+			  AND state IN (?, ?, ?)`,
 			string(a2a.TaskStateFailed), now.UnixNano(), now.UnixNano(), item.version+1, string(raw),
 			string(item.taskID), item.ownerKey, item.version,
 			string(a2a.TaskStateUnspecified), string(a2a.TaskStateSubmitted), string(a2a.TaskStateWorking),
-			string(a2a.TaskStateInputRequired), string(a2a.TaskStateAuthRequired),
 		)
 		if err != nil {
 			_ = tx.Rollback()

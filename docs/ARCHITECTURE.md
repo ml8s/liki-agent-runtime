@@ -2,19 +2,19 @@
 
 ## System boundary
 
-`liki-agent-runtime` is a generic multi-agent runtime. `liki-web` owns users,
+`agent-runtime` is a generic multi-agent runtime. `caller` owns users,
 authentication, products, payments, entitlements, quota, and durable product
-conversations. The Liki skill/project owns prompts, skills, domain policy, and
+conversations. The domain content repository owns prompts, skills, domain policy, and
 tool semantics. External MCP servers expose deterministic and judgment tools.
 
 ```text
 Server / machine client
   ↓ A2A JSON-RPC
 ┌────────────┐   MCP Streamable HTTP
-│ liki-agent-runtime │──────────────────────→ MCP tools (Engine, Counsel, ...)
+│ agent-runtime │──────────────────────→ MCP tools (MCP tools, MCP tools, ...)
 └────────────┘
   ↑ AG-UI SSE
-liki-web gateway
+caller gateway
 ```
 
 There is one execution path and no private `/v1` application API.
@@ -49,8 +49,8 @@ The manifest is decoded strictly by the runtime, then graph, file, MCP, and
 model-setting invariants are evaluated before startup.
 The deployment digest covers the manifest plus resolved instruction and output
 schema artifacts and the ADK graph semantics; it is an audit provenance label,
-not a startup gate. Deployment integrity is owned by liki-deploy: liki builds
-the assembly image from the sha-tagged local runtime base, and liki-deploy
+not a startup gate. Deployment integrity is owned by deployment system: the content build
+the assembly image from the sha-tagged local runtime base, and deployment system
 assembles and deploys the images by commit sha, so runtime binary, manifest,
 instructions, schemas, and skills roll out and roll back as one unit.
 
@@ -73,7 +73,7 @@ instructions, schemas, and skills roll out and roll back as one unit.
 ## Dependencies and modules
 
 ```text
-cmd/liki-agent-runtime
+cmd/agent-runtime
   → internal/transport
   → internal/protocol/a2a
   → internal/protocol/agui
@@ -84,23 +84,33 @@ internal/audit/sqlite
   → internal/audit
   → internal/domain
 
+internal/adksession/sqlite
+  → official ADK relational session service
+
+internal/protocolstate/sqlite
+  → A2A SDK stores
+
 internal/observability/prometheus
   → observability interfaces
 ```
 
 Protocol adapters never import each other. Database technology is confined to
-`internal/audit/sqlite` for append-only evidence and
-`internal/protocolstate/sqlite` for mutable standard protocol state.
+`internal/audit/sqlite` for append-only evidence,
+`internal/protocolstate/sqlite` for mutable standard protocol state, and
+`internal/adksession/sqlite` for the official ADK relational session adapter.
 
 | Module | Responsibility |
 |---|---|
 | `internal/protocol/a2a` | Agent Card and official A2A JSON-RPC binding |
 | `internal/protocol/agui` | Official AG-UI request decoding and SSE binding |
-| `internal/agent` | AgentDeployment loader, ADK graph, model adapter, MCP tools, audit hooks |
+| `internal/deployment` | AgentDeployment aggregate, strict loading, validation, and content identity |
+| `internal/agent` | ADK graph, model adapter, MCP tools, audit hooks |
+| `internal/adksession/sqlite` | Official ADK relational session service with safe SQLite configuration |
 | `internal/domain` | Runtime audit and validation invariants |
 | `internal/audit` | Immutable audit event format and recorder port |
 | `internal/audit/sqlite` | Append-only audit persistence |
-| `internal/protocolstate/sqlite` | A2A task aggregates and push callback configs |
+| `internal/protocolstate/sqlite` | A2A task aggregates and push notification configs |
+| `internal/execution` | Runtime-neutral run identity, event projection, output rules, and metrics port |
 | `internal/observability` | Metric interfaces |
 | `internal/observability/prometheus` | Prometheus implementation |
 | `internal/platform` | Configuration, identity, health interfaces, build metadata |
@@ -108,22 +118,27 @@ Protocol adapters never import each other. Database technology is confined to
 
 ## Runtime execution
 
-A protocol request is mapped to a generic `RunRequest`. History and opaque
+AG-UI requests are mapped to a generic `RunRequest`. History and opaque
 protocol context may be supplied by the caller; the runtime does not store
-product conversation state.
-History is rebuilt per run as native multi-turn events in the run-scoped ADK
-session (user and entrypoint-authored model turns, latest message last), so
-the model receives chronological turns and providers can prefix-cache every
-earlier turn; the seeded events are deleted with the session at terminal
-execution and the caller stays the owner of durable history.
+product conversation state. History is rebuilt per run as native multi-turn
+events in the run-scoped ADK session (user and entrypoint-authored model turns,
+latest message last), so the model receives chronological turns and providers
+can prefix-cache every earlier turn; the seeded events are deleted with the
+session at terminal execution and the caller stays the owner of durable
+history.
 
-Run, thread, and user identifiers are required. A RunID cannot start while it
-is active, and an ADK session is run-scoped: terminal execution removes the
-working session so the runtime does not retain prompts, model events, or tool
-responses in memory.
+A2A follows the official ADK mapping instead: ContextID owns the ADK session,
+TaskID owns the protocol aggregate, and a deterministic attempt ID owns runtime
+concurrency and audit scope. Attempt audit ends when the execution attempt ends;
+the ContextID session can survive an attempt.
+
+Run, thread, and user identifiers are required. A RunID/attempt ID cannot start
+while it is active. Terminal AG-UI execution removes its run-scoped working
+session; a successful A2A attempt preserves the ContextID-owned session so the
+standard protocol state can continue.
 Both protocol adapters enforce the configured total run deadline, and the
 runtime bounds concurrent model/MCP executions with
-`LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS`.
+`AGENT_RUNTIME_MAX_CONCURRENT_RUNS`.
 
 The entrypoint `AgentDefinition` supplies instruction, an optional output
 schema, and the tool allowlist. Plain text is the default. When structured
@@ -141,7 +156,7 @@ first model call. A failed refresh serves the last known catalog — declaration
 stay available — while every tool call still uses the live fast-fail transport,
 so a removed server-side tool fails its call rather than being hidden. The
 allowlist is applied after the memoized discovery, never bypassed by it
-(`liki_agents_mcp_catalog_requests_total` exposes hit/refresh/stale/error).
+(`agent_runtime_mcp_catalog_requests_total` exposes hit/refresh/stale/error).
 ADK's built-in `transfer_to_agent` call is not an MCP tool. It remains visible
 on AG-UI as a tool event and is audited through Agent delegation lifecycle
 events rather than MCP tool provenance.
@@ -169,15 +184,16 @@ result.
 Protocol choices are governed by [`STANDARDS.md`](STANDARDS.md); a private wire
 protocol must not replace a reviewed standard.
 
-On the mutual-TLS channel the verified `Remote-User` header carries the
-caller identity (the client certificate replaces the service token); plain
-requests keep the bearer token and the `X-Liki-User-ID` header. Runs that
-arrive over the mutual-TLS listener post a signed run-completed callback
-(CloudEvents structured mode + Standard Webhooks) to the control plane;
-relay runs are persisted by liki-web itself and never notify, so the relay
-stays a safe rollback lever.
+Protocol clients own product persistence and business follow-up. AG-UI protocol
+clients consume the standard SSE terminal event; A2A protocol clients consume
+task lifecycle events, standard task reads, or configured standard A2A push
+notifications.
+The runtime does not send private run-completed callbacks, CloudEvents, or
+product webhooks.
 
-A2A uses the official A2A Go SDK JSON-RPC binding and ADK A2A executor.
+A2A is a standard wire protocol, not an agent or persistence API. The runtime
+exposes an A2A protocol server and stores only protocol-owned task/push-config
+state. A2A uses the official A2A Go SDK JSON-RPC binding and ADK A2A executor.
 The runtime uses the executor's standard ContextID-to-ADK-session mapping. Task
 aggregates, client-registered push callbacks, and official ADK sessions live in
 separate SQLite databases from append-only audit evidence; push is enabled only through its two official dependencies and sends
@@ -188,7 +204,7 @@ event author against the deployment by both adapters (via
 entrypoint never leaks raw model JSON on either protocol.
 
 MCP endpoint bindings are deployment-owned complete URLs. A gateway may expose
-service prefixes such as `/engine` and `/counsel`; the MCP service owns its
+service prefixes such as `/tools-a` and `/tools-b`; the MCP service owns its
 standard `/mcp` and `/mcp/{domain}` routes. The runtime consumes the configured
 URL verbatim through the official MCP SDK and does not translate paths.
 
@@ -219,7 +235,7 @@ Event mapping:
 
 `RUN_FINISHED` contains the AgentDefinition reference, validated output when
 structured output is declared, and the authoritative user-facing `answer` text
-for the Liki product profile. A run never emits `RUN_ERROR` after
+for the domain content product profile. A run never emits `RUN_ERROR` after
 `RUN_FINISHED`.
 
 The A2A Agent Card uses curated `AgentDefinition` descriptions, mode, tool
@@ -234,11 +250,11 @@ canonical JSON on the wire is unchanged.
 ## Operations
 
 The operational surface (`/readyz`, `/version`, `/metrics`) is served on a
-dedicated ops listener (`LIKI_AGENT_RUNTIME_OPS_ADDR`, default `:8085`) so
+dedicated ops listener (`AGENT_RUNTIME_OPS_ADDR`, default `:8085`) so
 protocol mutual TLS never gates healthchecks or scrapers; `/metrics` keeps the
 same bearer-token boundary as protocol calls whenever an internal token is
 configured. The protocol listener can additionally expose a mutual-TLS
-endpoint (`LIKI_AGENT_RUNTIME_TLS_ADDR` plus the certificate trio, client
+endpoint (`AGENT_RUNTIME_TLS_ADDR` plus the certificate trio, client
 certificates verified against the CA). All POST endpoints enforce a 2 MB body
 limit.
 
@@ -254,7 +270,9 @@ During process drain, readiness reports `draining` before the standard HTTP
 server shutdown deadline waits for active protocol requests.
 
 Prometheus exposes protocol request count and duration, active streams, LLM
-calls and tokens, tool calls and duration, and dependency readiness. Structured
+calls and tokens, tool calls and duration, durable record growth, and
+dependency readiness. Storage gauges are sampled outside request paths; audit
+and protocol state retention policies remain deployment-owned. Structured
 logging uses `log/slog` with stable event names. Logs do not contain user prompts,
 raw model output, or tool payloads.
 

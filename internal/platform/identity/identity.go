@@ -1,5 +1,5 @@
 // Package identity carries the verified caller identity across service
-// boundaries. liki-web authenticates the end user; liki-agent-runtime trusts this
+// boundaries. caller authenticates the end user; agent-runtime trusts this
 // kernel identity only after its own service authentication.
 package identity
 

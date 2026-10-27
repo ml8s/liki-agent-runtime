@@ -1,7 +1,7 @@
 package execution
 
 import (
-	"github.com/ml8s/liki-agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 // RunIdentity identifies one execution aggregate. ThreadID and UserID are
