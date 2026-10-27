@@ -21,6 +21,8 @@ import (
 	"time"
 
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
+
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 )
 
 const (
@@ -31,14 +33,6 @@ const (
 	defaultBackoff  = time.Second
 )
 
-// Usage aggregates model usage for one run.
-type Usage struct {
-	LLMCalls         int
-	PromptTokens     int
-	CompletionTokens int
-	ThoughtTokens    int
-}
-
 // Record is one terminal run outcome to deliver.
 type Record struct {
 	RunID       string
@@ -48,7 +42,7 @@ type Record struct {
 	Status      string // completed | failed | canceled (A2A TaskState vocabulary)
 	Answer      string
 	Error       string
-	Usage       Usage
+	Usage       execution.RunUsage
 	StartedAt   time.Time
 	FinishedAt  time.Time
 }

@@ -1,11 +1,11 @@
 package agent
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"errors"
 	"strings"
+
+	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/execution"
 
@@ -92,7 +92,7 @@ func (r *Runtime) Run(
 	if auditErr := r.recordRunAudit(ctx, scope, audit.EventRunStarted, audit.StatusRunning, nil); auditErr != nil {
 		runErr = auditErr
 		auditScope, _ := r.callAuditor.scope(sessionID)
-		_, _ = r.callAuditor.end(sessionID, runErr)
+		r.callAuditor.end(sessionID, runErr)
 		_ = r.delegationAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
 		_ = r.toolAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
 		_ = r.sessions.Delete(context.WithoutCancel(ctx), &session.DeleteRequest{
@@ -107,7 +107,11 @@ func (r *Runtime) Run(
 		// Terminal evidence transaction (single implementation in
 		// run_evidence.go): the terminal event precedes any process-state
 		// release.
-		if err := r.closeRunEvidence(auditCtx, scope, runErr); err != nil && runErr == nil {
+		outcome := auditOutcomeCompleted
+		if runErr != nil {
+			outcome = auditOutcomeFailed
+		}
+		if err := r.closeRunEvidence(auditCtx, scope, runErr, outcome); err != nil && runErr == nil {
 			runErr = err
 		}
 		// Terminal evidence has been attempted; process state is released

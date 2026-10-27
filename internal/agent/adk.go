@@ -1,8 +1,7 @@
 package agent
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
+	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"

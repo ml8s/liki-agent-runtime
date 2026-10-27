@@ -3,6 +3,7 @@ package execution
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"google.golang.org/adk/v2/model"
@@ -87,18 +88,8 @@ func functionResponseEvent(author, name, callID string) *session.Event {
 	}
 }
 
-func TestNewRunState(t *testing.T) {
-	state := NewRunState(true)
-	if !state.CapturePlain {
-		t.Fatal("NewRunState(true).CapturePlain = false")
-	}
-	if state.Output.Text != "" || state.Output.JSON != nil {
-		t.Fatalf("initial output = %#v, want zero", state.Output)
-	}
-}
-
 func TestRunStateConsumeCapturesPlainFinalText(t *testing.T) {
-	state := NewRunState(true)
+	state := RunState{CapturePlain: true}
 
 	if next := state.Consume(nil); next.Output.Text != "" {
 		t.Fatalf("nil event output = %q, want empty", next.Output.Text)
@@ -121,7 +112,7 @@ func TestRunStateConsumeCapturesPlainFinalText(t *testing.T) {
 }
 
 func TestRunStateConsumeSkipsThoughtAndEmptyParts(t *testing.T) {
-	state := NewRunState(true)
+	state := RunState{CapturePlain: true}
 	event := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -138,7 +129,7 @@ func TestRunStateConsumeSkipsThoughtAndEmptyParts(t *testing.T) {
 }
 
 func TestRunStateConsumeNoCapturePlain(t *testing.T) {
-	state := NewRunState(false)
+	state := RunState{CapturePlain: false}
 	next := state.Consume(textEvent("main", "answer", false, true))
 	if next.Output.Text != "" {
 		t.Fatalf("CapturePlain=false output = %q, want empty", next.Output.Text)
@@ -146,7 +137,7 @@ func TestRunStateConsumeNoCapturePlain(t *testing.T) {
 }
 
 func TestRunStateConsumeNonFinalNoContent(t *testing.T) {
-	state := NewRunState(true)
+	state := RunState{CapturePlain: true}
 	next := state.Consume(&session.Event{
 		Author:      "main",
 		LLMResponse: model.LLMResponse{Partial: true},
@@ -195,7 +186,7 @@ func TestToolNameTrackerSkipsNonResponseParts(t *testing.T) {
 }
 
 func TestRunStateTools(t *testing.T) {
-	state := NewRunState(true)
+	state := RunState{CapturePlain: true}
 	if tools := state.Tools(); tools != nil {
 		t.Fatalf("initial Tools() = %v, want nil", tools)
 	}
@@ -206,5 +197,64 @@ func TestRunStateTools(t *testing.T) {
 	tools := state.Tools()
 	if len(tools) != 2 || tools[0] != "tool_a" || tools[1] != "tool_b" {
 		t.Fatalf("Tools() = %v, want [tool_a tool_b]", tools)
+	}
+}
+
+// TestRunStateConsumeIsImmutableForToolNames verifies the value semantics of
+// RunState across tool-tracking transitions.
+func TestRunStateConsumeIsImmutableForToolNames(t *testing.T) {
+	state := RunState{}
+	response := func(name string) *session.Event {
+		return functionResponseEvent("worker", name, "1")
+	}
+
+	state = state.Consume(response("tool_a"))
+	first := state
+	state = state.Consume(response("tool_a"))
+	state = state.Consume(response("tool_b"))
+
+	want := []string{"tool_a", "tool_b"}
+	if got := state.Tools(); !slices.Equal(got, want) {
+		t.Fatalf("tool names = %v, want %v", got, want)
+	}
+	if got := first.Tools(); !slices.Equal(got, want[:1]) {
+		t.Fatalf("previous state tool names = %v, want %v", got, want[:1])
+	}
+}
+
+// TestRunStateConsumeTracksMultipleToolsInOneEvent covers a single event
+// carrying several FunctionResponse parts (parallel tool calls).
+func TestRunStateConsumeTracksMultipleToolsInOneEvent(t *testing.T) {
+	state := RunState{}
+	event := &session.Event{LLMResponse: model.LLMResponse{
+		Content: &genai.Content{Parts: []*genai.Part{
+			responsePart("tool_a", "1"),
+			responsePart("tool_b", "2"),
+			responsePart("tool_a", "3"),
+		}},
+	}}
+
+	next := state.Consume(event)
+	want := []string{"tool_a", "tool_b"}
+	if got := next.Tools(); !slices.Equal(got, want) {
+		t.Fatalf("tool names = %v, want %v", got, want)
+	}
+	if len(state.Tools()) != 0 {
+		t.Fatalf("input state tool names = %v, want empty", state.Tools())
+	}
+}
+
+// TestRunStateConsumeCapturesDelegatedAuthorText verifies that the plain-text
+// capture does not require the entrypoint author; any agent's terminal final
+// response is user-facing.
+func TestRunStateConsumeCapturesDelegatedAuthorText(t *testing.T) {
+	state := RunState{CapturePlain: true}
+	event := textEvent("bazi", "delegated answer", false, true)
+	next := state.Consume(event)
+	if next.Output.Text != "delegated answer" {
+		t.Fatalf("output text = %q", next.Output.Text)
+	}
+	if state.Output.Text != "" {
+		t.Fatalf("input state text = %q, want unchanged", state.Output.Text)
 	}
 }

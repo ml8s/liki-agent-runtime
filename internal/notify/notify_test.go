@@ -13,6 +13,7 @@ import (
 
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
 
+	"github.com/ml8s/liki-agent-runtime/internal/execution"
 	"github.com/ml8s/liki-agent-runtime/internal/notify"
 )
 
@@ -26,20 +27,20 @@ func testRecord() notify.Record {
 		UserMessage: "你好",
 		Status:      "completed",
 		Answer:      "答案",
-		Usage:       notify.Usage{LLMCalls: 2, PromptTokens: 10, CompletionTokens: 20, ThoughtTokens: 1},
+		Usage:       execution.RunUsage{LLMCalls: 2, PromptTokens: 10, CompletionTokens: 20, ThoughtTokens: 1},
 		StartedAt:   time.Date(2026, 10, 19, 1, 0, 0, 0, time.UTC),
 		FinishedAt:  time.Date(2026, 10, 19, 1, 1, 0, 0, time.UTC),
 	}
 }
 
-func newTestNotifier(t *testing.T, url string, attempts int) *notify.Notifier {
+func newTestNotifier(t *testing.T, url string) *notify.Notifier {
 	t.Helper()
 	notifier, err := notify.New(notify.Config{
 		URL:      url,
 		Secret:   testSecret,
 		Source:   "spiffe://liki/runtime/natal",
 		Profile:  "natal",
-		Attempts: attempts,
+		Attempts: 3,
 		Backoff:  time.Millisecond,
 		Timeout:  time.Second,
 	})
@@ -92,7 +93,7 @@ func closeNotifier(t *testing.T, notifier *notify.Notifier) {
 
 func TestNotifierDeliversSignedCloudEvent(t *testing.T) {
 	server, capture, _ := newCaptureServer(t, func(int32) int { return http.StatusOK })
-	notifier := newTestNotifier(t, server.URL, 3)
+	notifier := newTestNotifier(t, server.URL)
 
 	notifier.Notify(testRecord())
 	closeNotifier(t, notifier)
@@ -172,7 +173,7 @@ func TestNotifierRetriesThenSucceeds(t *testing.T) {
 		}
 		return http.StatusOK
 	})
-	notifier := newTestNotifier(t, server.URL, 3)
+	notifier := newTestNotifier(t, server.URL)
 
 	notifier.Notify(testRecord())
 	closeNotifier(t, notifier)
@@ -187,7 +188,7 @@ func TestNotifierRetriesThenSucceeds(t *testing.T) {
 
 func TestNotifierGivesUpAfterConfiguredAttempts(t *testing.T) {
 	server, capture, attempts := newCaptureServer(t, func(int32) int { return http.StatusInternalServerError })
-	notifier := newTestNotifier(t, server.URL, 3)
+	notifier := newTestNotifier(t, server.URL)
 
 	notifier.Notify(testRecord())
 	closeNotifier(t, notifier)
@@ -202,7 +203,7 @@ func TestNotifierGivesUpAfterConfiguredAttempts(t *testing.T) {
 
 func TestNotifierCloseDrainsQueue(t *testing.T) {
 	server, capture, _ := newCaptureServer(t, func(int32) int { return http.StatusOK })
-	notifier := newTestNotifier(t, server.URL, 3)
+	notifier := newTestNotifier(t, server.URL)
 
 	for index := 0; index < 3; index++ {
 		record := testRecord()
@@ -218,7 +219,7 @@ func TestNotifierCloseDrainsQueue(t *testing.T) {
 
 func TestNotifierIgnoresNotifyAfterClose(t *testing.T) {
 	server, capture, attempts := newCaptureServer(t, func(int32) int { return http.StatusOK })
-	notifier := newTestNotifier(t, server.URL, 3)
+	notifier := newTestNotifier(t, server.URL)
 
 	closeNotifier(t, notifier)
 	notifier.Notify(testRecord())

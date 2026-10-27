@@ -1,7 +1,5 @@
 package execution
 
-import deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"bytes"
 	"encoding/json"
@@ -9,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"

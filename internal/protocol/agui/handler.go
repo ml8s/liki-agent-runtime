@@ -256,14 +256,9 @@ func (h *Handler) notifyCompletion(
 		UserMessage: spec.UserMessage,
 		Status:      status,
 		Answer:      result.Text,
-		Usage: notify.Usage{
-			LLMCalls:         result.Usage.LLMCalls,
-			PromptTokens:     result.Usage.PromptTokens,
-			CompletionTokens: result.Usage.CompletionTokens,
-			ThoughtTokens:    result.Usage.ThoughtTokens,
-		},
-		StartedAt:  startedAt,
-		FinishedAt: finishedAt,
+		Usage:       result.Usage,
+		StartedAt:   startedAt,
+		FinishedAt:  finishedAt,
 	}
 	if status == "failed" && runErr != nil {
 		record.Error = runErr.Error()

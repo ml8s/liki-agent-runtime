@@ -1,7 +1,5 @@
 package agent
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"fmt"
@@ -9,10 +7,11 @@ import (
 	"sync"
 	"time"
 
+	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 	"github.com/ml8s/liki-agent-runtime/internal/execution"
-	"go.opentelemetry.io/otel/trace"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -47,7 +46,7 @@ type DelegationAuditor struct {
 	now        func() time.Time
 	entrypoint string
 	agents     map[string]*agentdeployment.ResolvedAgentDefinition
-	scope      func(sessionID string) (*runExecution, bool)
+	scope      func(ctx adkagent.Context) (*runExecution, bool)
 
 	mu      sync.Mutex
 	pending map[string]DelegationExecutionRecord
@@ -58,7 +57,7 @@ func newDelegationAuditor(
 	metrics execution.Metrics,
 	now func() time.Time,
 	deployment *agentdeployment.AgentDeployment, entrypoint string,
-	scope func(sessionID string) (*runExecution, bool),
+	scope func(ctx adkagent.Context) (*runExecution, bool),
 ) *DelegationAuditor {
 	agents := make(map[string]*agentdeployment.ResolvedAgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
@@ -85,7 +84,7 @@ func (a *DelegationAuditor) BeforeAgent(ctx adkagent.Context) (*genai.Content, e
 	if ctx.AgentName() == a.entrypoint {
 		return nil, nil
 	}
-	scope, ok := a.scope(ctx.SessionID())
+	scope, ok := a.scope(ctx)
 	if !ok {
 		return nil, domain.NewError(domain.CodeAuditSessionRequired, "delegation has no audit scope", nil)
 	}
@@ -115,7 +114,7 @@ func (a *DelegationAuditor) AfterAgent(ctx adkagent.Context) (*genai.Content, er
 	if ctx.AgentName() == a.entrypoint {
 		return nil, nil
 	}
-	scope, ok := a.scope(ctx.SessionID())
+	scope, ok := a.scope(ctx)
 	if !ok {
 		return nil, domain.NewError(domain.CodeAuditSessionRequired, "delegation has no audit scope", nil)
 	}
@@ -277,19 +276,8 @@ func (a *DelegationAuditor) record(ctx context.Context, scope *runExecution, rec
 	if !ok {
 		return domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("delegated agent %q is not deployed", record.TargetAgent), nil)
 	}
-	status := audit.StatusRunning
-	switch eventType {
-	case audit.EventDelegationCompleted:
-		status = audit.StatusSucceeded
-	case audit.EventDelegationFailed:
-		status = audit.StatusFailed
-	}
-	sc := trace.SpanContextFromContext(ctx)
-	event := scopedEvent(scope)
+	event := scopedTerminalEvent(ctx, scope, eventType)
 	event.ID = fmt.Sprintf("%s/%s:%s", scope.identity.RunID, record.AgentPath, eventType)
-	event.Type = eventType
-	event.TraceID = sc.TraceID().String()
-	event.SpanID = sc.SpanID().String()
 	event.AgentName = record.TargetAgent
 	event.AgentVersion = target.Version
 	event.AgentDefinitionDigest = target.Digest
@@ -297,7 +285,6 @@ func (a *DelegationAuditor) record(ctx context.Context, scope *runExecution, rec
 	event.TargetAgent = record.TargetAgent
 	event.DelegationDepth = record.Depth
 	event.ParentRunID = scope.identity.RunID
-	event.Status = status
 	event.DurationMS = record.DurationMS
 	event.ErrorCode = record.ErrorCode
 	event.ErrorMessage = record.ErrorMessage

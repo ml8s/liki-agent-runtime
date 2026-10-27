@@ -28,14 +28,3 @@ func ValidateSkillToolsetAllow(tools []string) error {
 	}
 	return nil
 }
-
-// SkillBinding resolves the effective skills binding for an agent as a copy of
-// the deployment value: the artifact owns the root, and callers can adjust the
-// copy without mutating the shared definition.
-func SkillBinding(definition *AgentDefinition) *SkillsBinding {
-	if definition.Skills == nil {
-		return nil
-	}
-	binding := *definition.Skills
-	return &binding
-}

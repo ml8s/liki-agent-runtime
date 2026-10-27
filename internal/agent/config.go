@@ -1,11 +1,11 @@
 package agent
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/execution"
 

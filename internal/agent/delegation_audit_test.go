@@ -1,12 +1,12 @@
 package agent
 
-import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"strings"
 	"testing"
 	"time"
+
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"go.opentelemetry.io/otel/trace"
 
@@ -46,7 +46,7 @@ func newDelegationAuditorForTest(t *testing.T, branch string) (*DelegationAudito
 		func() time.Time { return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC) },
 		agentDeployment,
 		"coordinator",
-		ledger.scope,
+		ledger.auditScope,
 	)
 	ledger.begin("session_1", newTestScope())
 	ctx := &fakeAgentContext{
@@ -160,7 +160,7 @@ func TestDelegationAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T
 	scope := newTestScope()
 	ledger := newLLMCallAuditor(events, nil, "test-provider", agentDeployment, fixedLedgerNow)
 	ledger.begin("session_1", scope)
-	auditor := newDelegationAuditor(events, nil, fixedLedgerNow, agentDeployment, "coordinator", ledger.scope)
+	auditor := newDelegationAuditor(events, nil, fixedLedgerNow, agentDeployment, "coordinator", ledger.auditScope)
 	ctx := &fakeAgentContext{
 		sessionID:    "session_1",
 		invocationID: "inv_worker",

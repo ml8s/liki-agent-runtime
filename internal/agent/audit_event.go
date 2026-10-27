@@ -1,6 +1,11 @@
 package agent
 
-import "github.com/ml8s/liki-agent-runtime/internal/audit"
+import (
+	"context"
+
+	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
+)
 
 // scopedEvent seeds an audit event with the provenance fields that every
 // lifecycle event of a run shares. Callers then set the lifecycle and
@@ -15,8 +20,21 @@ func scopedEvent(scope *runExecution) audit.Event {
 		ThreadID:          scope.identity.ThreadID,
 		UserID:            scope.identity.UserID,
 		Protocol:          scope.provenance.Protocol,
+		ParentRunID:       domain.ID(scope.taskID),
 		DefinitionName:    scope.definitionName,
 		DefinitionVersion: scope.definitionVersion,
 		DefinitionDigest:  scope.definitionDigest,
 	}
+}
+
+// scopedTerminalEvent extends scopedEvent with the fields that every
+// auditor's record() populates identically: event type, derived status,
+// and the live trace identity from the request context.
+func scopedTerminalEvent(ctx context.Context, scope *runExecution, eventType audit.EventType) audit.Event {
+	event := scopedEvent(scope)
+	event.Type = eventType
+	event.Status = audit.StatusFor(eventType)
+	event.TraceID = traceIDFromContext(ctx)
+	event.SpanID = spanIDFromContext(ctx)
+	return event
 }

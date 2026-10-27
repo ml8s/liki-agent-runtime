@@ -53,25 +53,6 @@ func TestRunIdentityValidate(t *testing.T) {
 	}
 }
 
-func TestValidIdentifier(t *testing.T) {
-	validCases := []string{"run-1", "a b c", "中文标识", "x"}
-	for _, value := range validCases {
-		if !ValidIdentifier(value) {
-			t.Fatalf("ValidIdentifier(%q) = false, want true", value)
-		}
-	}
-	invalidCases := []string{
-		"",
-		string(make([]byte, domain.MaxIdentifierLength+1)),
-		"\x00",
-	}
-	for _, value := range invalidCases {
-		if ValidIdentifier(value) {
-			t.Fatalf("ValidIdentifier(%q) = true, want false", value)
-		}
-	}
-}
-
 func TestRunRequestIdentity(t *testing.T) {
 	request := RunRequest{RunID: "run-1", ThreadID: "thread-1", UserID: "user-1"}
 	identity := request.Identity()

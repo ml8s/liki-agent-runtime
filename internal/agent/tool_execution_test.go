@@ -57,7 +57,7 @@ func newToolAuditor(t *testing.T) (*ToolExecutionAuditor, *recordingAudit, *stub
 		func() time.Time { return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC) },
 		"test-provider",
 		agentDeployment,
-		ledger.scope,
+		ledger.auditScope,
 	)
 	ledger.begin("session_1", newTestScope())
 
@@ -211,20 +211,6 @@ func TestToolAuditorFailsPendingWhenRunEnds(t *testing.T) {
 	}
 }
 
-type failOnceAudit struct {
-	recordingAudit
-	eventType audit.EventType
-	failed    bool
-}
-
-func (r *failOnceAudit) Record(ctx context.Context, event *audit.Event) error {
-	if event != nil && event.Type == r.eventType && !r.failed {
-		r.failed = true
-		return errors.New("temporary audit store failure")
-	}
-	return r.recordingAudit.Record(ctx, event)
-}
-
 func TestToolAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 	events := &failOnceAudit{eventType: audit.EventToolCallCompleted}
 	agentDeployment := NewTestDeployment(t)
@@ -235,7 +221,7 @@ func TestToolAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 		fixedLedgerNow,
 		"test-provider",
 		agentDeployment,
-		ledger.scope,
+		ledger.auditScope,
 	)
 	scope := newTestScope()
 	ledger.begin("session_1", scope)
@@ -269,11 +255,11 @@ func TestToolAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 // a transient append failure must not dequeue the pending record, so
 // EndAuditRun's cleanup retry can still emit terminal evidence.
 func TestToolAuditorFailPendingRetainsRecordForRetry(t *testing.T) {
-	recorder := &failOnceStubAudit{eventType: audit.EventToolCallFailed}
+	recorder := &failOnceAudit{eventType: audit.EventToolCallFailed}
 	agentDeployment := NewTestDeployment(t)
 	metrics := &stubMetrics{}
 	ledger := newLLMCallAuditor(recorder, metrics, "test-provider", agentDeployment, fixedLedgerNow)
-	auditor := newToolExecutionAuditor(recorder, nil, fixedLedgerNow, "test-provider", agentDeployment, ledger.scope)
+	auditor := newToolExecutionAuditor(recorder, nil, fixedLedgerNow, "test-provider", agentDeployment, ledger.auditScope)
 	ledger.begin("session_retry", newTestScope())
 	ctx := &fakeAgentContext{
 		sessionID:      "session_retry",

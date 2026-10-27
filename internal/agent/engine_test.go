@@ -1,12 +1,12 @@
 package agent
 
-import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"strings"
 	"testing"
 	"time"
+
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/ml8s/liki-agent-runtime/internal/platform"

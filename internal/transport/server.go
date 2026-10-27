@@ -28,6 +28,8 @@ type Services struct {
 	Dependencies  observability.DependencyMetrics
 	MetricsTarget http.Handler
 	InternalToken string
+	A2APrincipal  string
+	A2ATenant     string
 	Logger        *slog.Logger
 
 	// ReadinessCacheTTL bounds how long one dependency check round is reused.
@@ -108,11 +110,29 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	writer.Header().Set("X-Request-ID", requestID)
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
 
-	// The verified user identity header is a liki-web AG-UI trust boundary. It
-	// is only adopted on /ag-ui; A2A machine callers sharing the internal token
-	// must not be able to spoof a user identity into audit/provenance.
-	if r.URL.Path == "/ag-ui" {
+	switch r.URL.Path {
+	case "/ag-ui":
 		r = r.WithContext(identity.WithIdentity(r.Context(), verifiedIdentity(r)))
+	case "/a2a":
+		// A2A accepts either a verified machine identity from mTLS or the
+		// composition-configured service principal. Relay user headers are not
+		// trusted on this machine protocol surface.
+		if mtls := mutualTLSVerified(r); mtls {
+			if verified := verifiedIdentity(r); !verified.IsZero() {
+				r = r.WithContext(identity.WithIdentity(r.Context(), verified))
+			} else if s.services.A2APrincipal != "" {
+				r = r.WithContext(identity.WithIdentity(r.Context(), identity.Identity{
+					UserID:    s.services.A2APrincipal,
+					Tenant:    s.services.A2ATenant,
+					MutualTLS: true,
+				}))
+			}
+		} else if s.services.InternalToken != "" && s.services.A2APrincipal != "" {
+			r = r.WithContext(identity.WithIdentity(r.Context(), identity.Identity{
+				UserID: s.services.A2APrincipal,
+				Tenant: s.services.A2ATenant,
+			}))
+		}
 	}
 
 	s.routes.ServeHTTP(writer, r)

@@ -60,22 +60,6 @@ func TestDefinitionRef(t *testing.T) {
 	}
 }
 
-func TestSkillBinding(t *testing.T) {
-	if SkillBinding(&AgentDefinition{}) != nil {
-		t.Fatal("SkillBinding(nil skills) != nil")
-	}
-	binding := &SkillsBinding{Root: "/skills", Preload: "frontmatter"}
-	got := SkillBinding(&AgentDefinition{Skills: binding})
-	if got == nil || got.Root != "/skills" {
-		t.Fatalf("SkillBinding() = %#v", got)
-	}
-	// The returned binding is a copy: mutating it must not affect the source.
-	got.Root = "/mutated"
-	if binding.Root != "/skills" {
-		t.Fatal("SkillBinding() returned a non-defensive copy")
-	}
-}
-
 func TestExposesModelText(t *testing.T) {
 	if ExposesModelText(nil) {
 		t.Fatal("ExposesModelText(nil) = true, want false")

@@ -132,14 +132,20 @@ func verifiedIdentity(r *http.Request) identity.Identity {
 	//   plaintext (token-bearing relay caller) → X-Liki-User-ID.
 	mtls := mutualTLSVerified(r)
 	header := "X-Liki-User-ID"
+	tenantHeader := "X-Liki-Tenant-ID"
 	if mtls {
 		header = "Remote-User"
+		tenantHeader = "Remote-Tenant"
 	}
 	userID := strings.TrimSpace(r.Header.Get(header))
 	if !validRequestID(userID) {
 		return identity.Identity{}
 	}
-	return identity.Identity{UserID: userID, MutualTLS: mtls}
+	tenant := strings.TrimSpace(r.Header.Get(tenantHeader))
+	if tenant != "" && !validRequestID(tenant) {
+		return identity.Identity{}
+	}
+	return identity.Identity{UserID: userID, Tenant: tenant, MutualTLS: mtls}
 }
 
 // mutualTLSVerified reports whether the request arrived over a TLS connection

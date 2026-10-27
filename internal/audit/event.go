@@ -16,6 +16,8 @@ const (
 	EventRunStarted          EventType = "run.started"
 	EventRunCompleted        EventType = "run.completed"
 	EventRunFailed           EventType = "run.failed"
+	EventRunPaused           EventType = "run.paused"
+	EventRunCanceled         EventType = "run.canceled"
 	EventLLMCallStarted      EventType = "llm.call.started"
 	EventLLMCallCompleted    EventType = "llm.call.completed"
 	EventLLMCallFailed       EventType = "llm.call.failed"
@@ -38,6 +40,8 @@ const (
 	StatusRunning   Status = "running"
 	StatusSucceeded Status = "succeeded"
 	StatusFailed    Status = "failed"
+	StatusPaused    Status = "paused"
+	StatusCanceled  Status = "canceled"
 )
 
 // Event is one immutable execution fact.
@@ -128,7 +132,7 @@ func (e Event) validate() error {
 
 	var validStatus bool
 	switch e.Status {
-	case "", StatusRunning, StatusSucceeded, StatusFailed:
+	case "", StatusRunning, StatusSucceeded, StatusFailed, StatusPaused, StatusCanceled:
 		validStatus = true
 	}
 	if !validStatus {
@@ -150,6 +154,14 @@ func (e Event) validate() error {
 	case EventRunCompleted, EventLLMCallCompleted, EventToolCallCompleted, EventDelegationCompleted:
 		if e.Status != StatusSucceeded {
 			return NewError(CodeStatusInvalid, "completed audit event must be succeeded")
+		}
+	case EventRunPaused:
+		if e.Status != StatusPaused {
+			return NewError(CodeStatusInvalid, "paused audit event must be paused")
+		}
+	case EventRunCanceled:
+		if e.Status != StatusCanceled {
+			return NewError(CodeStatusInvalid, "paused audit event must be paused")
 		}
 	case EventRunFailed, EventLLMCallFailed, EventToolCallFailed, EventDelegationFailed:
 		if e.Status != StatusFailed {
@@ -182,7 +194,7 @@ func (e Event) validate() error {
 
 func knownEventType(eventType EventType) bool {
 	switch eventType {
-	case EventRunStarted, EventRunCompleted, EventRunFailed,
+	case EventRunStarted, EventRunCompleted, EventRunFailed, EventRunPaused, EventRunCanceled,
 		EventLLMCallStarted, EventLLMCallCompleted, EventLLMCallFailed,
 		EventToolCallStarted, EventToolCallCompleted, EventToolCallFailed,
 		EventDelegationStarted, EventDelegationCompleted, EventDelegationFailed:
@@ -244,7 +256,26 @@ const (
 	CodeSpanIDInvalid                = "audit_event_span_id_invalid"
 	CodeToolEventCallIDRequired      = "audit_event_tool_call_id_required"
 	CodeToolEventNameRequired        = "audit_event_tool_name_required"
-	CodeRecorderRequired             = "audit_recorder_required"
 	CodeAuditAppendFailed            = "audit_append_failed"
 	CodeAuditEventConflict           = "audit_event_conflict"
 )
+
+// StatusFor maps a lifecycle event type to its expected audit status.
+// Terminal event types map to succeeded or failed; every other type
+// (including run.started, llm.call.started, and tool.call.started) is running.
+func StatusFor(eventType EventType) Status {
+	switch eventType {
+	case EventRunCompleted, EventLLMCallCompleted,
+		EventToolCallCompleted, EventDelegationCompleted:
+		return StatusSucceeded
+	case EventRunFailed, EventLLMCallFailed,
+		EventToolCallFailed, EventDelegationFailed:
+		return StatusFailed
+	case EventRunPaused:
+		return StatusPaused
+	case EventRunCanceled:
+		return StatusCanceled
+	default:
+		return StatusRunning
+	}
+}

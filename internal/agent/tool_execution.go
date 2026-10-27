@@ -1,12 +1,12 @@
 package agent
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"fmt"
 	"sync"
 	"time"
+
+	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
@@ -49,7 +49,7 @@ type ToolExecutionAuditor struct {
 	provider string
 
 	agents map[string]*agentdeployment.ResolvedAgentDefinition
-	scope  func(sessionID string) (*runExecution, bool)
+	scope  func(ctx adkagent.Context) (*runExecution, bool)
 
 	mu      sync.Mutex
 	pending map[string]ToolCallRecord
@@ -60,7 +60,7 @@ func newToolExecutionAuditor(
 	metrics execution.Metrics,
 	now func() time.Time,
 	provider string,
-	deployment *agentdeployment.AgentDeployment, scope func(sessionID string) (*runExecution, bool),
+	deployment *agentdeployment.AgentDeployment, scope func(ctx adkagent.Context) (*runExecution, bool),
 ) *ToolExecutionAuditor {
 	agents := make(map[string]*agentdeployment.ResolvedAgentDefinition, len(deployment.Spec.Agents))
 	for index := range deployment.Spec.Agents {
@@ -121,7 +121,7 @@ func (a *ToolExecutionAuditor) BeforeTool(
 	if ctx == nil || tool == nil {
 		return args, domain.NewError(domain.CodeToolCallInvalid, "tool callback context and tool are required", nil)
 	}
-	scope, ok := a.scope(ctx.SessionID())
+	scope, ok := a.scope(ctx)
 	if !ok {
 		return args, domain.NewError(domain.CodeAuditSessionRequired, "tool execution has no audit scope", nil)
 	}
@@ -159,7 +159,7 @@ func (a *ToolExecutionAuditor) AfterTool(
 	if ctx == nil || tool == nil {
 		return result, domain.NewError(domain.CodeToolCallInvalid, "tool callback context and tool are required", nil)
 	}
-	scope, ok := a.scope(ctx.SessionID())
+	scope, ok := a.scope(ctx)
 	if !ok {
 		return result, domain.NewError(domain.CodeAuditSessionRequired, "tool execution has no audit scope", nil)
 	}
@@ -309,16 +309,8 @@ func (a *ToolExecutionAuditor) record(
 	if !ok {
 		return domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("tool execution agent %q is not deployed", record.AgentName), nil)
 	}
-	status := audit.StatusRunning
-	switch eventType {
-	case audit.EventToolCallCompleted:
-		status = audit.StatusSucceeded
-	case audit.EventToolCallFailed:
-		status = audit.StatusFailed
-	}
-	event := scopedEvent(scope)
+	event := scopedTerminalEvent(ctx, scope, eventType)
 	event.ID = fmt.Sprintf("%s/%s/%s:%s", scope.identity.RunID, record.AgentName, record.CallID, eventType)
-	event.Type = eventType
 	event.AgentName = record.AgentName
 	event.AgentVersion = record.AgentVersion
 	event.AgentDefinitionDigest = definition.Digest
@@ -326,9 +318,6 @@ func (a *ToolExecutionAuditor) record(
 	event.ToolName = record.Tool
 	event.Model = scope.model
 	event.Provider = a.provider
-	event.Status = status
-	event.TraceID = traceIDFromContext(ctx)
-	event.SpanID = spanIDFromContext(ctx)
 	event.DurationMS = record.DurationMS
 	event.ErrorCode = record.ErrorCode
 	event.ErrorMessage = record.ErrorMessage

@@ -1,7 +1,5 @@
 package agent
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"crypto/tls"
@@ -9,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+
+	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/platform"
 	"github.com/ml8s/liki-agent-runtime/internal/platform/buildinfo"

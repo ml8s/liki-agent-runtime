@@ -1,7 +1,5 @@
 package agent
 
-import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"fmt"
@@ -10,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/execution"
 

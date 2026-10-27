@@ -1,8 +1,10 @@
 package agent
 
-import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+import (
+	"testing"
 
-import "testing"
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
+)
 
 func mustRuntimeAgentDefinition(t testing.TB, resolved deploymentpkg.ResolvedAgentDefinition) RuntimeAgentDefinition {
 	t.Helper()

@@ -32,6 +32,9 @@ type Metrics struct {
 	auditBatchEvents   *prometheus.HistogramVec
 	auditQueueDepth    *prometheus.GaugeVec
 	runRejections      *prometheus.CounterVec
+	pushConfigs        *prometheus.CounterVec
+	pushDeliveries     *prometheus.CounterVec
+	pushDelivery       *prometheus.HistogramVec
 }
 
 // New builds a metrics registry with runtime and protocol collectors.
@@ -113,6 +116,19 @@ func New() *Metrics {
 			Name: "liki_agents_run_rejections_total",
 			Help: "Runs rejected before execution by reason.",
 		}, []string{"reason"}),
+		pushConfigs: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "liki_agents_a2a_push_config_operations_total",
+			Help: "Standard A2A push callback configuration operations.",
+		}, []string{"operation", "status"}),
+		pushDeliveries: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "liki_agents_a2a_push_deliveries_total",
+			Help: "Standard A2A push notification deliveries.",
+		}, []string{"status"}),
+		pushDelivery: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "liki_agents_a2a_push_delivery_duration_seconds",
+			Help:    "Standard A2A push notification delivery duration.",
+			Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30},
+		}, nil),
 		dependencyUp: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "liki_agents_dependency_up",
 			Help: "Whether a runtime dependency is ready.",
@@ -136,6 +152,9 @@ func New() *Metrics {
 		metrics.auditBatchEvents,
 		metrics.auditQueueDepth,
 		metrics.runRejections,
+		metrics.pushConfigs,
+		metrics.pushDeliveries,
+		metrics.pushDelivery,
 	)
 	return metrics
 }
@@ -189,6 +208,17 @@ func (m *Metrics) ObserveAuditQueueDepth(depth int) {
 // ObserveRunRejection records a run rejected before execution.
 func (m *Metrics) ObserveRunRejection(reason string) {
 	m.runRejections.WithLabelValues(reason).Inc()
+}
+
+// ObservePushConfig records one standard A2A callback configuration operation.
+func (m *Metrics) ObservePushConfig(operation, status string) {
+	m.pushConfigs.WithLabelValues(operation, status).Inc()
+}
+
+// ObservePushDelivery records one standard A2A push delivery outcome.
+func (m *Metrics) ObservePushDelivery(status string, duration time.Duration) {
+	m.pushDeliveries.WithLabelValues(status).Inc()
+	m.pushDelivery.WithLabelValues().Observe(duration.Seconds())
 }
 
 // ObserveToolCall records one tool invocation and its duration.

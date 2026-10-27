@@ -1,11 +1,11 @@
 package agent
 
-import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"encoding/json"
 	"reflect"
 	"testing"
+
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	adkagent "google.golang.org/adk/v2/agent"

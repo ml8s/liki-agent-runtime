@@ -14,8 +14,7 @@ import (
 
 // AuditEventRepository persists immutable audit events.
 type AuditEventRepository struct {
-	db      *gorm.DB
-	metrics audit.AppendMetrics
+	db *gorm.DB
 }
 
 // recoveryWindow bounds the startup orphan scan. Every successful startup
@@ -24,31 +23,15 @@ type AuditEventRepository struct {
 // clock skew and restored databases while keeping the scan index-bounded.
 const recoveryWindow = 7 * 24 * time.Hour
 
-// RepositoryOption customizes an audit repository.
-type RepositoryOption func(*AuditEventRepository)
-
-// WithMetrics observes every append outcome and its persistence latency.
-func WithMetrics(metrics audit.AppendMetrics) RepositoryOption {
-	return func(repository *AuditEventRepository) {
-		repository.metrics = metrics
-	}
-}
-
 // NewAuditEventRepository builds an audit repository over a database handle.
-func NewAuditEventRepository(db *gorm.DB, options ...RepositoryOption) *AuditEventRepository {
-	repository := &AuditEventRepository{db: db}
-	for _, option := range options {
-		option(repository)
-	}
-	return repository
+func NewAuditEventRepository(db *gorm.DB) *AuditEventRepository {
+	return &AuditEventRepository{db: db}
 }
 
 // Record appends one validated audit event, treating a retry of an identical
 // event as idempotent.
 func (r *AuditEventRepository) Record(ctx context.Context, event *audit.Event) error {
-	started := time.Now()
-	status, err := r.record(ctx, event)
-	r.observeAuditAppend(status, time.Since(started))
+	_, err := r.record(ctx, event)
 	return err
 }
 
@@ -66,12 +49,6 @@ func (r *AuditEventRepository) record(ctx context.Context, event *audit.Event) (
 	}
 	*event = normalized
 	return r.append(ctx, r.db, event)
-}
-
-func (r *AuditEventRepository) observeAuditAppend(status string, duration time.Duration) {
-	if r.metrics != nil {
-		r.metrics.ObserveAuditAppend(status, duration)
-	}
 }
 
 // appendEvent inserts one audit event on the supplied handle or transaction

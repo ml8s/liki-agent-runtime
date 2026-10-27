@@ -1,7 +1,5 @@
 package agent
 
-import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"errors"
@@ -10,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/execution"
 
@@ -66,56 +66,23 @@ func (c *fakeAgentContext) Value(key any) any {
 	return context.Background().Value(key)
 }
 
-type stubAuditRecorder struct {
-	mu     sync.Mutex
-	events []audit.Event
-}
-
-type failOnceStubAudit struct {
-	stubAuditRecorder
+type failOnceAudit struct {
+	recordingAudit
 	eventType audit.EventType
 	failed    bool
 }
 
-func (r *failOnceStubAudit) Record(ctx context.Context, event *audit.Event) error {
+func (r *failOnceAudit) Record(ctx context.Context, event *audit.Event) error {
 	if event != nil && event.Type == r.eventType && !r.failed {
 		r.failed = true
 		return errors.New("temporary audit store failure")
 	}
-	return r.stubAuditRecorder.Record(ctx, event)
+	return r.recordingAudit.Record(ctx, event)
 }
 
-func (r *stubAuditRecorder) Record(_ context.Context, event *audit.Event) error {
-	if event == nil {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.events = append(r.events, *event)
-	return nil
-}
-
-func (r *stubAuditRecorder) eventsOfType(eventType audit.EventType) []audit.Event {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	result := make([]audit.Event, 0)
-	for _, event := range r.events {
-		if event.Type == eventType {
-			result = append(result, event)
-		}
-	}
-	return result
-}
-
-func (r *stubAuditRecorder) lastEvent() audit.Event {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.events[len(r.events)-1]
-}
-
-func newTestLedger(t *testing.T) (*llmCallAuditor, *stubAuditRecorder) {
+func newTestLedger(t *testing.T) (*llmCallAuditor, *recordingAudit) {
 	t.Helper()
-	recorder := &stubAuditRecorder{}
+	recorder := &recordingAudit{}
 	callAuditor := newLLMCallAuditor(recorder, nil, "test", NewTestDeployment(t), func() time.Time {
 		return time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
 	})
@@ -183,9 +150,7 @@ func TestLedgerReconciledTerminalKeepsTrace(t *testing.T) {
 	}
 	// Reconciliation runs without a live span (context.Background inside
 	// failActive); the scope-carried trace must survive.
-	if _, err := callAuditor.end("session_trace", nil); err != nil {
-		t.Fatalf("end() error = %v", err)
-	}
+	callAuditor.end("session_trace", nil)
 	failed := recorder.eventsOfType(audit.EventLLMCallFailed)
 	if len(failed) != 1 {
 		t.Fatalf("failed events = %d, want 1", len(failed))
@@ -219,9 +184,7 @@ func TestLedgerLifecycleCompletesNormally(t *testing.T) {
 	if last.Status != audit.StatusSucceeded {
 		t.Fatalf("status = %s, want succeeded", last.Status)
 	}
-	if _, err := callAuditor.end("session_1", nil); err != nil {
-		t.Fatalf("end clean session: %v", err)
-	}
+	callAuditor.end("session_1", nil)
 	if got := len(recorder.eventsOfType(audit.EventLLMCallFailed)); got != 0 {
 		t.Fatalf("failed events after clean end = %d, want 0", got)
 	}
@@ -270,7 +233,7 @@ func TestBeforeModelRejectsMissingAuditScope(t *testing.T) {
 }
 
 func TestLedgerRetainsActiveCallWhenTerminalAuditWriteFails(t *testing.T) {
-	recorder := &failOnceStubAudit{eventType: audit.EventLLMCallCompleted}
+	recorder := &failOnceAudit{eventType: audit.EventLLMCallCompleted}
 	callAuditor := newLLMCallAuditor(recorder, nil, "test", NewTestDeployment(t), fixedLedgerNow)
 	scope := newTestScope()
 	if !callAuditor.begin("session_1", scope) {
@@ -324,9 +287,7 @@ func TestLedgerLifecycleFailurePath(t *testing.T) {
 	if last.ErrorCode != domain.CodeRuntimeTimeout {
 		t.Fatalf("error_code = %s, want %s", last.ErrorCode, domain.CodeRuntimeTimeout)
 	}
-	if _, err := callAuditor.end("session_1", nil); err != nil {
-		t.Fatalf("end failed session: %v", err)
-	}
+	callAuditor.end("session_1", nil)
 	if got := len(recorder.eventsOfType(audit.EventLLMCallFailed)); got != 1 {
 		t.Fatalf("failed events after end = %d, want 1", got)
 	}
@@ -340,9 +301,7 @@ func TestLedgerInterruptedRunFailsActiveCalls(t *testing.T) {
 	if _, err := callAuditor.beforeModel(ctx, &model.LLMRequest{Model: "test-model"}); err != nil {
 		t.Fatalf("beforeModel() error = %v", err)
 	}
-	if _, err := callAuditor.end("session_1", nil); err != nil {
-		t.Fatalf("end interrupted session: %v", err)
-	}
+	callAuditor.end("session_1", nil)
 	if got := len(recorder.eventsOfType(audit.EventLLMCallFailed)); got != 1 {
 		t.Fatalf("failed events = %d, want 1", got)
 	}
@@ -389,9 +348,7 @@ func TestLedgerDuplicateBeginRejected(t *testing.T) {
 	if callAuditor.begin("session_1", newTestScope()) {
 		t.Fatal("second begin should fail")
 	}
-	if _, err := callAuditor.end("session_1", nil); err != nil {
-		t.Fatalf("end duplicate-begin session: %v", err)
-	}
+	callAuditor.end("session_1", nil)
 	if !callAuditor.begin("session_1", newTestScope()) {
 		t.Fatal("begin after end should succeed")
 	}
@@ -417,9 +374,7 @@ func TestLedgerConcurrentCallbacksDoNotRace(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	if _, err := callAuditor.end("session_1", nil); err != nil {
-		t.Fatalf("end concurrent session: %v", err)
-	}
+	callAuditor.end("session_1", nil)
 	if got := len(recorder.eventsOfType(audit.EventLLMCallStarted)); got != 50 {
 		t.Fatalf("started events = %d, want 50", got)
 	}
@@ -438,7 +393,7 @@ func TestLedgerUsesInvokingAgentPromptProvenance(t *testing.T) {
 	worker.SubAgents = nil
 	agentDeployment.Spec.Agents = append(agentDeployment.Spec.Agents, worker)
 
-	events := &stubAuditRecorder{}
+	events := &recordingAudit{}
 	callAuditor := newLLMCallAuditor(events, nil, "test-provider", agentDeployment, fixedLedgerNow)
 	scope := newTestScope()
 	callAuditor.begin("session_worker", scope)

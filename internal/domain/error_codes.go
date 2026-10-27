@@ -47,12 +47,12 @@ const (
 	CodeHistoryInvalid            = "history_invalid"
 	CodeRuntimeSessionUnavailable = "runtime_session_unavailable"
 	CodeRuntimeInterrupted        = "runtime_interrupted"
+	CodeRuntimePaused             = "runtime_paused"
 	CodeRunIDConflict             = "run_id_conflict"
 	CodeStructuredOutputInvalid   = "structured_output_invalid"
 	CodeStructuredOutputEmpty     = "structured_output_empty"
 
 	// Audit lifecycle codes (internal/agent BeginAuditRun/EndAuditRun)
-	CodeAuditScopeRequired   = "audit_scope_required"
 	CodeAuditScopeMissing    = "audit_scope_missing"
 	CodeAuditSessionRequired = "audit_session_required"
 	CodeAuditSessionActive   = "audit_session_active"

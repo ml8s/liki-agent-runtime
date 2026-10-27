@@ -46,9 +46,10 @@ They must not be exposed through A2A, AG-UI, or MCP fields:
 
 The service is deliberately **single-process/single-replica**:
 
-- ADK uses its in-memory session service.
+- ADK uses the official relational session service backed by local SQLite.
 - the active-run registry and run concurrency semaphore are process-local;
-- A2A uses the SDK's default in-memory task store;
+- A2A task state and registered callbacks use the local SQLite protocol-state
+  database;
 - audit evidence is in a local SQLite file;
 - MCP toolsets and the ADK graph are process-local.
 

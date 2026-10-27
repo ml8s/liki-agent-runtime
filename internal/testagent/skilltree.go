@@ -6,8 +6,9 @@ import (
 	"testing"
 )
 
-// writeMinimalSkill creates a valid ADK skill rootFS for runtime preload.
-func writeMinimalSkill(t testing.TB, root string) {
+// WriteMinimalSkill creates a valid ADK skill rootFS for runtime preload.
+// WriteMinimalSkill creates a valid ADK skill rootFS for runtime preload.
+func WriteMinimalSkill(t testing.TB, root string) {
 	t.Helper()
 	dir := filepath.Join(root, "testskill")
 	if err := os.MkdirAll(filepath.Join(dir, "references"), 0o755); err != nil {
@@ -15,12 +16,12 @@ func writeMinimalSkill(t testing.TB, root string) {
 	}
 	skill := `---
 name: testskill
-description: Minimal adapter-test skill providing one reference card for skilltoolset preload coverage.
+description: Minimal skill used by runtime tests to exercise the skilltoolset binding. Provides one reference card for load_skill_resource coverage.
 ---
 
 # testskill
 
-See references/card.md.`
+Load references/card.md for details.`
 	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(skill), 0o600); err != nil {
 		t.Fatal(err)
 	}

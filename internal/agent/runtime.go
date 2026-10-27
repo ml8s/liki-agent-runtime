@@ -3,8 +3,6 @@
 // second execution path.
 package agent
 
-import agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"fmt"
@@ -14,6 +12,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	agentdeployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/execution"
 
@@ -33,6 +33,7 @@ import (
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/mcptoolset"
+	"google.golang.org/genai"
 )
 
 const (
@@ -206,7 +207,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		config.Now,
 		config.Provider,
 		config.AgentDeployment,
-		callAuditor.scope,
+		callAuditor.auditScope,
 	)
 	delegationAuditor := newDelegationAuditor(
 		config.AuditRecorder,
@@ -214,7 +215,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		config.Now,
 		config.AgentDeployment,
 		entrypoint.Name,
-		callAuditor.scope,
+		callAuditor.auditScope,
 	)
 	graph := newAgentGraphBuilder(config.AgentDeployment, entrypoint.Name, agentGraphDeps{
 		mcpToolsets:       mcpToolsets,
@@ -238,13 +239,30 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create tool retry plugin", err)
 	}
+	attemptPlugin, err := plugin.New(plugin.Config{
+		Name: "liki.audit_attempt",
+		BeforeRunCallback: func(invocation agent.InvocationContext) (*genai.Content, error) {
+			if attemptID, ok := invocation.Value(auditAttemptKey{}).(string); ok && attemptID != "" {
+				callAuditor.bindInvocation(invocation.Session().ID(), invocation.InvocationID(), attemptID)
+			}
+			return nil, nil
+		},
+		AfterRunCallback: func(invocation agent.InvocationContext) {
+			if attemptID, ok := invocation.Value(auditAttemptKey{}).(string); ok && attemptID != "" {
+				callAuditor.unbindAttempt(attemptID)
+			}
+		},
+	})
+	if err != nil {
+		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create audit attempt plugin", err)
+	}
 	runnerConfig := runner.Config{
 		AppName:           config.AppName,
 		Agent:             root,
 		SessionService:    sessionService,
 		AutoCreateSession: true,
 		PluginConfig: runner.PluginConfig{
-			Plugins:      []*plugin.Plugin{retryPlugin},
+			Plugins:      []*plugin.Plugin{retryPlugin, attemptPlugin},
 			CloseTimeout: 5 * time.Second,
 		},
 	}

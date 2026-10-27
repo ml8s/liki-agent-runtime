@@ -12,6 +12,7 @@ import (
 // boundaries.
 type Identity struct {
 	UserID string
+	Tenant string
 	// MutualTLS reports that the request arrived over the mutually
 	// authenticated listener. Callbacks and other direct-connect-only
 	// behaviours key off this channel fact, never off header contents.
@@ -46,4 +47,13 @@ func UserIDFromContext(ctx context.Context) (string, bool) {
 		return "", false
 	}
 	return identity.UserID, true
+}
+
+// TenantFromContext returns the verified tenant, if present.
+func TenantFromContext(ctx context.Context) (string, bool) {
+	identity, ok := FromContext(ctx)
+	if !ok || strings.TrimSpace(identity.Tenant) == "" {
+		return "", false
+	}
+	return identity.Tenant, true
 }

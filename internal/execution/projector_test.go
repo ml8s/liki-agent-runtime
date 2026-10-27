@@ -1,9 +1,9 @@
 package execution
 
-import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"testing"
+
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
@@ -262,27 +262,6 @@ func structuredTextDeployment() *deploymentpkg.AgentDeployment {
 	}
 }
 
-func TestExposesModelText(t *testing.T) {
-	plain := plainTextDeployment().Spec.Agents[0]
-	structured := structuredTextDeployment().Spec.Agents[0]
-	testCases := []struct {
-		name       string
-		definition *deploymentpkg.AgentDefinition
-		want       bool
-	}{
-		{name: "nil definition", definition: nil, want: false},
-		{name: "plain agent", definition: &plain.AgentDefinition, want: true},
-		{name: "structured agent", definition: &structured.AgentDefinition, want: false},
-	}
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			if got := deploymentpkg.ExposesModelText(testCase.definition); got != testCase.want {
-				t.Fatalf("deploymentpkg.ExposesModelText() = %v, want %v", got, testCase.want)
-			}
-		})
-	}
-}
-
 // TestEventProjectorExposeDecisionMatchesRule locks the projector to the single
 // visibility policy so a protocol adapter cannot silently diverge from it.
 func TestEventProjectorExposeDecisionMatchesRule(t *testing.T) {
@@ -296,5 +275,43 @@ func TestEventProjectorExposeDecisionMatchesRule(t *testing.T) {
 		if expose != deploymentpkg.ExposesModelText(&entrypoint.AgentDefinition) {
 			t.Fatalf("projector expose = %v, ExposesModelText = %v", expose, deploymentpkg.ExposesModelText(&entrypoint.AgentDefinition))
 		}
+	}
+}
+
+// TestEventProjectorFiltersObserverFacts pins the observer-fact filtering
+// policy: partial model payloads and tool declarations are framework-internal
+// evidence and never surface as user-visible events.
+func TestEventProjectorFiltersObserverFacts(t *testing.T) {
+	toolCall := &genai.Part{FunctionCall: &genai.FunctionCall{ID: "call_1", Name: "test_tool"}}
+	testCases := []struct {
+		name    string
+		event   *session.Event
+		wantNil bool
+	}{
+		{name: "partial payload", event: &session.Event{
+			LLMResponse: model.LLMResponse{Partial: true, Content: &genai.Content{Parts: []*genai.Part{{Text: `{"answer":"par`}}}},
+		}, wantNil: true},
+		{name: "partial tool call", event: &session.Event{
+			LLMResponse: model.LLMResponse{Partial: true, Content: &genai.Content{Parts: []*genai.Part{toolCall}}},
+		}, wantNil: true},
+		{name: "final payload with tool fact", event: &session.Event{
+			LLMResponse: model.LLMResponse{Content: &genai.Content{Parts: []*genai.Part{{Text: `{"answer":"raw"}`}, toolCall}}},
+		}},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			projector := NewEventProjector(NewEventProjectorIndex(structuredTextDeployment()))
+			projection := NewEventProjectionState()
+			visible, _, visibleOK := projector.Project(projection, testCase.event)
+			if testCase.wantNil {
+				if visibleOK {
+					t.Fatalf("visible event = %+v, want none", visible)
+				}
+				return
+			}
+			if !visibleOK || visible == nil || len(visible.Content.Parts) != 1 || visible.Content.Parts[0].FunctionCall == nil {
+				t.Fatalf("visible event = %+v/%v, want one function call", visible, visibleOK)
+			}
+		})
 	}
 }

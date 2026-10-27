@@ -58,7 +58,7 @@ func (l *llmCallAuditor) beforeModel(ctx agent.Context, request *model.LLMReques
 	if err := domain.ValidateLLMCall(call); err != nil {
 		return nil, err
 	}
-	if err := l.recordCall(ctx, scope, &call, audit.EventLLMCallStarted, audit.StatusRunning); err != nil {
+	if err := l.recordCall(ctx, scope, &call, audit.EventLLMCallStarted); err != nil {
 		return nil, err
 	}
 	runtime := llmCallRuntime{
@@ -130,12 +130,10 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 		return response, err
 	}
 	terminalEvent := audit.EventLLMCallCompleted
-	terminalStatus := audit.StatusSucceeded
 	if call.Status == domain.LLMCallFailed {
 		terminalEvent = audit.EventLLMCallFailed
-		terminalStatus = audit.StatusFailed
 	}
-	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, &call, terminalEvent, terminalStatus); auditErr != nil {
+	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, &call, terminalEvent); auditErr != nil {
 		return response, auditErr
 	}
 	scope.mu.Lock()
@@ -217,7 +215,7 @@ func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMReque
 	if err := domain.ValidateLLMCall(call); err != nil {
 		return nil, err
 	}
-	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, &call, audit.EventLLMCallFailed, audit.StatusFailed); auditErr != nil {
+	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, &call, audit.EventLLMCallFailed); auditErr != nil {
 		return nil, auditErr
 	}
 	if exists {

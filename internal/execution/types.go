@@ -1,10 +1,10 @@
 package execution
 
-import deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"encoding/json"
 	"time"
+
+	deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
@@ -87,10 +87,4 @@ type Metrics interface {
 	ObserveAgentDelegation(caller, target, status string, duration time.Duration)
 	ObserveMCPCatalog(server, outcome string)
 	ObserveRunRejection(reason string)
-}
-
-// ValidIdentifier accepts bounded printable identifiers while preserving
-// provider-specific identifier alphabets.
-func ValidIdentifier(value string) bool {
-	return domain.ValidIdentifier(value)
 }

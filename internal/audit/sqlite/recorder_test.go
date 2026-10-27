@@ -317,29 +317,6 @@ func TestAuditRecorderQueueFullFailsClosed(t *testing.T) {
 	}
 }
 
-func TestAuditRecorderRecoversInterrupted(t *testing.T) {
-	store, recorder := newRecorderStore(t)
-	ctx := context.Background()
-	orphan := recorderEvent("run_recover", false)
-	if err := recorder.Record(ctx, &orphan); err != nil {
-		t.Fatalf("Record(orphan) error = %v", err)
-	}
-	now := time.Date(2026, 10, 26, 10, 1, 0, 0, time.UTC)
-	if err := recorder.RecoverInterrupted(ctx, now); err != nil {
-		t.Fatalf("RecoverInterrupted() error = %v", err)
-	}
-	var status string
-	if err := store.GORM().
-		Table("agent_audit_events").
-		Where("id = ?", "run_recover:llm.call.failed").
-		Pluck("status", &status).Error; err != nil {
-		t.Fatalf("read recovery event: %v", err)
-	}
-	if status != string(audit.StatusFailed) {
-		t.Fatalf("recovery status = %q, want %q", status, audit.StatusFailed)
-	}
-}
-
 func TestAuditRecorderBatchInsertMatchesDirectPath(t *testing.T) {
 	store, recorder := newRecorderStore(t)
 	ctx := context.Background()

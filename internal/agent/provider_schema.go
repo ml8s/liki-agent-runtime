@@ -45,39 +45,27 @@ func ConvertJSONSchemaToGenai(schema *jsonschema.Schema) (*genai.Schema, error) 
 		}
 		result.Type = genaiType
 	}
-	copyInt64 := func(value *int) (*int64, error) {
+	copyInt64 := func(value *int) *int64 {
 		if value == nil {
-			return nil, nil
+			return nil
 		}
 		converted := int64(*value)
-		return &converted, nil
+		return &converted
 	}
-	copyFloat64 := func(value *float64) (*float64, error) {
+	copyFloat64 := func(value *float64) *float64 {
 		if value == nil {
-			return nil, nil
+			return nil
 		}
 		converted := *value
-		return &converted, nil
+		return &converted
 	}
+	result.MinItems = copyInt64(schema.MinItems)
+	result.MaxItems = copyInt64(schema.MaxItems)
+	result.MinLength = copyInt64(schema.MinLength)
+	result.MaxLength = copyInt64(schema.MaxLength)
+	result.Minimum = copyFloat64(schema.Minimum)
+	result.Maximum = copyFloat64(schema.Maximum)
 	var err error
-	if result.MinItems, err = copyInt64(schema.MinItems); err != nil {
-		return nil, err
-	}
-	if result.MaxItems, err = copyInt64(schema.MaxItems); err != nil {
-		return nil, err
-	}
-	if result.MinLength, err = copyInt64(schema.MinLength); err != nil {
-		return nil, err
-	}
-	if result.MaxLength, err = copyInt64(schema.MaxLength); err != nil {
-		return nil, err
-	}
-	if result.Minimum, err = copyFloat64(schema.Minimum); err != nil {
-		return nil, err
-	}
-	if result.Maximum, err = copyFloat64(schema.Maximum); err != nil {
-		return nil, err
-	}
 	if schema.Items != nil {
 		result.Items, err = ConvertJSONSchemaToGenai(schema.Items)
 		if err != nil {

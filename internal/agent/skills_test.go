@@ -1,13 +1,15 @@
 package agent
 
-import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/ml8s/liki-agent-runtime/internal/testagent"
+
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 )
 
 func TestValidateSkillToolsetAllow(t *testing.T) {
@@ -141,7 +143,7 @@ func TestAgentSkillsBindingValidation(t *testing.T) {
 func TestNewSkillToolset(t *testing.T) {
 	t.Run("valid tree frontmatter preload", func(t *testing.T) {
 		root := t.TempDir()
-		writeMinimalSkillTree(t, root)
+		testagent.WriteMinimalSkill(t, root)
 		ts, err := newSkillToolset(&deploymentpkg.SkillsBinding{Root: root})
 		if err != nil {
 			t.Fatalf("error = %v", err)
@@ -152,7 +154,7 @@ func TestNewSkillToolset(t *testing.T) {
 	})
 	t.Run("valid tree complete preload", func(t *testing.T) {
 		root := t.TempDir()
-		writeMinimalSkillTree(t, root)
+		testagent.WriteMinimalSkill(t, root)
 		ts, err := newSkillToolset(&deploymentpkg.SkillsBinding{Root: root, Preload: "complete"})
 		if err != nil {
 			t.Fatalf("error = %v", err)

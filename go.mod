@@ -4,9 +4,10 @@ go 1.26.10
 
 require (
 	github.com/a2aproject/a2a-go/v2 v2.5.0
-	github.com/ag-ui-protocol/ag-ui/sdks/community/go v0.0.0-20260921233645-db790c3d4832
+	github.com/ag-ui-protocol/ag-ui/sdks/community/go v0.0.0-20261026220504-4eac7a982228
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/jsonschema-go v0.4.3
+	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/prometheus/client_golang v1.24.1
@@ -38,7 +39,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/safehtml v0.1.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.20 // indirect
 	github.com/googleapis/gax-go/v2 v2.24.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect

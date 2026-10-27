@@ -1,7 +1,5 @@
 package agent
 
-import deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"errors"
@@ -9,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	deploymentpkg "github.com/ml8s/liki-agent-runtime/internal/deployment"
 
 	"github.com/ml8s/liki-agent-runtime/internal/execution"
 
@@ -18,6 +18,17 @@ import (
 	"google.golang.org/adk/v2/tool"
 )
 
+// testDeploymentForMCP builds a minimal deployment for MCP toolset tests.
+func testDeploymentForMCP() *deploymentpkg.AgentDeployment {
+	return &deploymentpkg.AgentDeployment{Spec: deploymentpkg.DeploymentSpec{
+		MCPServers: []deploymentpkg.MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
+		Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+			Name:  "test-agent",
+			Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+		}}),
+	}}
+}
+
 type catalogTool struct {
 	name string
 }
@@ -26,6 +37,8 @@ func (t catalogTool) Name() string        { return t.name }
 func (t catalogTool) Description() string { return t.name + " description" }
 func (t catalogTool) IsLongRunning() bool { return false }
 
+// catalogStub is a controllable inner toolset shared by all cachedToolset
+// tests. The release channel coordinates concurrent-singleflight timing.
 type catalogStub struct {
 	mu      sync.Mutex
 	calls   int
@@ -62,10 +75,57 @@ func newCatalogCache(stub *catalogStub, now func() time.Time, metrics execution.
 	return newCachedToolset("engine", stub, time.Minute, now, metrics)
 }
 
+func catalogClock() func() time.Time {
+	now := time.Date(2026, 10, 26, 11, 0, 0, 0, time.UTC)
+	return func() time.Time { return now }
+}
+
+// TestSystemReadonlyContextDefaults pins the zero-value accessors of the
+// root-scope context used for warmup catalog discovery.
+func TestSystemReadonlyContextDefaults(t *testing.T) {
+	ctx := systemReadonlyContext{Context: context.Background()}
+	if ctx.UserContent() != nil {
+		t.Fatal("UserContent() != nil")
+	}
+	if ctx.InvocationID() != "" || ctx.AgentName() != "" {
+		t.Fatal("InvocationID/AgentName not empty")
+	}
+	if ctx.ReadonlyState() != nil {
+		t.Fatal("ReadonlyState() != nil")
+	}
+	if ctx.UserID() != "" || ctx.AppName() != "" || ctx.SessionID() != "" || ctx.Branch() != "" {
+		t.Fatal("identity accessors not empty")
+	}
+}
+
+func TestNewCachedToolsetDefaultsTTL(t *testing.T) {
+	cache := newCachedToolset("server", &catalogStub{}, 0, nil, nil)
+	if cache.ttl != mcpCatalogTTL {
+		t.Fatalf("ttl = %v, want default %v", cache.ttl, mcpCatalogTTL)
+	}
+	if cache.now == nil {
+		t.Fatal("now func not defaulted")
+	}
+}
+
+func TestCachedToolsetForwardsNameAndDefaults(t *testing.T) {
+	cache := newCachedToolset("server", &catalogStub{}, time.Minute, nil, nil)
+	if cache.Name() != "stub-mcp" {
+		t.Fatalf("Name() = %q, want forwarded", cache.Name())
+	}
+	// Description and IsLongRunning use interface upgrade; catalogStub does
+	// not implement them, so the cache must return zero values.
+	if cache.Description() != "" {
+		t.Fatalf("Description() = %q, want empty", cache.Description())
+	}
+	if cache.IsLongRunning() {
+		t.Fatal("IsLongRunning() = true, want false")
+	}
+}
+
 func TestMCPCatalogCacheServesWithinTTL(t *testing.T) {
 	stub := &catalogStub{tools: []tool.Tool{catalogTool{name: "bazi_chart"}}}
-	clock := catalogClock()
-	cache := newCatalogCache(stub, clock, nil)
+	cache := newCatalogCache(stub, catalogClock(), nil)
 
 	first, err := cache.Tools(nil)
 	if err != nil {
@@ -86,8 +146,7 @@ func TestMCPCatalogCacheServesWithinTTL(t *testing.T) {
 func TestMCPCatalogCacheRefreshesAfterTTL(t *testing.T) {
 	stub := &catalogStub{tools: []tool.Tool{catalogTool{name: "natal_query"}}}
 	now := time.Date(2026, 10, 26, 11, 0, 0, 0, time.UTC)
-	clock := func() time.Time { return now }
-	cache := newCatalogCache(stub, clock, nil)
+	cache := newCatalogCache(stub, func() time.Time { return now }, nil)
 
 	if _, err := cache.Tools(nil); err != nil {
 		t.Fatalf("first Tools() error = %v", err)
@@ -114,7 +173,7 @@ func TestMCPCatalogCacheSingleflightsConcurrentRefresh(t *testing.T) {
 
 	const callers = 8
 	results := make(chan error, callers)
-	for index := 0; index < callers; index++ {
+	for range callers {
 		go func() {
 			_, err := cache.Tools(nil)
 			results <- err
@@ -123,7 +182,7 @@ func TestMCPCatalogCacheSingleflightsConcurrentRefresh(t *testing.T) {
 	// All callers are now blocked behind the one in-flight discovery.
 	time.Sleep(5 * time.Millisecond)
 	close(stub.release)
-	for index := 0; index < callers; index++ {
+	for range callers {
 		if err := <-results; err != nil {
 			t.Fatalf("concurrent Tools() error = %v", err)
 		}
@@ -136,8 +195,7 @@ func TestMCPCatalogCacheSingleflightsConcurrentRefresh(t *testing.T) {
 func TestMCPCatalogCacheServesStaleWhenRefreshFails(t *testing.T) {
 	stub := &catalogStub{tools: []tool.Tool{catalogTool{name: "city_coords"}}}
 	now := time.Date(2026, 10, 26, 11, 0, 0, 0, time.UTC)
-	clock := func() time.Time { return now }
-	cache := newCatalogCache(stub, clock, nil)
+	cache := newCatalogCache(stub, func() time.Time { return now }, nil)
 
 	if _, err := cache.Tools(nil); err != nil {
 		t.Fatalf("first Tools() error = %v", err)
@@ -170,16 +228,12 @@ func TestMCPCatalogCacheFailsClosedWithoutAnyCache(t *testing.T) {
 	}
 }
 
-func TestMCPCatalogCacheMetricsAndForwarding(t *testing.T) {
+func TestMCPCatalogCacheMetricsLifecycle(t *testing.T) {
 	stub := &catalogStub{tools: []tool.Tool{catalogTool{name: "tianwen_time"}}}
 	metrics := &stubMetrics{}
 	now := time.Date(2026, 10, 26, 11, 0, 0, 0, time.UTC)
-	clock := func() time.Time { return now }
-	cache := newCatalogCache(stub, clock, metrics)
+	cache := newCatalogCache(stub, func() time.Time { return now }, metrics)
 
-	if cache.Name() != "stub-mcp" {
-		t.Fatalf("Name() = %q, want forwarded %q", cache.Name(), "stub-mcp")
-	}
 	if _, err := cache.Tools(nil); err != nil {
 		t.Fatalf("refresh Tools() error = %v", err)
 	}
@@ -209,9 +263,11 @@ func TestMCPCatalogCacheMetricsAndForwarding(t *testing.T) {
 	}
 }
 
-func catalogClock() func() time.Time {
-	now := time.Date(2026, 10, 26, 11, 0, 0, 0, time.UTC)
-	return func() time.Time { return now }
+func TestCachedToolsetNilMetricsSafe(t *testing.T) {
+	cache := newCachedToolset("server", &catalogStub{}, time.Minute, catalogClock(), nil)
+	if _, err := cache.Tools(nil); err != nil {
+		t.Fatalf("Tools() with nil metrics error = %v", err)
+	}
 }
 
 // TestNewMCPToolsetsMemoizeDiscovery wires the cache exactly as the runtime
@@ -249,19 +305,14 @@ func TestNewMCPToolsetsMemoizeDiscovery(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = serverSession.Close() })
 
+	deployment := testDeploymentForMCP()
 	config := Config{
 		MCPTimeout: 5 * time.Second,
 		mcpTransportOverrides: map[string]mcp.Transport{
 			"test": clientTransport,
 		},
-		AgentDeployment: &deploymentpkg.AgentDeployment{Spec: deploymentpkg.DeploymentSpec{
-			MCPServers: []deploymentpkg.MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-			Agents: resolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
-				Name:  "test-agent",
-				Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
-			}}),
-		}},
-		Now: catalogClock(),
+		AgentDeployment: deployment,
+		Now:             catalogClock(),
 	}
 	toolsets, err := newMCPToolsets(config)
 	if err != nil {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -103,65 +102,6 @@ func TestAuditEventRepositoryAppendsImmutableEvents(t *testing.T) {
 	if err == nil {
 		t.Fatal("deleting an audit event unexpectedly succeeded")
 	}
-}
-
-func TestAuditEventRepositoryObservesAppendOutcomes(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "agent-audit.db"))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	t.Cleanup(func() {
-		if err := store.Close(); err != nil {
-			t.Errorf("close sqlite: %v", err)
-		}
-	})
-	recorder := &recordingAppendMetrics{}
-	repository := NewAuditEventRepository(store.GORM(), WithMetrics(recorder))
-	ctx := context.Background()
-
-	occurred := time.Date(2026, 10, 26, 9, 0, 0, 0, time.UTC)
-	event := audit.Event{
-		ID:   "call_metrics:started",
-		Type: audit.EventLLMCallStarted, OccurredAt: occurred,
-		RootRunID: "run_metrics", RunID: "run_metrics", ThreadID: "thread_1",
-		UserID: "user_1", AgentName: "coordinator",
-		Model: "test-model", Provider: "test", Status: audit.StatusRunning,
-	}
-	if err := repository.Record(ctx, &event); err != nil {
-		t.Fatalf("Record(started) error = %v", err)
-	}
-	conflict := event
-	conflict.Type = audit.EventLLMCallFailed
-	conflict.Status = audit.StatusFailed
-	conflict.ErrorCode = domain.CodeLLMCallFailed
-	if err := repository.Record(ctx, &conflict); err == nil {
-		t.Fatal("Record(conflict) unexpectedly succeeded")
-	}
-	invalid := event
-	invalid.ID = ""
-	if err := repository.Record(ctx, &invalid); err == nil {
-		t.Fatal("Record(invalid) unexpectedly succeeded")
-	}
-
-	want := []string{audit.AppendStatusOK, audit.AppendStatusConflict, audit.AppendStatusInvalid}
-	if !reflect.DeepEqual(recorder.statuses, want) {
-		t.Fatalf("append statuses = %v, want %v", recorder.statuses, want)
-	}
-	for _, duration := range recorder.durations {
-		if duration < 0 {
-			t.Fatalf("negative append duration: %v", duration)
-		}
-	}
-}
-
-type recordingAppendMetrics struct {
-	statuses  []string
-	durations []time.Duration
-}
-
-func (m *recordingAppendMetrics) ObserveAuditAppend(status string, duration time.Duration) {
-	m.statuses = append(m.statuses, status)
-	m.durations = append(m.durations, duration)
 }
 
 func TestAuditEventRepositoryRejectsInvalidEvents(t *testing.T) {

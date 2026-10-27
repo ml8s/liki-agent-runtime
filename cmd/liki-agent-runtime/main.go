@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	a2apush "github.com/a2aproject/a2a-go/v2/a2asrv/push"
 	agentruntime "github.com/ml8s/liki-agent-runtime/internal/agent"
 	"github.com/ml8s/liki-agent-runtime/internal/audit/sqlite"
 	"github.com/ml8s/liki-agent-runtime/internal/notify"
@@ -25,6 +26,7 @@ import (
 	"github.com/ml8s/liki-agent-runtime/internal/platform/tlsconf"
 	a2aadapter "github.com/ml8s/liki-agent-runtime/internal/protocol/a2a"
 	aguiadapter "github.com/ml8s/liki-agent-runtime/internal/protocol/agui"
+	protocolstate "github.com/ml8s/liki-agent-runtime/internal/protocolstate/sqlite"
 	"github.com/ml8s/liki-agent-runtime/internal/transport"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -102,6 +104,16 @@ func run() (err error) {
 	}
 	otel.InstallGlobalPropagator()
 
+	sessionDB, err := agentruntime.OpenSQLiteSessionService(cfg.ADKSessionDBPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := sessionDB.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close ADK session database: %w", closeErr)
+		}
+	}()
+
 	store, err := sqlite.Open(cfg.AuditDBPath)
 	if err != nil {
 		return err
@@ -109,6 +121,22 @@ func run() (err error) {
 	defer func() {
 		if closeErr := store.Close(); closeErr != nil && err == nil {
 			err = fmt.Errorf("close audit database: %w", closeErr)
+		}
+	}()
+	protocolDB, err := protocolstate.Open(cfg.ProtocolStateDBPath)
+	if err != nil {
+		return err
+	}
+	recovered, err := protocolDB.RecoverAbandonedTasks(context.Background(), time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if recovered > 0 {
+		logger.Warn("a2a_abandoned_tasks_recovered", "count", recovered)
+	}
+	defer func() {
+		if closeErr := protocolDB.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close protocol state database: %w", closeErr)
 		}
 	}()
 	metricsCollector := prometheus.New()
@@ -143,6 +171,7 @@ func run() (err error) {
 		MCPTimeout:        cfg.MCPTimeout,
 		MCPHealthTimeout:  cfg.MCPHealthTimeout,
 		MaxConcurrentRuns: cfg.MaxConcurrentRuns,
+		SessionService:    sessionDB.SessionService(),
 	})
 	if err != nil {
 		return err
@@ -152,11 +181,28 @@ func run() (err error) {
 	if err != nil {
 		return err
 	}
-	a2aServer, err := a2aadapter.New(runtime, a2aadapter.Config{
-		PublicURL:  publicURL,
-		RunTimeout: cfg.RunTimeout,
-		Logger:     logger,
-	})
+	a2aConfig := a2aadapter.Config{
+		PublicURL:        publicURL,
+		RunTimeout:       cfg.RunTimeout,
+		Logger:           logger,
+		Metrics:          metricsCollector,
+		ServicePrincipal: "liki-a2a",
+		Security: a2aadapter.SecurityConfig{
+			Bearer:    cfg.InternalToken != "",
+			MutualTLS: cfg.TLSAddr != "",
+		},
+		TaskStore: protocolDB.NewTaskStore(protocolstate.TaskStoreConfig{}),
+	}
+	if cfg.A2APushEnabled {
+		a2aConfig.Push = a2aadapter.PushConfig{
+			Store: protocolDB.NewPushConfigStore(protocolstate.PushConfigStoreConfig{}),
+			Sender: a2apush.NewHTTPPushSender(&a2apush.HTTPSenderConfig{
+				Timeout:              cfg.A2APushTimeout,
+				AllowPrivateNetworks: cfg.A2APushAllowPrivateNetworks,
+			}),
+		}
+	}
+	a2aServer, err := a2aadapter.New(runtime, a2aConfig)
 	if err != nil {
 		return err
 	}
@@ -176,7 +222,7 @@ func run() (err error) {
 	if err != nil {
 		return err
 	}
-	healthChecks := []platform.HealthChecker{store}
+	healthChecks := []platform.HealthChecker{store, protocolDB, sessionDB}
 	healthChecks = append(healthChecks, runtime.MCPHealthChecks()...)
 	protocolServer, err := transport.New(transport.Services{
 		AgentCard:     a2aServer.AgentCardHandler(),
@@ -187,6 +233,8 @@ func run() (err error) {
 		Dependencies:  metricsCollector,
 		MetricsTarget: metricsCollector.Handler(),
 		InternalToken: cfg.InternalToken,
+		A2APrincipal:  "liki-a2a",
+		A2ATenant:     cfg.A2ATenant,
 		Logger:        logger,
 	})
 	if err != nil {

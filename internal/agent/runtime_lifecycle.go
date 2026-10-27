@@ -106,10 +106,14 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 	ledgerScope := &runExecution{
 		identity: identity,
 		provenance: execution.RunProvenance{
-			Protocol: scope.Protocol,
-			TraceID:  traceIDFromContext(ctx),
-			SpanID:   spanIDFromContext(ctx),
+			Protocol:  scope.Protocol,
+			TraceID:   traceIDFromContext(ctx),
+			SpanID:    spanIDFromContext(ctx),
+			TaskID:    scope.TaskID,
+			MessageID: scope.MessageID,
 		},
+		attemptKey:        scope.RunID,
+		taskID:            scope.TaskID,
 		model:             r.entrypoint.EffectiveModel(r.config.Model),
 		instructionDigest: r.entrypoint.InstructionDigest,
 		definitionName:    r.definition.Metadata.Name,
@@ -127,13 +131,41 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 	event := r.runEvent(ctx, ledgerScope, audit.EventRunStarted, audit.StatusRunning, nil)
 	if err := r.recordAuditWithRetry(ctx, &event); err != nil {
 		r.runs.finish(scope.RunID)
-		_, _ = r.callAuditor.end(sessionID, err)
+		r.callAuditor.end(sessionID, err)
 		_ = r.delegationAuditor.FailPending(ctx, ledgerScope)
 		_ = r.toolAuditor.FailPending(ctx, ledgerScope)
 		releaseRun()
 		return err
 	}
 	return nil
+}
+
+// AuditEndOption customizes closure of one externally driven audit attempt.
+type AuditEndOption func(*auditEndOptions)
+
+type auditEndOptions struct {
+	paused          bool
+	canceled        bool
+	preserveSession bool
+}
+
+// WithCanceledAttempt records a standard cancellation as cancellation evidence
+// rather than a generic failure.
+func WithCanceledAttempt() AuditEndOption {
+	return func(o *auditEndOptions) { o.canceled = true }
+}
+
+// WithPausedAttempt records a non-terminal pause (for example A2A
+// input-required) instead of a terminal success or failure.
+func WithPausedAttempt() AuditEndOption {
+	return func(o *auditEndOptions) { o.paused = true }
+}
+
+// WithPreservedSession keeps the ADK session for protocol continuation. A2A
+// ContextIDs own session lifetime; audit completion does not imply context
+// lifetime.
+func WithPreservedSession() AuditEndOption {
+	return func(o *auditEndOptions) { o.preserveSession = true }
 }
 
 // EndAuditRun completes an externally driven audit lifecycle exactly once.
@@ -143,7 +175,11 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, sessionID string, scope Run
 // scope or the concurrency slot, so the executor's cleanup callback retries the
 // terminal append rather than stranding an orphaned started event. Startup
 // recovery remains the last resort if the process exits before a retry succeeds.
-func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr error) error {
+func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr error, options ...AuditEndOption) error {
+	var opts auditEndOptions
+	for _, option := range options {
+		option(&opts)
+	}
 	ctx = context.WithoutCancel(ctx)
 	if sessionID == "" {
 		return nil
@@ -158,23 +194,35 @@ func (r *Runtime) EndAuditRun(ctx context.Context, sessionID string, runErr erro
 	// returns without releasing scope or state; the executor's cleanup
 	// callback owns the retry. Causal and compensation errors are already
 	// encoded as the terminal event's failure reason.
-	if err := r.closeRunEvidence(ctx, scope, runErr); err != nil {
+	outcome := auditOutcomeCompleted
+	switch {
+	case opts.canceled:
+		outcome = auditOutcomeCanceled
+	case opts.paused:
+		outcome = auditOutcomePaused
+	case runErr != nil:
+		outcome = auditOutcomeFailed
+	}
+	if err := r.closeRunEvidence(ctx, scope, runErr, outcome); err != nil {
 		return err
 	}
 
-	// Terminal evidence is durable: release process state exactly once. Cleanup
-	// is operational noise and must not change the durable execution outcome.
-	if deleteErr := r.sessions.Delete(ctx, &session.DeleteRequest{
-		AppName:   r.config.AppName,
-		UserID:    scope.identity.UserID,
-		SessionID: sessionID,
-	}); deleteErr != nil {
-		r.config.Logger.WarnContext(ctx, "external_run_session_cleanup_failed",
-			"run_id", string(scope.identity.RunID),
-			"error", runtimeError(deleteErr).Error(),
-		)
+	// Protocol sessions can outlive an attempt. Only a runtime that owns a
+	// run-scoped session may delete it when the attempt ends.
+	if !opts.preserveSession {
+		if deleteErr := r.sessions.Delete(ctx, &session.DeleteRequest{
+			AppName:   r.config.AppName,
+			UserID:    scope.identity.UserID,
+			SessionID: sessionID,
+		}); deleteErr != nil {
+			r.config.Logger.WarnContext(ctx, "external_run_session_cleanup_failed",
+				"run_id", string(scope.identity.RunID),
+				"error", runtimeError(deleteErr).Error(),
+			)
+		}
 	}
 	r.callAuditor.forget(sessionID)
+	r.callAuditor.forgetAttempt(string(scope.identity.RunID))
 	if scope.releaseRun != nil {
 		scope.releaseRun()
 	}

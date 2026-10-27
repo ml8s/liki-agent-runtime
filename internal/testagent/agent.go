@@ -12,19 +12,19 @@ import (
 )
 
 // AgentDeployment loads a generic structured AgentDeployment for adapter tests.
-func AgentDeployment(t *testing.T) *deploymentpkg.AgentDeployment {
+func AgentDeployment(t testing.TB) *deploymentpkg.AgentDeployment {
 	t.Helper()
 	t.Setenv("TEST_MCP_ENDPOINT", "in-memory://test")
 	root := t.TempDir()
 	files := map[string]string{
 		"agent-deployment.json": `{
-			"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "adapter-agent", "version": "1.0.0"},
+			"schema_version": "liki.agent-deployment.v1", "metadata": {"name": "test-agent", "version": "1.0.0"},
 			"spec": {
 				"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
 				"agents": [{
-					"name": "main",
-					"version": "1.0.0",
-					"description": "generic adapter test agent",
+				"name": "main",
+				"version": "1.0.0",
+				"description": "generic test agent",
 						"mode": "chat",
 						"sub_agents": [],
 					"instruction": {"path": "instruction.md"},
@@ -44,12 +44,13 @@ func AgentDeployment(t *testing.T) *deploymentpkg.AgentDeployment {
 			"additionalProperties": false,
 			"required": ["answer"],
 			"properties": {
-				"answer": {"type": "string", "minLength": 1}
+				"answer": {"type": "string", "minLength": 1},
+				"confidence": {"type": "number", "minimum": 0, "maximum": 1}
 			}
 		}`,
 	}
 	skillRoot := filepath.Join(root, "skills-root")
-	writeMinimalSkill(t, skillRoot)
+	WriteMinimalSkill(t, skillRoot)
 	files["agent-deployment.json"] = strings.ReplaceAll(
 		files["agent-deployment.json"], "SKILLS_ROOT_PLACEHOLDER", skillRoot)
 	for name, content := range files {

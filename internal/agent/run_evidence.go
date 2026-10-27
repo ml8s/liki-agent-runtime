@@ -8,6 +8,16 @@ import (
 	"context"
 
 	"github.com/ml8s/liki-agent-runtime/internal/audit"
+	"github.com/ml8s/liki-agent-runtime/internal/domain"
+)
+
+type auditOutcome int
+
+const (
+	auditOutcomeCompleted auditOutcome = iota
+	auditOutcomeFailed
+	auditOutcomePaused
+	auditOutcomeCanceled
 )
 
 // closeRunEvidence executes the run terminal-evidence transaction in order:
@@ -20,7 +30,7 @@ import (
 // durably appended — on failure the caller decides whether to retry or hand
 // over to startup recovery, and must not release any process state before
 // then. Run and EndAuditRun share this single implementation.
-func (r *Runtime) closeRunEvidence(ctx context.Context, scope *runExecution, cause error) error {
+func (r *Runtime) closeRunEvidence(ctx context.Context, scope *runExecution, cause error, outcome auditOutcome) error {
 	ctx = context.WithoutCancel(ctx)
 	if ledgerErr := r.callAuditor.closeActive(scope, runtimeError(cause)); ledgerErr != nil {
 		if reconcileErr := r.callAuditor.reconcile(scope, ledgerErr); reconcileErr != nil && cause == nil {
@@ -33,9 +43,24 @@ func (r *Runtime) closeRunEvidence(ctx context.Context, scope *runExecution, cau
 	if err := r.toolAuditor.FailPending(ctx, scope); err != nil && cause == nil {
 		cause = err
 	}
-	eventType, status := audit.EventRunCompleted, audit.StatusSucceeded
-	if cause != nil {
-		eventType, status = audit.EventRunFailed, audit.StatusFailed
+	if cause != nil && outcome == auditOutcomeCompleted {
+		outcome = auditOutcomeFailed
 	}
+	eventType := audit.EventRunCompleted
+	switch outcome {
+	case auditOutcomeCanceled:
+		eventType = audit.EventRunCanceled
+		if cause == nil {
+			cause = domain.NewError(domain.CodeRuntimeCancelled, "execution was canceled", nil)
+		}
+	case auditOutcomePaused:
+		eventType = audit.EventRunPaused
+		if cause == nil {
+			cause = domain.NewError(domain.CodeRuntimePaused, "execution paused waiting for protocol input", nil)
+		}
+	case auditOutcomeFailed:
+		eventType = audit.EventRunFailed
+	}
+	status := audit.StatusFor(eventType)
 	return r.recordRunAudit(ctx, scope, eventType, status, cause)
 }

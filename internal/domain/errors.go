@@ -1,3 +1,6 @@
+// Package domain holds the runtime's transport-neutral validation invariants
+// and stable error codes. It must not import transport, provider, or storage
+// packages.
 package domain
 
 import "errors"

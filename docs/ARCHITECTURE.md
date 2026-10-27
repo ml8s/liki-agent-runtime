@@ -89,7 +89,8 @@ internal/observability/prometheus
 ```
 
 Protocol adapters never import each other. Database technology is confined to
-`internal/audit/sqlite`.
+`internal/audit/sqlite` for append-only evidence and
+`internal/protocolstate/sqlite` for mutable standard protocol state.
 
 | Module | Responsibility |
 |---|---|
@@ -99,6 +100,7 @@ Protocol adapters never import each other. Database technology is confined to
 | `internal/domain` | Runtime audit and validation invariants |
 | `internal/audit` | Immutable audit event format and recorder port |
 | `internal/audit/sqlite` | Append-only audit persistence |
+| `internal/protocolstate/sqlite` | A2A task aggregates and push callback configs |
 | `internal/observability` | Metric interfaces |
 | `internal/observability/prometheus` | Prometheus implementation |
 | `internal/platform` | Configuration, identity, health interfaces, build metadata |
@@ -176,10 +178,13 @@ relay runs are persisted by liki-web itself and never notify, so the relay
 stays a safe rollback lever.
 
 A2A uses the official A2A Go SDK JSON-RPC binding and ADK A2A executor.
-The runtime uses the executor's standard ContextID-to-ADK-session mapping. No
-private A2A extension, RPC method, or state machine is advertised. Model-text
-visibility is resolved per event author against the deployment by both adapters
-(via `agent.ExposesModelText`), so a structured expert delegated under a plain
+The runtime uses the executor's standard ContextID-to-ADK-session mapping. Task
+aggregates, client-registered push callbacks, and official ADK sessions live in
+separate SQLite databases from append-only audit evidence; push is enabled only through its two official dependencies and sends
+the standard A2A `StreamResponse` payload. No private A2A extension, RPC
+method, or state machine is advertised. Model-text visibility is resolved per
+event author against the deployment by both adapters (via
+`agent.ExposesModelText`), so a structured expert delegated under a plain
 entrypoint never leaks raw model JSON on either protocol.
 
 MCP endpoint bindings are deployment-owned complete URLs. A gateway may expose

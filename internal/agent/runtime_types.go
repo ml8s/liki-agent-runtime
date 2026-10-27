@@ -9,10 +9,12 @@ import (
 
 func (s RunAuditIdentity) normalize() RunAuditIdentity {
 	return RunAuditIdentity{
-		RunID:    strings.TrimSpace(s.RunID),
-		ThreadID: strings.TrimSpace(s.ThreadID),
-		UserID:   strings.TrimSpace(s.UserID),
-		Protocol: s.Protocol,
+		RunID:     strings.TrimSpace(s.RunID),
+		ThreadID:  strings.TrimSpace(s.ThreadID),
+		UserID:    strings.TrimSpace(s.UserID),
+		Protocol:  s.Protocol,
+		TaskID:    strings.TrimSpace(s.TaskID),
+		MessageID: strings.TrimSpace(s.MessageID),
 	}
 }
 
@@ -31,8 +33,10 @@ func (s RunAuditIdentity) runIdentity() (execution.RunIdentity, error) {
 // RunAuditIdentity identifies an externally driven ADK execution for the LLM
 // audit ledger. It does not create a second execution path.
 type RunAuditIdentity struct {
-	RunID    string
-	ThreadID string
-	UserID   string
-	Protocol string
+	RunID     string
+	ThreadID  string
+	UserID    string
+	Protocol  string
+	TaskID    string
+	MessageID string
 }

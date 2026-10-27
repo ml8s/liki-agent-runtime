@@ -1,18 +1,13 @@
 package execution
 
-import deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
-
 import (
 	"encoding/json"
 	"strings"
 
+	deployment "github.com/ml8s/liki-agent-runtime/internal/deployment"
+
 	"google.golang.org/adk/v2/session"
 )
-
-// NewRunState returns the initial state for a run and selects plain-text capture.
-func NewRunState(capturePlain bool) RunState {
-	return RunState{CapturePlain: capturePlain}
-}
 
 // RunState is the immutable result state advanced across run events.
 type RunState struct {
@@ -133,7 +128,3 @@ func (s RunState) ConsumeStructuredOutput(
 	next.Output = result
 	return next, nil
 }
-
-// ParseStructuredOutput is the single protocol-independent finalizer for ADK
-// structured-output state. Every protocol receives the same validation,
-// canonical JSON, and user-facing pointer text.

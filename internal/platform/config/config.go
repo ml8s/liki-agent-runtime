@@ -21,6 +21,15 @@ const (
 	DefaultShutdownTimeout   = 30 * time.Second
 	DefaultLLMTimeout        = 120 * time.Second
 	DefaultLLMTemperature    = 0.2
+	DefaultPushTimeout       = 10 * time.Second
+
+	// DefaultProtocolStateDBPath keeps A2A task and callback state out of the
+	// append-only audit database.
+	DefaultProtocolStateDBPath = "./data/liki-agent-runtime-protocol-state.db"
+
+	// DefaultADKSessionDBPath persists official ADK session state separately
+	// from append-only audit evidence.
+	DefaultADKSessionDBPath = "./data/liki-agent-runtime-adk-sessions.db"
 )
 
 // DefaultAddr is the default HTTP listen address. The server and the
@@ -34,44 +43,49 @@ const DefaultOpsAddr = ":8085"
 
 // Config is the fully resolved runtime configuration.
 type Config struct {
-	Env                 string
-	Topology            Topology
-	ProtocolAddr        string
-	OpsAddr             string
-	TLSAddr             string
-	TLSCertFile         string
-	TLSKeyFile          string
-	TLSClientCAFile     string
-	PublicURL           string
-	InternalToken       string
-	CallbackURL         string
-	CallbackSecret      string
-	AuditDBPath         string
-	DeploymentFile      string
-	MCPTimeout          time.Duration
-	MCPHealthTimeout    time.Duration
-	MaxConcurrentRuns   int
-	RunTimeout          time.Duration
-	ShutdownTimeout     time.Duration
-	LLMStructuredOutput string
-	LLMBaseURL          string
-	LLMAPIKey           string
-	LLMModel            string
-	LLMProvider         string
-	LLMTimeout          time.Duration
-	LLMMaxOutputTokens  int
-	LLMTemperature      float64
-	LogFormat           string
-	LogLevel            string
+	Env                         string
+	Topology                    Topology
+	ProtocolAddr                string
+	OpsAddr                     string
+	TLSAddr                     string
+	TLSCertFile                 string
+	TLSKeyFile                  string
+	TLSClientCAFile             string
+	PublicURL                   string
+	InternalToken               string
+	CallbackURL                 string
+	CallbackSecret              string
+	AuditDBPath                 string
+	ProtocolStateDBPath         string
+	ADKSessionDBPath            string
+	DeploymentFile              string
+	MCPTimeout                  time.Duration
+	MCPHealthTimeout            time.Duration
+	MaxConcurrentRuns           int
+	RunTimeout                  time.Duration
+	ShutdownTimeout             time.Duration
+	LLMStructuredOutput         string
+	LLMBaseURL                  string
+	LLMAPIKey                   string
+	LLMModel                    string
+	LLMProvider                 string
+	LLMTimeout                  time.Duration
+	LLMMaxOutputTokens          int
+	LLMTemperature              float64
+	LogFormat                   string
+	LogLevel                    string
+	A2ATenant                   string
+	A2APushEnabled              bool
+	A2APushTimeout              time.Duration
+	A2APushAllowPrivateNetworks bool
 }
 
 // Topology declares the process state required by the deployment.
 type Topology string
 
 const (
-	// TopologySingle is the only supported production topology. It permits
-	// official in-memory ADK sessions, the SDK's in-memory A2A task store, and
-	// the local SQLite evidence database.
+	// TopologySingle is the only supported production topology. It uses local
+	// SQLite protocol state and evidence with official in-memory ADK sessions.
 	TopologySingle Topology = "single"
 
 	// TopologyMulti is intentionally recognized but rejected. It is a fail-closed
@@ -97,6 +111,9 @@ func Load() (Config, error) {
 		CallbackURL:         getEnv("LIKI_AGENT_RUNTIME_CALLBACK_URL", ""),
 		CallbackSecret:      getEnv("LIKI_AGENT_RUNTIME_CALLBACK_SECRET", ""),
 		AuditDBPath:         getEnv("LIKI_AGENT_RUNTIME_AUDIT_DB_PATH", "./data/liki-agent-runtime-audit.db"),
+		ProtocolStateDBPath: getEnv("LIKI_AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH", DefaultProtocolStateDBPath),
+		ADKSessionDBPath:    getEnv("LIKI_AGENT_RUNTIME_ADK_SESSION_DB_PATH", DefaultADKSessionDBPath),
+		A2ATenant:           getEnv("LIKI_AGENT_RUNTIME_A2A_TENANT", ""),
 		DeploymentFile:      getEnv("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE", ""),
 		LLMBaseURL:          getEnv("LIKI_AGENT_RUNTIME_LLM_BASE_URL", ""),
 		LLMAPIKey:           getEnv("LIKI_AGENT_RUNTIME_LLM_API_KEY", ""),
@@ -114,6 +131,15 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.MCPHealthTimeout, err = getOptionalDuration("LIKI_AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS"); err != nil {
+		return Config{}, err
+	}
+	if cfg.A2APushEnabled, err = getBool("LIKI_AGENT_RUNTIME_A2A_PUSH_ENABLED", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.A2APushTimeout, err = getDuration("LIKI_AGENT_RUNTIME_A2A_PUSH_TIMEOUT_SECONDS", DefaultPushTimeout); err != nil {
+		return Config{}, err
+	}
+	if cfg.A2APushAllowPrivateNetworks, err = getBool("LIKI_AGENT_RUNTIME_A2A_PUSH_ALLOW_PRIVATE_NETWORKS", false); err != nil {
 		return Config{}, err
 	}
 	if cfg.MaxConcurrentRuns, err = getInt("LIKI_AGENT_RUNTIME_MAX_CONCURRENT_RUNS", DefaultMaxConcurrentRuns); err != nil {
@@ -180,6 +206,12 @@ func validate(cfg Config) (Config, error) {
 	}
 	if cfg.DeploymentFile == "" {
 		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_DEPLOYMENT_FILE is required")
+	}
+	if cfg.ProtocolStateDBPath == "" {
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH is required")
+	}
+	if cfg.ADKSessionDBPath == "" {
+		return Config{}, fmt.Errorf("LIKI_AGENT_RUNTIME_ADK_SESSION_DB_PATH is required")
 	}
 	switch cfg.Topology {
 	case TopologySingle:
@@ -312,6 +344,18 @@ func getInt(key string, fallback int) (int, error) {
 	value, err := strconv.Atoi(raw)
 	if err != nil {
 		return 0, fmt.Errorf("%s is not a valid integer: %q", key, raw)
+	}
+	return value, nil
+}
+
+func getBool(key string, fallback bool) (bool, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s is not a valid boolean: %q", key, raw)
 	}
 	return value, nil
 }

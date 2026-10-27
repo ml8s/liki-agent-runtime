@@ -11,6 +11,8 @@ type runExecution struct {
 	mu                sync.Mutex
 	identity          execution.RunIdentity
 	provenance        execution.RunProvenance
+	attemptKey        string
+	taskID            string
 	startedAt         time.Time
 	model             string
 	instructionDigest string

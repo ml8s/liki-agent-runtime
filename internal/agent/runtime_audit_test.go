@@ -13,12 +13,12 @@ import (
 	"github.com/ml8s/liki-agent-runtime/internal/domain"
 )
 
-type recordingAuditEvents struct {
+type recordingAudit struct {
 	mu     sync.Mutex
 	events []audit.Event
 }
 
-func (r *recordingAuditEvents) Record(_ context.Context, event *audit.Event) error {
+func (r *recordingAudit) Record(_ context.Context, event *audit.Event) error {
 	if event == nil {
 		return nil
 	}
@@ -28,7 +28,7 @@ func (r *recordingAuditEvents) Record(_ context.Context, event *audit.Event) err
 	return nil
 }
 
-func (r *recordingAuditEvents) eventsOfType(eventType audit.EventType) []audit.Event {
+func (r *recordingAudit) eventsOfType(eventType audit.EventType) []audit.Event {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	result := make([]audit.Event, 0)
@@ -40,9 +40,9 @@ func (r *recordingAuditEvents) eventsOfType(eventType audit.EventType) []audit.E
 	return result
 }
 
-func newAuditRuntime(t *testing.T) (*agent.Runtime, *recordingAuditEvents) {
+func newAuditRuntime(t *testing.T) (*agent.Runtime, *recordingAudit) {
 	t.Helper()
-	events := &recordingAuditEvents{}
+	events := &recordingAudit{}
 	agentDeployment := agent.NewTestDeployment(t)
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	runtime, err := agent.NewRuntime(agent.Config{
@@ -62,7 +62,7 @@ func newAuditRuntime(t *testing.T) (*agent.Runtime, *recordingAuditEvents) {
 // flakyRunTerminalAudit injects a configurable number of transient failures for
 // terminal run events, leaving all other audit appends intact.
 type flakyRunTerminalAudit struct {
-	*recordingAuditEvents
+	*recordingAudit
 	mu        sync.Mutex
 	remaining int
 }
@@ -77,7 +77,7 @@ func (r *flakyRunTerminalAudit) Record(ctx context.Context, event *audit.Event) 
 		}
 		r.mu.Unlock()
 	}
-	return r.recordingAuditEvents.Record(ctx, event)
+	return r.recordingAudit.Record(ctx, event)
 }
 
 func newAuditRuntimeWith(t *testing.T, recorder audit.Recorder, maxConcurrent int) *agent.Runtime {
@@ -191,7 +191,7 @@ func TestExternalAuditRunRejectsDuplicateRunID(t *testing.T) {
 }
 
 func TestExternalAuditRunRecordsDuration(t *testing.T) {
-	events := &recordingAuditEvents{}
+	events := &recordingAudit{}
 	tick := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 	runtime := newAuditRuntimeWithClock(t, events, 1, func() time.Time {
 		tick = tick.Add(time.Second)
@@ -217,7 +217,7 @@ func TestExternalAuditRunRecordsDuration(t *testing.T) {
 }
 
 func TestExternalAuditRunRetriesTerminalAppendAndReleasesOnce(t *testing.T) {
-	recorder := &flakyRunTerminalAudit{recordingAuditEvents: &recordingAuditEvents{}, remaining: 2}
+	recorder := &flakyRunTerminalAudit{recordingAudit: &recordingAudit{}, remaining: 2}
 	runtime := newAuditRuntimeWith(t, recorder, 1)
 	ctx := context.Background()
 	scope := agent.RunAuditIdentity{RunID: "task_retry", ThreadID: "context_1", UserID: "user_1", Protocol: "a2a"}
@@ -251,7 +251,7 @@ func TestExternalAuditRunRetriesTerminalAppendAndReleasesOnce(t *testing.T) {
 }
 
 type existsAudit struct {
-	recordingAuditEvents
+	recordingAudit
 	exists bool
 }
 
@@ -268,5 +268,62 @@ func TestExternalAuditRunRejectsDurableDuplicateRunID(t *testing.T) {
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRunIDConflict {
 		t.Fatalf("BeginAuditRun() error = %v, want %s", err, domain.CodeRunIDConflict)
+	}
+}
+
+func TestEndAuditRunRecordsPausedAndCanceledAttempts(t *testing.T) {
+	events := &recordingAudit{}
+	agentDeployment := agent.NewTestDeployment(t)
+	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
+	runtime, err := agent.NewRuntime(agent.Config{
+		Model:           "test-model",
+		ModelAPIKey:     "test-key",
+		AgentDeployment: agentDeployment,
+		Provider:        "test-provider",
+		AuditRecorder:   events,
+	})
+	if err != nil {
+		t.Fatalf("NewRuntime() error = %v", err)
+	}
+
+	ctx := context.Background()
+	pausedScope := agent.RunAuditIdentity{
+		RunID: "attempt_pause", ThreadID: "context_1", UserID: "user_1",
+		Protocol: "a2a", TaskID: "task_pause", MessageID: "message_pause",
+	}
+	pausedSession := "context_1"
+	if err := runtime.BeginAuditRun(ctx, pausedSession, pausedScope); err != nil {
+		t.Fatalf("BeginAuditRun(paused) error = %v", err)
+	}
+	if err := runtime.EndAuditRun(ctx, pausedSession, nil,
+		agent.WithPausedAttempt(), agent.WithPreservedSession()); err != nil {
+		t.Fatalf("EndAuditRun(paused) error = %v", err)
+	}
+	paused := events.eventsOfType(audit.EventRunPaused)
+	if len(paused) != 1 || paused[0].Status != audit.StatusPaused {
+		t.Fatalf("paused events = %#v", paused)
+	}
+	if string(paused[0].ParentRunID) != "task_pause" {
+		t.Fatalf("paused parent task = %q", paused[0].ParentRunID)
+	}
+
+	canceledScope := agent.RunAuditIdentity{
+		RunID: "attempt_cancel", ThreadID: "context_2", UserID: "user_1",
+		Protocol: "a2a", TaskID: "task_cancel", MessageID: "message_cancel",
+	}
+	canceledSession := "context_2"
+	if err := runtime.BeginAuditRun(ctx, canceledSession, canceledScope); err != nil {
+		t.Fatalf("BeginAuditRun(canceled) error = %v", err)
+	}
+	if err := runtime.EndAuditRun(ctx, canceledSession, nil,
+		agent.WithCanceledAttempt(), agent.WithPreservedSession()); err != nil {
+		t.Fatalf("EndAuditRun(canceled) error = %v", err)
+	}
+	canceled := events.eventsOfType(audit.EventRunCanceled)
+	if len(canceled) != 1 || canceled[0].Status != audit.StatusCanceled {
+		t.Fatalf("canceled events = %#v", canceled)
+	}
+	if string(canceled[0].ParentRunID) != "task_cancel" {
+		t.Fatalf("canceled parent task = %q", canceled[0].ParentRunID)
 	}
 }

@@ -14,3 +14,10 @@ type ProtocolMetrics interface {
 type DependencyMetrics interface {
 	SetDependencyReady(name string, ready bool)
 }
+
+// A2AMetrics observes standard A2A push notification configuration and
+// delivery. Labels are bounded operational statuses, never callback secrets.
+type A2AMetrics interface {
+	ObservePushConfig(operation, status string)
+	ObservePushDelivery(status string, duration time.Duration)
+}
