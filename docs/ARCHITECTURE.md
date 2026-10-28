@@ -266,6 +266,10 @@ Bearer-token failures and missing verified identities are counted in a bounded
 fixed window per TCP socket source. Untrusted forwarding headers never change
 the source. A source that exceeds ten failures in one minute receives HTTP 429
 and the stable `rate_limited` code.
+Service authentication and end-user identity are separate ports. A service
+token authenticates the caller; a pluggable `identity.RequestSource` supplies
+the verified end-user identity. The bundled trusted-header adapter maps only
+channel-owned headers.
 
 Readiness checks SQLite and every declared MCP dependency through the official
 MCP discovery RPC. It requires the configured MCP revision, server identity,

@@ -24,6 +24,7 @@ import (
 	"github.com/ml8s/agent-runtime/internal/platform"
 	"github.com/ml8s/agent-runtime/internal/platform/buildinfo"
 	"github.com/ml8s/agent-runtime/internal/platform/config"
+	"github.com/ml8s/agent-runtime/internal/platform/identity"
 	"github.com/ml8s/agent-runtime/internal/platform/tlsconf"
 	a2aadapter "github.com/ml8s/agent-runtime/internal/protocol/a2a"
 	aguiadapter "github.com/ml8s/agent-runtime/internal/protocol/agui"
@@ -189,17 +190,18 @@ func run() (err error) {
 	healthChecks := []platform.HealthChecker{store, protocolDB, sessionDB}
 	healthChecks = append(healthChecks, runtime.MCPHealthChecks()...)
 	protocolServer, err := transport.New(transport.Services{
-		AgentCard:     a2aServer.AgentCardHandler(),
-		A2A:           a2aServer.EndpointHandler(),
-		AGUI:          aguiHandler,
-		HealthChecks:  healthChecks,
-		Metrics:       metricsCollector,
-		Dependencies:  metricsCollector,
-		MetricsTarget: metricsCollector.Handler(),
-		InternalToken: cfg.InternalToken,
-		A2APrincipal:  cfg.A2APrincipal,
-		A2ATenant:     cfg.A2ATenant,
-		Logger:        logger,
+		AgentCard:      a2aServer.AgentCardHandler(),
+		A2A:            a2aServer.EndpointHandler(),
+		AGUI:           aguiHandler,
+		HealthChecks:   healthChecks,
+		Metrics:        metricsCollector,
+		Dependencies:   metricsCollector,
+		MetricsTarget:  metricsCollector.Handler(),
+		InternalToken:  cfg.InternalToken,
+		IdentitySource: identity.NewHeaderSource(identity.HeaderSourceConfig{}),
+		A2APrincipal:   cfg.A2APrincipal,
+		A2ATenant:      cfg.A2ATenant,
+		Logger:         logger,
 	})
 	if err != nil {
 		return err

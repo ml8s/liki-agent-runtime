@@ -20,17 +20,18 @@ import (
 // Services bundles the protocol and operational handlers the transport
 // composes.
 type Services struct {
-	AgentCard     http.Handler
-	A2A           http.Handler
-	AGUI          http.Handler
-	HealthChecks  []platform.HealthChecker
-	Metrics       observability.ProtocolMetrics
-	Dependencies  observability.DependencyMetrics
-	MetricsTarget http.Handler
-	InternalToken string
-	A2APrincipal  string
-	A2ATenant     string
-	Logger        *slog.Logger
+	AgentCard      http.Handler
+	A2A            http.Handler
+	AGUI           http.Handler
+	HealthChecks   []platform.HealthChecker
+	Metrics        observability.ProtocolMetrics
+	Dependencies   observability.DependencyMetrics
+	MetricsTarget  http.Handler
+	InternalToken  string
+	IdentitySource identity.RequestSource
+	A2APrincipal   string
+	A2ATenant      string
+	Logger         *slog.Logger
 
 	// ReadinessCacheTTL bounds how long one dependency check round is reused.
 	// Zero selects the default; negative values disable caching.
@@ -52,6 +53,9 @@ type Server struct {
 func New(services Services) (*Server, error) {
 	if services.AgentCard == nil || services.A2A == nil || services.AGUI == nil {
 		return nil, fmt.Errorf("A2A and AG-UI protocol handlers are required")
+	}
+	if services.IdentitySource == nil {
+		return nil, fmt.Errorf("identity source is required")
 	}
 	if services.Logger == nil {
 		services.Logger = slog.Default()
@@ -112,13 +116,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.URL.Path {
 	case "/ag-ui":
-		r = r.WithContext(identity.WithIdentity(r.Context(), verifiedIdentity(r)))
+		if verified, ok := s.services.IdentitySource.IdentityFromRequest(r); ok {
+			r = r.WithContext(identity.WithIdentity(r.Context(), verified))
+		}
 	case "/a2a":
 		// A2A accepts either a verified machine identity from mTLS or the
 		// composition-configured service principal. Relay user headers are not
 		// trusted on this machine protocol surface.
-		if mtls := mutualTLSVerified(r); mtls {
-			if verified := verifiedIdentity(r); !verified.IsZero() {
+		if mtls := identity.MutualTLSVerified(r); mtls {
+			if verified, ok := s.services.IdentitySource.IdentityFromRequest(r); ok && !verified.IsZero() {
 				r = r.WithContext(identity.WithIdentity(r.Context(), verified))
 			} else if s.services.A2APrincipal != "" {
 				r = r.WithContext(identity.WithIdentity(r.Context(), identity.Identity{

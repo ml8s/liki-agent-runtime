@@ -37,11 +37,12 @@ func (c *countingChecker) CheckHealth(context.Context) platform.DependencyHealth
 func newServer(t *testing.T, token string) *transport.Server {
 	t.Helper()
 	handler, err := transport.New(transport.Services{
-		AgentCard:     http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
-		A2A:           http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
-		AGUI:          http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
-		HealthChecks:  []platform.HealthChecker{healthy{}},
-		InternalToken: token,
+		AgentCard:      http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A:            http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		AGUI:           http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		HealthChecks:   []platform.HealthChecker{healthy{}},
+		IdentitySource: identity.NewHeaderSource(identity.HeaderSourceConfig{}),
+		InternalToken:  token,
 	})
 	if err != nil {
 		t.Fatalf("transport.New() error = %v", err)
@@ -51,6 +52,9 @@ func newServer(t *testing.T, token string) *transport.Server {
 
 func mustNewServer(t *testing.T, services transport.Services) *transport.Server {
 	t.Helper()
+	if services.IdentitySource == nil {
+		services.IdentitySource = identity.NewHeaderSource(identity.HeaderSourceConfig{})
+	}
 	handler, err := transport.New(services)
 	if err != nil {
 		t.Fatalf("transport.New() error = %v", err)
@@ -227,12 +231,24 @@ func TestIdentityFailuresAreRateLimitedWithoutServiceToken(t *testing.T) {
 	}
 }
 
+func TestTransportRequiresExplicitIdentitySource(t *testing.T) {
+	_, err := transport.New(transport.Services{
+		AgentCard: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A:       http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		AGUI:      http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+	})
+	if err == nil || err.Error() != "identity source is required" {
+		t.Fatalf("transport.New() error = %v, want explicit identity source requirement", err)
+	}
+}
+
 func TestDrainMakesReadinessUnavailableWithoutCancellingRequests(t *testing.T) {
 	server, err := transport.New(transport.Services{
-		AgentCard:    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
-		A2A:          http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
-		AGUI:         http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
-		HealthChecks: []platform.HealthChecker{healthy{}},
+		AgentCard:      http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A:            http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		AGUI:           http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		HealthChecks:   []platform.HealthChecker{healthy{}},
+		IdentitySource: identity.NewHeaderSource(identity.HeaderSourceConfig{}),
 	})
 	if err != nil {
 		t.Fatalf("transport.New() error = %v", err)

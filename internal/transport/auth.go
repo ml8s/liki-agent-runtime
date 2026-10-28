@@ -85,7 +85,7 @@ func (s *Server) authorized(next http.Handler, requireIdentity bool) http.Handle
 		// An mTLS channel (client certificate already verified) uses the
 		// certificate as the channel credential; a plaintext listener
 		// (transitional relay) still requires the service token.
-		if s.services.InternalToken != "" && !mutualTLSVerified(r) {
+		if s.services.InternalToken != "" && !identity.MutualTLSVerified(r) {
 			const prefix = "Bearer "
 			header := r.Header.Get("Authorization")
 			if !strings.HasPrefix(header, prefix) || subtle.ConstantTimeCompare([]byte(header[len(prefix):]), []byte(s.services.InternalToken)) != 1 {
@@ -124,36 +124,6 @@ func requestSource(remoteAddr string) string {
 		remoteAddr = remoteAddr[:128]
 	}
 	return remoteAddr
-}
-
-func verifiedIdentity(r *http.Request) identity.Identity {
-	// The channel determines the trusted identity header (contract C4):
-	//   mTLS (edge forward_auth injection) → Remote-User;
-	//   plaintext (token-bearing relay caller) → X-Agent-User-ID.
-	mtls := mutualTLSVerified(r)
-	header := "X-Agent-User-ID"
-	tenantHeader := "X-Agent-Tenant-ID"
-	if mtls {
-		header = "Remote-User"
-		tenantHeader = "Remote-Tenant"
-	}
-	userID := strings.TrimSpace(r.Header.Get(header))
-	if !validRequestID(userID) {
-		return identity.Identity{}
-	}
-	tenant := strings.TrimSpace(r.Header.Get(tenantHeader))
-	if tenant != "" && !validRequestID(tenant) {
-		return identity.Identity{}
-	}
-	return identity.Identity{UserID: userID, Tenant: tenant, MutualTLS: mtls}
-}
-
-// mutualTLSVerified reports whether the request arrived over a TLS connection
-// whose client certificate the listener already verified. The mTLS listener is
-// configured with RequireAndVerifyClientCert, so a present peer certificate
-// means the channel itself is authenticated.
-func mutualTLSVerified(r *http.Request) bool {
-	return r.TLS != nil && len(r.TLS.PeerCertificates) > 0
 }
 
 func validRequestID(value string) bool {

@@ -86,6 +86,11 @@ inject `X-Agent-User-ID`. The header is a browser-only trust signal: it is
 adopted on `/ag-ui` only and never on A2A, so a machine client sharing the
 internal token cannot spoof a user identity into audit/provenance.
 
+The transport consumes a pluggable `identity.RequestSource`; the bundled
+trusted-header adapter is channel-aware and accepts only headers owned by the
+authenticated channel. Future OIDC or certificate-identity adapters implement
+the same port without changing protocol handlers.
+
 The runtime is never directly public and never authenticates end users, issues
 sessions, stores conversations, or trusts unverified identities. Internet-facing
 rate limiting is the gateway's job; the internal per-source limiter only resists
