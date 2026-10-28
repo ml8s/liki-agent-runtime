@@ -18,8 +18,6 @@ type runExecution struct {
 	// every field is final, so no other lock ever protects them.
 	identity          execution.RunIdentity
 	provenance        execution.RunProvenance
-	sessionID         string
-	attemptKey        string
 	taskID            string
 	startedAt         time.Time
 	model             string

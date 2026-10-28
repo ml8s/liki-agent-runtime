@@ -4,7 +4,6 @@ import (
 	"crypto/subtle"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -79,22 +78,11 @@ func (l *authFailureLimiter) pruneLocked(now time.Time) {
 	}
 }
 
-// bearerCredential returns the token following a case-insensitive Bearer
-// authorization scheme, as required by RFC 7235.
-func bearerCredential(header string) (string, bool) {
-	const prefix = "bearer "
-	if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
-		return "", false
-	}
-	token := strings.TrimSpace(header[len(prefix):])
-	return token, token != ""
-}
-
 // bearerMatches reports whether the header carries exactly the expected
 // bearer credential. Comparison is constant-time so tokens cannot be probed
 // byte by byte.
 func bearerMatches(header, expected string) bool {
-	token, ok := bearerCredential(header)
+	token, ok := identity.BearerToken(header)
 	return ok && subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
 }
 

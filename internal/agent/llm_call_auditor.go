@@ -49,7 +49,6 @@ func (l *llmCallAuditor) begin(handle AuditAttemptHandle, scope *runExecution) b
 	}
 	return l.attempts.begin(
 		string(handle.AttemptID),
-		string(scope.identity.RunID),
 		handle.ContextID,
 		scope,
 	)

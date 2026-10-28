@@ -85,8 +85,6 @@ func (r *Runtime) Run(
 		definitionVersion: r.definition.Metadata.Version,
 		definitionDigest:  r.definition.Digest,
 		startedAt:         startedAt,
-		attemptKey:        string(handle.AttemptID),
-		sessionID:         sessionID,
 		activeCalls:       make(map[string]llmCallRuntime),
 	}
 	// Aggregate usage is filled in on every exit path (including failure

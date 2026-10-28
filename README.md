@@ -98,8 +98,8 @@ on both AG-UI and A2A.
 
 The transport consumes a pluggable `identity.RequestSource`; the bundled
 trusted-header adapter is channel-aware and accepts only headers owned by the
-authenticated channel. Future OIDC or certificate-identity adapters implement
-the same port without changing protocol handlers.
+authenticated channel, and the bundled OIDC and certificate-identity adapters
+implement the same port without changing protocol handlers.
 
 On the optional mutual-TLS listener, the default
 `AGENT_RUNTIME_MTLS_IDENTITY_SOURCE=certificate` maps the identity from the

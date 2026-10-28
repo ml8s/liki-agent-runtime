@@ -395,7 +395,6 @@ func TestLedgerResolvesConcurrentAttemptsInOneSession(t *testing.T) {
 
 	scopeOne := newTestScope()
 	scopeOne.identity.RunID = "attempt_one"
-	scopeOne.attemptKey = string(scopeOne.identity.RunID)
 	handleOne := ledgerHandle(sessionID, scopeOne)
 	if !callAuditor.begin(handleOne, scopeOne) {
 		t.Fatal("begin attempt one should succeed")
@@ -403,7 +402,6 @@ func TestLedgerResolvesConcurrentAttemptsInOneSession(t *testing.T) {
 
 	scopeTwo := newTestScope()
 	scopeTwo.identity.RunID = "attempt_two"
-	scopeTwo.attemptKey = string(scopeTwo.identity.RunID)
 	handleTwo := ledgerHandle(sessionID, scopeTwo)
 	if !callAuditor.begin(handleTwo, scopeTwo) {
 		t.Fatal("begin attempt two should succeed for the same ADK session")

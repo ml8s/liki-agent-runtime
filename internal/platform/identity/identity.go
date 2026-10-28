@@ -50,10 +50,3 @@ func UserIDFromContext(ctx context.Context) (string, bool) {
 }
 
 // TenantFromContext returns the verified tenant, if present.
-func TenantFromContext(ctx context.Context) (string, bool) {
-	identity, ok := FromContext(ctx)
-	if !ok || strings.TrimSpace(identity.Tenant) == "" {
-		return "", false
-	}
-	return identity.Tenant, true
-}

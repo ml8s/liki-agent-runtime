@@ -17,7 +17,7 @@ skill/project.
 | LLMCall | One auditable model invocation and its lifecycle within a RunExecution |
 | Delegation | A parent Agent delegating a subtask to a sub-expert; a child lifecycle of RunExecution |
 | Audit event | An immutable domain fact containing lifecycle evidence |
-| ADK working session | AG-UI owns a run-scoped session (`run:<RunID>`), deleted at terminal state; A2A ContextID owns the durable ADK session |
+| ADK working session | AG-UI owns a run-scoped in-process session (`run:<RunID>`), deleted at terminal state; A2A ContextID owns the durable ADK session |
 | Skills binding | The artifact-declared skills root plus the built-in skill tools (list/load/resource) |
 
 ## AgentDeployment invariants
