@@ -225,6 +225,9 @@ func run() (err error) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go collectStorageMetrics(ctx, metricsCollector, store, protocolDB)
+	if cfg.A2ATaskRetention > 0 {
+		go retainTerminalProtocolTasks(ctx, logger, protocolDB, cfg.A2ATaskRetention)
+	}
 	errCh := make(chan error, len(servers))
 	go func() {
 		logger.Info("agent-runtime listening",
@@ -291,6 +294,44 @@ func collectStorageMetrics(
 			return
 		case <-ticker.C:
 			update()
+		}
+	}
+}
+
+// retainTerminalProtocolTasks periodically expires immutable terminal A2A
+// tasks and their push configs. Process-owned and client-owned wait states are
+// never removed; append-only audit evidence is intentionally outside this
+// lifecycle.
+func retainTerminalProtocolTasks(
+	ctx context.Context,
+	logger *slog.Logger,
+	protocolDB *protocolstate.DB,
+	retention time.Duration,
+) {
+	const sweepInterval = time.Hour
+	sweep := func() {
+		result, err := protocolDB.RetainTerminalTasks(ctx, retention, time.Now().UTC())
+		if err != nil {
+			logger.Warn("a2a_retention_sweep_failed", "error", err.Error())
+			return
+		}
+		if result.Tasks > 0 || result.PushConfigs > 0 {
+			logger.Info("a2a_retention_sweep",
+				"retention_seconds", int(retention/time.Second),
+				"tasks", result.Tasks,
+				"push_configs", result.PushConfigs,
+			)
+		}
+	}
+	sweep()
+	ticker := time.NewTicker(sweepInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sweep()
 		}
 	}
 }

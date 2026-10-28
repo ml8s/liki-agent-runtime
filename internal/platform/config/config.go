@@ -80,6 +80,7 @@ type Config struct {
 	A2APushEnabled              bool
 	A2APushTimeout              time.Duration
 	A2APushAllowPrivateNetworks bool
+	A2ATaskRetention            time.Duration
 }
 
 // Topology declares the process state required by the deployment.
@@ -141,6 +142,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.A2APushAllowPrivateNetworks, err = getBool("AGENT_RUNTIME_A2A_PUSH_ALLOW_PRIVATE_NETWORKS", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.A2ATaskRetention, err = getOptionalDuration("AGENT_RUNTIME_A2A_TASK_RETENTION_SECONDS"); err != nil {
 		return Config{}, err
 	}
 	if cfg.MaxConcurrentRuns, err = getInt("AGENT_RUNTIME_MAX_CONCURRENT_RUNS", DefaultMaxConcurrentRuns); err != nil {

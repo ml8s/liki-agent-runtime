@@ -140,6 +140,25 @@ func TestLoadDerivesPublicURLFromDefaultAddress(t *testing.T) {
 	}
 }
 
+func TestLoadA2ATaskRetention(t *testing.T) {
+	baseEnv(t)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.A2ATaskRetention != 0 {
+		t.Fatalf("unset A2A task retention = %s, want disabled", cfg.A2ATaskRetention)
+	}
+	t.Setenv("AGENT_RUNTIME_A2A_TASK_RETENTION_SECONDS", "86400")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("Load(retention) error = %v", err)
+	}
+	if cfg.A2ATaskRetention != 24*time.Hour {
+		t.Fatalf("A2A task retention = %s, want 24h", cfg.A2ATaskRetention)
+	}
+}
+
 func TestLoadMaxOutputTokens(t *testing.T) {
 	baseEnv(t)
 	cfg, err := config.Load()

@@ -115,6 +115,7 @@ endpoint is HTTPS-only without embedded credentials.
 | `AGENT_RUNTIME_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
 | `AGENT_RUNTIME_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
 | `AGENT_RUNTIME_LOG_*` | structured logging |
+| `AGENT_RUNTIME_A2A_TASK_RETENTION_SECONDS` | optional terminal A2A task retention; unset/zero disables cleanup |
 | `OTEL_*` | standard OpenTelemetry tracing settings |
 
 MCP endpoint values are complete URLs; the gateway may own service prefixes
