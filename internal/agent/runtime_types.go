@@ -11,20 +11,20 @@ import (
 // distinct: the ADK session is owned by the protocol ContextID, while each
 // execution and its audit lifecycle is owned by a unique attempt ID.
 type AuditAttemptHandle struct {
-	ADKSessionID string
-	AttemptID    string
+	ContextID string
+	AttemptID domain.AttemptID
 }
 
 func (h AuditAttemptHandle) normalize() AuditAttemptHandle {
 	return AuditAttemptHandle{
-		ADKSessionID: strings.TrimSpace(h.ADKSessionID),
-		AttemptID:    strings.TrimSpace(h.AttemptID),
+		ContextID: strings.TrimSpace(h.ContextID),
+		AttemptID: domain.AttemptID(strings.TrimSpace(string(h.AttemptID))),
 	}
 }
 
 func (h AuditAttemptHandle) validate() error {
-	if h.ADKSessionID == "" {
-		return domain.NewError(domain.CodeAuditSessionRequired, "audit ADK session identifier is required", domain.ErrInvalidInput)
+	if h.ContextID == "" {
+		return domain.NewError(domain.CodeAuditSessionRequired, "audit protocol context identifier is required", domain.ErrInvalidInput)
 	}
 	if h.AttemptID == "" {
 		return domain.NewError(domain.CodeRunIDRequired, "audit attempt identifier is required", domain.ErrInvalidInput)
@@ -34,7 +34,7 @@ func (h AuditAttemptHandle) validate() error {
 
 func (s RunAuditIdentity) normalize() RunAuditIdentity {
 	return RunAuditIdentity{
-		RunID:     strings.TrimSpace(s.RunID),
+		AttemptID: domain.AttemptID(strings.TrimSpace(string(s.AttemptID))),
 		ThreadID:  strings.TrimSpace(s.ThreadID),
 		UserID:    strings.TrimSpace(s.UserID),
 		Protocol:  s.Protocol,
@@ -45,7 +45,7 @@ func (s RunAuditIdentity) normalize() RunAuditIdentity {
 
 func (s RunAuditIdentity) runIdentity() (execution.RunIdentity, error) {
 	identity := execution.RunIdentity{
-		RunID:    domain.ID(s.RunID),
+		RunID:    domain.ID(s.AttemptID),
 		ThreadID: domain.ID(s.ThreadID),
 		UserID:   s.UserID,
 	}
@@ -58,7 +58,7 @@ func (s RunAuditIdentity) runIdentity() (execution.RunIdentity, error) {
 // RunAuditIdentity identifies an externally driven ADK execution for the LLM
 // audit ledger. It does not create a second execution path.
 type RunAuditIdentity struct {
-	RunID     string
+	AttemptID domain.AttemptID
 	ThreadID  string
 	UserID    string
 	Protocol  string

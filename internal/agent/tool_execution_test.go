@@ -10,6 +10,7 @@ import (
 
 	"github.com/ml8s/agent-runtime/internal/audit"
 	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/execution"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -18,8 +19,8 @@ type stubMetrics struct {
 	catalog []string
 }
 
-func (m *stubMetrics) ObserveLLMCall(string, string, domain.LLMTokenUsage) {}
-func (m *stubMetrics) ObserveLLMCallLatency(string, string, time.Duration) {}
+func (m *stubMetrics) ObserveLLMCall(string, string, execution.LLMTokenUsage) {}
+func (m *stubMetrics) ObserveLLMCallLatency(string, string, time.Duration)    {}
 
 func (m *stubMetrics) ObserveAgentDelegation(caller, target, status string, _ time.Duration) {
 	m.calls = append(m.calls, caller+"/"+target+"/"+status)

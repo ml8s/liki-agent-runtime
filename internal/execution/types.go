@@ -81,7 +81,7 @@ func StructuredOutputStateKey(agentName string) string {
 
 // Metrics is the runtime observation interface for execution evidence.
 type Metrics interface {
-	ObserveLLMCall(model, status string, usage domain.LLMTokenUsage)
+	ObserveLLMCall(model, status string, usage LLMTokenUsage)
 	ObserveLLMCallLatency(model, status string, duration time.Duration)
 	ObserveToolCall(agent, tool, status string, duration time.Duration)
 	ObserveAgentDelegation(caller, target, status string, duration time.Duration)

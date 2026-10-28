@@ -1,9 +1,11 @@
-package domain
+package execution
 
 import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 func TestNormalizeLLMCall(t *testing.T) {
@@ -15,7 +17,7 @@ func TestNormalizeLLMCall(t *testing.T) {
 		ErrorCode: " runtime_timeout ",
 	}
 	normalized := NormalizeLLMCall(input)
-	if normalized.ID != "call_1" || normalized.AgentName != "coordinator" || normalized.Model != "test-model" || normalized.ErrorCode != CodeRuntimeTimeout {
+	if normalized.ID != "call_1" || normalized.AgentName != "coordinator" || normalized.Model != "test-model" || normalized.ErrorCode != domain.CodeRuntimeTimeout {
 		t.Fatalf("normalized call = %+v", normalized)
 	}
 	if input.ID != " call_1 " || input.AgentName != " coordinator " || input.Model != " test-model " || input.ErrorCode != " runtime_timeout " {
@@ -39,20 +41,20 @@ func TestValidateLLMCall(t *testing.T) {
 		mutate   func(*LLMCall)
 		wantCode string
 	}{
-		{name: "missing id", mutate: func(c *LLMCall) { c.ID = "" }, wantCode: CodeLLMCallIDRequired},
-		{name: "missing run", mutate: func(c *LLMCall) { c.RunID = "" }, wantCode: CodeRunIDRequired},
-		{name: "missing thread", mutate: func(c *LLMCall) { c.ThreadID = "" }, wantCode: CodeThreadIDRequired},
-		{name: "missing user", mutate: func(c *LLMCall) { c.UserID = "" }, wantCode: CodeUserIDRequired},
-		{name: "missing agent", mutate: func(c *LLMCall) { c.AgentName = "" }, wantCode: CodeAgentNameRequired},
-		{name: "missing model", mutate: func(c *LLMCall) { c.Model = "" }, wantCode: CodeModelRequired},
-		{name: "missing start time", mutate: func(c *LLMCall) { c.StartedAt = time.Time{} }, wantCode: CodeLLMCallStartedAtRequired},
+		{name: "missing id", mutate: func(c *LLMCall) { c.ID = "" }, wantCode: domain.CodeLLMCallIDRequired},
+		{name: "missing run", mutate: func(c *LLMCall) { c.RunID = "" }, wantCode: domain.CodeRunIDRequired},
+		{name: "missing thread", mutate: func(c *LLMCall) { c.ThreadID = "" }, wantCode: domain.CodeThreadIDRequired},
+		{name: "missing user", mutate: func(c *LLMCall) { c.UserID = "" }, wantCode: domain.CodeUserIDRequired},
+		{name: "missing agent", mutate: func(c *LLMCall) { c.AgentName = "" }, wantCode: domain.CodeAgentNameRequired},
+		{name: "missing model", mutate: func(c *LLMCall) { c.Model = "" }, wantCode: domain.CodeModelRequired},
+		{name: "missing start time", mutate: func(c *LLMCall) { c.StartedAt = time.Time{} }, wantCode: domain.CodeLLMCallStartedAtRequired},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			call := valid
 			testCase.mutate(&call)
 			err := ValidateLLMCall(call)
-			var domainErr *Error
+			var domainErr *domain.Error
 			if !errors.As(err, &domainErr) || domainErr.Code != testCase.wantCode {
 				t.Fatalf("ValidateLLMCall() error = %v, want code %s", err, testCase.wantCode)
 			}
@@ -71,13 +73,13 @@ func TestLLMCallLifecycle(t *testing.T) {
 		t.Fatalf("completed call = %+v", completed)
 	}
 
-	failed := FailLLMCall(call, NewError(CodeRuntimeTimeout, "runtime timeout", nil), finished)
-	if failed.Status != LLMCallFailed || failed.ErrorCode != CodeRuntimeTimeout || failed.ErrorMessage != "runtime timeout" {
+	failed := FailLLMCall(call, domain.NewError(domain.CodeRuntimeTimeout, "runtime timeout", nil), finished)
+	if failed.Status != LLMCallFailed || failed.ErrorCode != domain.CodeRuntimeTimeout || failed.ErrorMessage != "runtime timeout" {
 		t.Fatalf("domain failed call = %+v", failed)
 	}
 
 	genericFailed := FailLLMCall(call, errors.New("network failed"), finished)
-	if genericFailed.ErrorCode != CodeLLMCallFailed || genericFailed.ErrorMessage != "LLM call failed" {
+	if genericFailed.ErrorCode != domain.CodeLLMCallFailed || genericFailed.ErrorMessage != "LLM call failed" {
 		t.Fatalf("generic failed call = %+v", genericFailed)
 	}
 }
@@ -96,7 +98,7 @@ func TestPureLLMCallTransitionsDoNotMutateInput(t *testing.T) {
 	}
 
 	failed := FailLLMCall(started, errors.New("failed"), startedAt.Add(time.Second))
-	if failed.Status != LLMCallFailed || failed.ErrorCode != CodeLLMCallFailed {
+	if failed.Status != LLMCallFailed || failed.ErrorCode != domain.CodeLLMCallFailed {
 		t.Fatalf("failed = %#v", failed)
 	}
 	if started.Status != LLMCallRunning || started.ErrorCode != "" {

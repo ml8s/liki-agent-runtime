@@ -8,6 +8,7 @@ import (
 
 	"github.com/ml8s/agent-runtime/internal/audit"
 	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/execution"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
@@ -39,7 +40,7 @@ func (l *llmCallAuditor) beforeModel(ctx agent.Context, request *model.LLMReques
 	scope.mu.Unlock()
 	callID := fmt.Sprintf("%s/%s/%d", ctx.InvocationID(), modelName, callSeq)
 	startedAt := l.now()
-	call := domain.LLMCall{
+	call := execution.LLMCall{
 		ID:                callID,
 		RunID:             scope.identity.RunID,
 		ThreadID:          scope.identity.ThreadID,
@@ -47,15 +48,15 @@ func (l *llmCallAuditor) beforeModel(ctx agent.Context, request *model.LLMReques
 		AgentName:         ctx.AgentName(),
 		Model:             modelName,
 		Provider:          l.provider,
-		Status:            domain.LLMCallRunning,
+		Status:            execution.LLMCallRunning,
 		PromptVersion:     scope.instructionDigest,
 		DefinitionName:    scope.definitionName,
 		DefinitionVersion: scope.definitionVersion,
 		DefinitionDigest:  scope.definitionDigest,
 		StartedAt:         startedAt,
 	}
-	call = l.withAgent(domain.NormalizeLLMCall(call), call.AgentName)
-	if err := domain.ValidateLLMCall(call); err != nil {
+	call = l.withAgent(execution.NormalizeLLMCall(call), call.AgentName)
+	if err := execution.ValidateLLMCall(call); err != nil {
 		return nil, err
 	}
 	if err := l.recordCall(ctx, scope, &call, audit.EventLLMCallStarted); err != nil {
@@ -95,7 +96,7 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 	}
 
 	finishedAt := l.now()
-	call := domain.LLMCall{
+	call := execution.LLMCall{
 		ID:                runtime.id,
 		RunID:             scope.identity.RunID,
 		ThreadID:          scope.identity.ThreadID,
@@ -103,7 +104,7 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 		AgentName:         ctx.AgentName(),
 		Model:             modelName,
 		Provider:          l.provider,
-		Status:            domain.LLMCallCompleted,
+		Status:            execution.LLMCallCompleted,
 		PromptVersion:     scope.instructionDigest,
 		DefinitionName:    scope.definitionName,
 		DefinitionVersion: scope.definitionVersion,
@@ -112,13 +113,13 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 		FinishedAt:        finishedAt,
 	}
 	if responseErr != nil {
-		call = domain.FailLLMCall(call, responseErr, finishedAt)
+		call = execution.FailLLMCall(call, responseErr, finishedAt)
 	} else if response != nil && response.UsageMetadata != nil {
-		call = domain.CompleteLLMCall(call, llmUsageFromResponse(response.UsageMetadata), finishedAt)
+		call = execution.CompleteLLMCall(call, llmUsageFromResponse(response.UsageMetadata), finishedAt)
 	} else {
-		call = domain.CompleteLLMCall(call, domain.LLMTokenUsage{}, finishedAt)
+		call = execution.CompleteLLMCall(call, execution.LLMTokenUsage{}, finishedAt)
 	}
-	call = domain.NormalizeLLMCall(call)
+	call = execution.NormalizeLLMCall(call)
 	scope.mu.Lock()
 	scope.llmCalls++
 	scope.promptTokens += int(call.PromptTokens)
@@ -126,11 +127,11 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 	scope.thoughtTokens += int(call.ThoughtTokens)
 	scope.mu.Unlock()
 	call = l.withAgent(call, call.AgentName)
-	if err := domain.ValidateLLMCall(call); err != nil {
+	if err := execution.ValidateLLMCall(call); err != nil {
 		return response, err
 	}
 	terminalEvent := audit.EventLLMCallCompleted
-	if call.Status == domain.LLMCallFailed {
+	if call.Status == execution.LLMCallFailed {
 		terminalEvent = audit.EventLLMCallFailed
 	}
 	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, &call, terminalEvent); auditErr != nil {
@@ -142,7 +143,7 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 	delete(scope.activeCalls, callbackKey)
 	scope.mu.Unlock()
 	if l.metrics != nil {
-		l.metrics.ObserveLLMCall(call.Model, string(call.Status), domain.LLMTokenUsage{
+		l.metrics.ObserveLLMCall(call.Model, string(call.Status), execution.LLMTokenUsage{
 			PromptTokens:     call.PromptTokens,
 			CompletionTokens: call.CompletionTokens,
 			ThoughtTokens:    call.ThoughtTokens,
@@ -193,7 +194,7 @@ func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMReque
 		}
 	}
 	finishedAt := l.now()
-	call := domain.LLMCall{
+	call := execution.LLMCall{
 		ID:                runtime.id,
 		RunID:             scope.identity.RunID,
 		ThreadID:          scope.identity.ThreadID,
@@ -201,7 +202,7 @@ func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMReque
 		AgentName:         ctx.AgentName(),
 		Model:             modelName,
 		Provider:          l.provider,
-		Status:            domain.LLMCallFailed,
+		Status:            execution.LLMCallFailed,
 		PromptVersion:     scope.instructionDigest,
 		DefinitionName:    scope.definitionName,
 		DefinitionVersion: scope.definitionVersion,
@@ -209,10 +210,10 @@ func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMReque
 		StartedAt:         runtime.startedAt,
 		FinishedAt:        finishedAt,
 	}
-	call = domain.FailLLMCall(call, requestErr, finishedAt)
-	call = domain.NormalizeLLMCall(call)
+	call = execution.FailLLMCall(call, requestErr, finishedAt)
+	call = execution.NormalizeLLMCall(call)
 	call = l.withAgent(call, call.AgentName)
-	if err := domain.ValidateLLMCall(call); err != nil {
+	if err := execution.ValidateLLMCall(call); err != nil {
 		return nil, err
 	}
 	if auditErr := l.recordCall(context.WithoutCancel(ctx), scope, &call, audit.EventLLMCallFailed); auditErr != nil {
@@ -224,7 +225,7 @@ func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMReque
 		scope.mu.Unlock()
 	}
 	if l.metrics != nil {
-		l.metrics.ObserveLLMCall(call.Model, string(call.Status), domain.LLMTokenUsage{
+		l.metrics.ObserveLLMCall(call.Model, string(call.Status), execution.LLMTokenUsage{
 			PromptTokens:     call.PromptTokens,
 			CompletionTokens: call.CompletionTokens,
 			ThoughtTokens:    call.ThoughtTokens,
@@ -239,11 +240,11 @@ func (l *llmCallAuditor) onModelError(ctx agent.Context, request *model.LLMReque
 	return nil, requestErr
 }
 
-func llmUsageFromResponse(usage *genai.GenerateContentResponseUsageMetadata) domain.LLMTokenUsage {
+func llmUsageFromResponse(usage *genai.GenerateContentResponseUsageMetadata) execution.LLMTokenUsage {
 	if usage == nil {
-		return domain.LLMTokenUsage{}
+		return execution.LLMTokenUsage{}
 	}
-	return domain.LLMTokenUsage{
+	return execution.LLMTokenUsage{
 		PromptTokens:     int64(usage.PromptTokenCount),
 		CompletionTokens: int64(usage.CandidatesTokenCount),
 		ThoughtTokens:    int64(usage.ThoughtsTokenCount),

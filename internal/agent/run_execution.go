@@ -8,7 +8,14 @@ import (
 )
 
 type runExecution struct {
-	mu                sync.Mutex
+	// mu guards the mutable call bookkeeping below (nextCall, activeCalls,
+	// and the usage counters). It is never held together with the attempt
+	// registry lock.
+	mu sync.Mutex
+
+	// The fields from identity through releaseRun are immutable after the
+	// scope is constructed: registration publishes the pointer only after
+	// every field is final, so no other lock ever protects them.
 	identity          execution.RunIdentity
 	provenance        execution.RunProvenance
 	sessionID         string

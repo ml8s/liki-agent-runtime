@@ -22,6 +22,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv/push"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
 	"github.com/ml8s/agent-runtime/internal/agent"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	observability "github.com/ml8s/agent-runtime/internal/observability"
 	platformconfig "github.com/ml8s/agent-runtime/internal/platform/config"
 	"github.com/ml8s/agent-runtime/internal/platform/identity"
@@ -183,11 +184,11 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			}
 			attempt := executionAttemptFromRequest(request).withID()
 			handle := agent.AuditAttemptHandle{
-				ADKSessionID: request.ContextID,
-				AttemptID:    attempt.ID,
+				ContextID: request.ContextID,
+				AttemptID: domain.AttemptID(attempt.ID),
 			}
 			scope := agent.RunAuditIdentity{
-				RunID:     attempt.ID,
+				AttemptID: domain.AttemptID(attempt.ID),
 				ThreadID:  request.ContextID,
 				UserID:    caller,
 				Protocol:  "a2a",
@@ -220,8 +221,8 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			options = append(options, agent.WithPreservedSession())
 			attempt := executionAttemptFromContext(ctx, ctx.RequestContext())
 			return runtime.EndAuditRun(ctx, agent.AuditAttemptHandle{
-				ADKSessionID: attempt.ContextID,
-				AttemptID:    attempt.ID,
+				ContextID: attempt.ContextID,
+				AttemptID: domain.AttemptID(attempt.ID),
 			}, err, options...)
 		},
 		A2AExecutionCleanupCallback: func(ctx context.Context, request *a2asrv.ExecutorContext, _ []*a2a.AgentCard, result a2a.SendMessageResult, cause error) {
@@ -239,8 +240,8 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			attempt := executionAttemptFromRequest(request).withID()
 			server.structured.release(attempt.ID)
 			if auditErr := runtime.EndAuditRun(ctx, agent.AuditAttemptHandle{
-				ADKSessionID: attempt.ContextID,
-				AttemptID:    attempt.ID,
+				ContextID: attempt.ContextID,
+				AttemptID: domain.AttemptID(attempt.ID),
 			}, cause, options...); auditErr != nil {
 				config.Logger.WarnContext(ctx, "a2a_cleanup_audit_failed",
 					"task_id", request.TaskID,

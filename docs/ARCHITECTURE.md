@@ -251,6 +251,21 @@ event's state delta directly, and both protocol adapters reuse the decoded
 document alongside the canonical JSON bytes instead of re-parsing them; the
 canonical JSON on the wire is unchanged.
 
+## Functional core, imperative shell
+
+The runtime separates pure decision code from stateful execution. The
+functional core is `internal/domain` (stable error codes, identifier rules,
+opaque IDs) and `internal/execution` (run requests/results, pure event state
+transitions, structured-output parsing, and the `LLMCall` lifecycle value):
+these packages have no pointer receivers that mutate shared state, and their
+transition functions return new values instead of editing inputs. The
+imperative shell is `internal/agent` plus the protocol/transport adapters: it
+owns bounded process state (attempt registry, lifecycle maps, pending audit
+records, caches) and releases it only after terminal audit evidence is
+durable. New capabilities join the core as pure functions and the shell as
+explicit, lock-annotated state — do not move mutation into `domain` or
+`execution`.
+
 ## Operations
 
 The operational surface (`/readyz`, `/version`, `/metrics`, `/debug/pprof`) is

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/execution"
 )
 
 func TestAcquireRunObservesRejectionReasons(t *testing.T) {
@@ -36,10 +36,10 @@ type lifecycleStubMetrics struct {
 
 func (m *lifecycleStubMetrics) ObserveAgentDelegation(string, string, string, time.Duration) {}
 
-func (m *lifecycleStubMetrics) ObserveLLMCall(string, string, domain.LLMTokenUsage)   {}
-func (m *lifecycleStubMetrics) ObserveLLMCallLatency(string, string, time.Duration)   {}
-func (m *lifecycleStubMetrics) ObserveToolCall(string, string, string, time.Duration) {}
-func (m *lifecycleStubMetrics) ObserveMCPCatalog(string, string)                      {}
+func (m *lifecycleStubMetrics) ObserveLLMCall(string, string, execution.LLMTokenUsage) {}
+func (m *lifecycleStubMetrics) ObserveLLMCallLatency(string, string, time.Duration)    {}
+func (m *lifecycleStubMetrics) ObserveToolCall(string, string, string, time.Duration)  {}
+func (m *lifecycleStubMetrics) ObserveMCPCatalog(string, string)                       {}
 func (m *lifecycleStubMetrics) ObserveRunRejection(reason string) {
 	m.calls = append(m.calls, "run_rejection/"+reason)
 }

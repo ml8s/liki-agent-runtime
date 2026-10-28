@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/execution"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -177,7 +177,7 @@ func (m *Metrics) ObserveHTTPRequest(protocol, operation, status string, duratio
 }
 
 // ObserveLLMCall records one model call and its token usage.
-func (m *Metrics) ObserveLLMCall(model, status string, usage domain.LLMTokenUsage) {
+func (m *Metrics) ObserveLLMCall(model, status string, usage execution.LLMTokenUsage) {
 	m.llmCalls.WithLabelValues(model, status).Inc()
 	m.llmTokens.WithLabelValues(model, "prompt").Add(float64(usage.PromptTokens))
 	m.llmTokens.WithLabelValues(model, "completion").Add(float64(usage.CompletionTokens))

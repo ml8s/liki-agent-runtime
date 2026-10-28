@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
@@ -14,15 +13,15 @@ import (
 )
 
 type llmCallAuditor struct {
-	mu              sync.Mutex
-	recorder        audit.Recorder
-	metrics         execution.Metrics
-	now             func() time.Time
-	provider        string
-	agents          map[string]*agentdeployment.ResolvedAgentDefinition
-	scopes          map[string]*runExecution
-	invocations     map[string]string
-	sessionAttempts map[string]map[string]struct{}
+	recorder audit.Recorder
+	metrics  execution.Metrics
+	now      func() time.Time
+	provider string
+	agents   map[string]*agentdeployment.ResolvedAgentDefinition
+
+	// attempts owns every externally driven attempt index. Callbacks resolve
+	// scopes only through it; this type keeps no parallel attempt state.
+	attempts *attemptRegistry
 }
 
 func newLLMCallAuditor(recorder audit.Recorder, metrics execution.Metrics, provider string, deployment *agentdeployment.AgentDeployment, now func() time.Time) *llmCallAuditor {
@@ -30,14 +29,12 @@ func newLLMCallAuditor(recorder audit.Recorder, metrics execution.Metrics, provi
 		now = func() time.Time { return time.Now().UTC() }
 	}
 	ledger := &llmCallAuditor{
-		recorder:        recorder,
-		metrics:         metrics,
-		provider:        provider,
-		now:             now,
-		agents:          make(map[string]*agentdeployment.ResolvedAgentDefinition, len(deployment.Spec.Agents)),
-		scopes:          make(map[string]*runExecution),
-		invocations:     make(map[string]string),
-		sessionAttempts: make(map[string]map[string]struct{}),
+		recorder: recorder,
+		metrics:  metrics,
+		provider: provider,
+		now:      now,
+		agents:   make(map[string]*agentdeployment.ResolvedAgentDefinition, len(deployment.Spec.Agents)),
+		attempts: newAttemptRegistry(),
 	}
 	for index := range deployment.Spec.Agents {
 		ledger.agents[deployment.Spec.Agents[index].Name] = &deployment.Spec.Agents[index]
@@ -47,27 +44,15 @@ func newLLMCallAuditor(recorder audit.Recorder, metrics execution.Metrics, provi
 
 func (l *llmCallAuditor) begin(handle AuditAttemptHandle, scope *runExecution) bool {
 	handle = handle.normalize()
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	if err := handle.validate(); err != nil {
 		return false
 	}
-	primaryID := handle.AttemptID
-	scope.attemptKey = primaryID
-	if _, exists := l.scopes[primaryID]; exists {
-		return false
-	}
-	if _, exists := l.scopes[string(scope.identity.RunID)]; exists && primaryID != string(scope.identity.RunID) {
-		return false
-	}
-	l.scopes[primaryID] = scope
-	l.scopes[string(scope.identity.RunID)] = scope
-	scope.sessionID = handle.ADKSessionID
-	if l.sessionAttempts[handle.ADKSessionID] == nil {
-		l.sessionAttempts[handle.ADKSessionID] = make(map[string]struct{})
-	}
-	l.sessionAttempts[handle.ADKSessionID][primaryID] = struct{}{}
-	return true
+	return l.attempts.begin(
+		string(handle.AttemptID),
+		string(scope.identity.RunID),
+		handle.ContextID,
+		scope,
+	)
 }
 
 // closeActive fails every in-flight model call for the run and leaves the run
@@ -86,47 +71,17 @@ func (l *llmCallAuditor) closeActive(scope *runExecution, runErr error) error {
 
 func (l *llmCallAuditor) forget(handle AuditAttemptHandle) {
 	handle = handle.normalize()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	for primaryID := range l.sessionAttempts[handle.ADKSessionID] {
-		if scope, exists := l.scopes[primaryID]; exists {
-			delete(l.scopes, string(scope.identity.RunID))
-		}
-		delete(l.scopes, primaryID)
-	}
-	delete(l.sessionAttempts, handle.ADKSessionID)
+	l.attempts.forgetContext(handle.ContextID)
 }
 
 func (l *llmCallAuditor) forgetAttempt(handle AuditAttemptHandle) {
 	handle = handle.normalize()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	scope, exists := l.scopes[handle.AttemptID]
-	if !exists {
-		return
-	}
-	delete(l.scopes, string(scope.identity.RunID))
-	delete(l.scopes, handle.AttemptID)
-	if attempts := l.sessionAttempts[handle.ADKSessionID]; attempts != nil {
-		delete(attempts, handle.AttemptID)
-		if len(attempts) == 0 {
-			delete(l.sessionAttempts, handle.ADKSessionID)
-		}
-	}
-	l.unbindAttemptLocked(handle.AttemptID)
-}
-
-func (l *llmCallAuditor) unbindAttemptLocked(attemptID string) {
-	for key, bound := range l.invocations {
-		if bound == attemptID {
-			delete(l.invocations, key)
-		}
-	}
+	l.attempts.unbindAttempt(string(handle.AttemptID))
 }
 
 func (l *llmCallAuditor) end(handle AuditAttemptHandle, runErr error) {
 	handle = handle.normalize()
-	scope, exists := l.scope(handle.AttemptID)
+	scope, exists := l.scope(string(handle.AttemptID))
 	if !exists {
 		return
 	}
@@ -135,19 +90,13 @@ func (l *llmCallAuditor) end(handle AuditAttemptHandle, runErr error) {
 }
 
 func (l *llmCallAuditor) scope(sessionID string) (*runExecution, bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if scope, exists := l.scopes[sessionID]; exists {
-		return scope, true
-	}
-	attempts := l.sessionAttempts[sessionID]
-	if len(attempts) == 1 {
-		for attemptID := range attempts {
-			scope, exists := l.scopes[attemptID]
-			return scope, exists
-		}
-	}
-	return nil, false
+	return l.attempts.lookup(sessionID)
+}
+
+// unbindInvocations drops only the ADK invocation bridge of a finished
+// invocation; the attempt stays registered for its protocol context.
+func (l *llmCallAuditor) unbindInvocations(attemptID string) {
+	l.attempts.unbindInvocations(attemptID)
 }
 
 // bindInvocation records the ADK invocation that belongs to an externally
@@ -162,23 +111,7 @@ func WithAuditAttempt(ctx context.Context, attemptID string) context.Context {
 }
 
 func (l *llmCallAuditor) bindInvocation(sessionID, invocationID, attemptID string) {
-	if sessionID == "" || invocationID == "" || attemptID == "" {
-		return
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.invocations[invocationKey(sessionID, invocationID)] = attemptID
-}
-
-// unbindAttempt removes ADK invocation bridges when an attempt closes.
-func (l *llmCallAuditor) unbindAttempt(attemptID string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.unbindAttemptLocked(attemptID)
-}
-
-func invocationKey(sessionID, invocationID string) string {
-	return sessionID + "\x00" + invocationID
+	l.attempts.bindInvocation(sessionID, invocationID, attemptID)
 }
 
 func (l *llmCallAuditor) auditScope(ctx agent.Context) (*runExecution, bool) {
@@ -186,10 +119,7 @@ func (l *llmCallAuditor) auditScope(ctx agent.Context) (*runExecution, bool) {
 		return l.scope(attemptID)
 	}
 	if sessionID, invocationID := ctx.SessionID(), ctx.InvocationID(); sessionID != "" && invocationID != "" {
-		l.mu.Lock()
-		attemptID := l.invocations[invocationKey(sessionID, invocationID)]
-		l.mu.Unlock()
-		if attemptID != "" {
+		if attemptID, ok := l.attempts.attemptForInvocation(sessionID, invocationID); ok {
 			return l.scope(attemptID)
 		}
 	}
@@ -201,15 +131,15 @@ func (l *llmCallAuditor) failActive(scope *runExecution, err error, finishedAt t
 	defer scope.mu.Unlock()
 	var firstErr error
 	for callbackKey, runtime := range scope.activeCalls {
-		call := domain.LLMCall{
+		call := execution.LLMCall{
 			ID: runtime.id, RunID: scope.identity.RunID, ThreadID: scope.identity.ThreadID,
 			UserID: scope.identity.UserID, AgentName: runtime.agentName, Model: runtime.model,
-			Provider: l.provider, Status: domain.LLMCallFailed,
+			Provider: l.provider, Status: execution.LLMCallFailed,
 			PromptVersion: runtime.instructionDigest,
 			StartedAt:     runtime.startedAt, FinishedAt: finishedAt,
 		}
-		call = domain.FailLLMCall(call, err, finishedAt)
-		call = domain.NormalizeLLMCall(call)
+		call = execution.FailLLMCall(call, err, finishedAt)
+		call = execution.NormalizeLLMCall(call)
 		call = l.withAgent(call, call.AgentName)
 		recordErr := l.recordCall(context.Background(), scope, &call, audit.EventLLMCallFailed)
 		if recordErr == nil {
@@ -228,7 +158,7 @@ func (l *llmCallAuditor) reconcile(scope *runExecution, cause error) error {
 	return l.failActive(scope, cause, l.now())
 }
 
-func (l *llmCallAuditor) withAgent(call domain.LLMCall, name string) domain.LLMCall {
+func (l *llmCallAuditor) withAgent(call execution.LLMCall, name string) execution.LLMCall {
 	definition, ok := l.agents[name]
 	if !ok {
 		return call
@@ -244,7 +174,7 @@ func (l *llmCallAuditor) withAgent(call domain.LLMCall, name string) domain.LLMC
 // without a matching BeforeModel callback, preserving the audit rule that
 // every model call has started and terminal evidence.
 func (l *llmCallAuditor) recordCallStarted(ctx agent.Context, scope *runExecution, runtime llmCallRuntime) error {
-	call := domain.LLMCall{
+	call := execution.LLMCall{
 		ID:                runtime.id,
 		RunID:             scope.identity.RunID,
 		ThreadID:          scope.identity.ThreadID,
@@ -252,21 +182,21 @@ func (l *llmCallAuditor) recordCallStarted(ctx agent.Context, scope *runExecutio
 		AgentName:         runtime.agentName,
 		Model:             runtime.model,
 		Provider:          l.provider,
-		Status:            domain.LLMCallRunning,
+		Status:            execution.LLMCallRunning,
 		PromptVersion:     scope.instructionDigest,
 		DefinitionName:    scope.definitionName,
 		DefinitionVersion: scope.definitionVersion,
 		DefinitionDigest:  scope.definitionDigest,
 		StartedAt:         runtime.startedAt,
 	}
-	call = l.withAgent(domain.NormalizeLLMCall(call), call.AgentName)
-	if err := domain.ValidateLLMCall(call); err != nil {
+	call = l.withAgent(execution.NormalizeLLMCall(call), call.AgentName)
+	if err := execution.ValidateLLMCall(call); err != nil {
 		return err
 	}
 	return l.recordCall(context.WithoutCancel(ctx), scope, &call, audit.EventLLMCallStarted)
 }
 
-func (l *llmCallAuditor) recordCall(ctx context.Context, scope *runExecution, call *domain.LLMCall, eventType audit.EventType) error {
+func (l *llmCallAuditor) recordCall(ctx context.Context, scope *runExecution, call *execution.LLMCall, eventType audit.EventType) error {
 	if l.recorder == nil {
 		return domain.NewError(domain.CodeAuditRecorderMissing, "audit recorder is required", nil)
 	}

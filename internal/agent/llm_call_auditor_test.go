@@ -96,8 +96,8 @@ func fixedLedgerNow() time.Time {
 func newTestScope() *runExecution {
 	return &runExecution{
 		identity: execution.RunIdentity{
-			RunID:    "run_1",
-			ThreadID: "thread_1",
+			RunID:    domain.ID("run_1"),
+			ThreadID: domain.ID("thread_1"),
 			UserID:   "user_1",
 		},
 		model:             "test-model",
@@ -110,7 +110,7 @@ func newTestScope() *runExecution {
 }
 
 func ledgerHandle(sessionID string, scope *runExecution) AuditAttemptHandle {
-	return AuditAttemptHandle{ADKSessionID: sessionID, AttemptID: string(scope.identity.RunID)}
+	return AuditAttemptHandle{ContextID: sessionID, AttemptID: domain.AttemptID(scope.identity.RunID)}
 }
 
 func testCtx() *fakeAgentContext {
@@ -437,11 +437,14 @@ func TestLedgerResolvesConcurrentAttemptsInOneSession(t *testing.T) {
 
 	callAuditor.end(handleOne, nil)
 	callAuditor.end(handleTwo, nil)
-	if len(callAuditor.sessionAttempts[sessionID]) != 0 {
-		t.Fatalf("attempt registry leaked: %#v", callAuditor.sessionAttempts[sessionID])
+	if _, ok := callAuditor.scope(sessionID); ok {
+		t.Fatalf("attempt registry leaked context %q", sessionID)
 	}
-	if len(callAuditor.scopes) != 0 {
-		t.Fatalf("attempt scopes leaked: %#v", callAuditor.scopes)
+	if _, ok := callAuditor.scope(string(handleOne.AttemptID)); ok {
+		t.Fatalf("attempt registry leaked attempt %q", handleOne.AttemptID)
+	}
+	if _, ok := callAuditor.scope(string(handleTwo.AttemptID)); ok {
+		t.Fatalf("attempt registry leaked attempt %q", handleTwo.AttemptID)
 	}
 }
 
@@ -486,7 +489,7 @@ func TestLedgerUsesInvokingAgentPromptProvenance(t *testing.T) {
 // TestLLMUsageFromResponse maps genai usage metadata into token accounting,
 // including the empty case.
 func TestLLMUsageFromResponse(t *testing.T) {
-	if got := llmUsageFromResponse(nil); got != (domain.LLMTokenUsage{}) {
+	if got := llmUsageFromResponse(nil); got != (execution.LLMTokenUsage{}) {
 		t.Fatalf("llmUsageFromResponse(nil) = %+v, want zero", got)
 	}
 	got := llmUsageFromResponse(&genai.GenerateContentResponseUsageMetadata{
@@ -495,7 +498,7 @@ func TestLLMUsageFromResponse(t *testing.T) {
 		ThoughtsTokenCount:   1,
 		TotalTokenCount:      13,
 	})
-	want := domain.LLMTokenUsage{PromptTokens: 10, CompletionTokens: 2, ThoughtTokens: 1, TotalTokens: 13}
+	want := execution.LLMTokenUsage{PromptTokens: 10, CompletionTokens: 2, ThoughtTokens: 1, TotalTokens: 13}
 	if got != want {
 		t.Fatalf("llmUsageFromResponse() = %+v, want %+v", got, want)
 	}

@@ -1,17 +1,15 @@
-package domain
+package execution
 
 import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 // LLMCallStatus is the lifecycle state of one model call.
 type LLMCallStatus string
-
-// ID is a logical cross-service identifier. The agent does not own foreign
-// tables; IDs are opaque audit correlation values.
-type ID string
 
 // Model call lifecycle states.
 const (
@@ -31,8 +29,8 @@ type LLMTokenUsage struct {
 // LLMCall is one auditable model invocation inside a run.
 type LLMCall struct {
 	ID                    string
-	RunID                 ID
-	ThreadID              ID
+	RunID                 domain.ID
+	ThreadID              domain.ID
 	UserID                string
 	AgentName             string
 	AgentVersion          string
@@ -69,19 +67,19 @@ func NormalizeLLMCall(call LLMCall) LLMCall {
 func ValidateLLMCall(call LLMCall) error {
 	switch {
 	case call.ID == "":
-		return NewError(CodeLLMCallIDRequired, "llm call id is required", ErrInvalidInput)
+		return domain.NewError(domain.CodeLLMCallIDRequired, "llm call id is required", domain.ErrInvalidInput)
 	case call.RunID == "":
-		return NewError(CodeRunIDRequired, "run_id is required", ErrInvalidInput)
+		return domain.NewError(domain.CodeRunIDRequired, "run_id is required", domain.ErrInvalidInput)
 	case call.ThreadID == "":
-		return NewError(CodeThreadIDRequired, "thread_id is required", ErrInvalidInput)
+		return domain.NewError(domain.CodeThreadIDRequired, "thread_id is required", domain.ErrInvalidInput)
 	case call.UserID == "":
-		return NewError(CodeUserIDRequired, "user_id is required", ErrInvalidInput)
+		return domain.NewError(domain.CodeUserIDRequired, "user_id is required", domain.ErrInvalidInput)
 	case call.AgentName == "":
-		return NewError(CodeAgentNameRequired, "agent_name is required", ErrInvalidInput)
+		return domain.NewError(domain.CodeAgentNameRequired, "agent_name is required", domain.ErrInvalidInput)
 	case call.Model == "":
-		return NewError(CodeModelRequired, "model is required", ErrInvalidInput)
+		return domain.NewError(domain.CodeModelRequired, "model is required", domain.ErrInvalidInput)
 	case call.StartedAt.IsZero():
-		return NewError(CodeLLMCallStartedAtRequired, "llm call start time is required", ErrInvalidInput)
+		return domain.NewError(domain.CodeLLMCallStartedAtRequired, "llm call start time is required", domain.ErrInvalidInput)
 	}
 	return nil
 }
@@ -109,13 +107,13 @@ func FailLLMCall(call LLMCall, err error, finishedAt time.Time) LLMCall {
 	next.Status = LLMCallFailed
 	next.FinishedAt = finishedAt
 	next.DurationMS = finishedAt.Sub(call.StartedAt).Milliseconds()
-	var domainErr *Error
+	var domainErr *domain.Error
 	if errors.As(err, &domainErr) {
 		next.ErrorCode = domainErr.Code
 		next.ErrorMessage = domainErr.Message
 		return next
 	}
-	next.ErrorCode = CodeLLMCallFailed
+	next.ErrorCode = domain.CodeLLMCallFailed
 	next.ErrorMessage = "LLM call failed"
 	return next
 }

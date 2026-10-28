@@ -35,11 +35,12 @@ func (r *Runtime) Run(
 	if !r.runs.begin(request.RunID) {
 		return execution.RunResult{}, domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
 	}
+	sessionID := runSessionID(request.RunID)
 	// Runtime.Run owns a run-scoped session, so the ADK session and attempt IDs
 	// happen to coincide. Keeping the distinction explicit makes the externally
 	// driven A2A path (ContextID != attempt ID) unambiguous.
-	handle := AuditAttemptHandle{ADKSessionID: runSessionID(request.RunID), AttemptID: request.RunID}
-	ctx = WithAuditAttempt(ctx, handle.AttemptID)
+	handle := AuditAttemptHandle{ContextID: sessionID, AttemptID: domain.AttemptID(request.RunID)}
+	ctx = WithAuditAttempt(ctx, string(handle.AttemptID))
 	releaseRun, err := r.acquireRun(ctx)
 	if err != nil {
 		r.runs.finish(request.RunID)
@@ -67,7 +68,6 @@ func (r *Runtime) Run(
 	)
 	defer runSpan.End()
 	startedAt := r.config.Now()
-	sessionID := runSessionID(request.RunID)
 	scope := &runExecution{
 		identity: execution.RunIdentity{
 			RunID:    domain.ID(request.RunID),
@@ -85,6 +85,8 @@ func (r *Runtime) Run(
 		definitionVersion: r.definition.Metadata.Version,
 		definitionDigest:  r.definition.Digest,
 		startedAt:         startedAt,
+		attemptKey:        string(handle.AttemptID),
+		sessionID:         sessionID,
 		activeCalls:       make(map[string]llmCallRuntime),
 	}
 	// Aggregate usage is filled in on every exit path (including failure
@@ -96,7 +98,7 @@ func (r *Runtime) Run(
 	}
 	if auditErr := r.recordRunAudit(ctx, scope, audit.EventRunStarted, audit.StatusRunning, nil); auditErr != nil {
 		runErr = auditErr
-		auditScope, _ := r.callAuditor.scope(handle.AttemptID)
+		auditScope, _ := r.callAuditor.scope(string(handle.AttemptID))
 		r.callAuditor.end(handle, runErr)
 		_ = r.delegationAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
 		_ = r.toolAuditor.FailPending(context.WithoutCancel(ctx), auditScope)

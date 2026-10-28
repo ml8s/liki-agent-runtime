@@ -9,6 +9,8 @@ import (
 
 	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 
+	"github.com/ml8s/agent-runtime/internal/domain"
+
 	"github.com/ml8s/agent-runtime/internal/audit"
 )
 
@@ -88,10 +90,10 @@ func TestCloseRunEvidenceEncodesCompensationFailureAndPersistsTerminal(t *testin
 	if err != nil {
 		t.Fatalf("NewRuntime() error = %v", err)
 	}
-	scope := RunAuditIdentity{RunID: "run_e1", ThreadID: "thread_e1", UserID: "user_e1"}
-	sessionID := runSessionID(scope.RunID)
+	scope := RunAuditIdentity{AttemptID: domain.AttemptID("run_e1"), ThreadID: "thread_e1", UserID: "user_e1"}
+	sessionID := runSessionID(string(scope.AttemptID))
 	ctx := context.Background()
-	if err := runtime.BeginAuditRun(ctx, externalAuditHandle(sessionID, scope.RunID), scope); err != nil {
+	if err := runtime.BeginAuditRun(ctx, externalAuditHandle(sessionID, string(scope.AttemptID)), scope); err != nil {
 		t.Fatalf("BeginAuditRun() error = %v", err)
 	}
 	// 制造未决委派（started 已持久化，补偿在终态时发生）。
@@ -104,7 +106,7 @@ func TestCloseRunEvidenceEncodesCompensationFailureAndPersistsTerminal(t *testin
 	}
 
 	// 契约钉子：补偿失败已编码进终态事件并成功持久化 → 返回 nil。
-	if err := runtime.EndAuditRun(ctx, externalAuditHandle(sessionID, scope.RunID), nil); err != nil {
+	if err := runtime.EndAuditRun(ctx, externalAuditHandle(sessionID, string(scope.AttemptID)), nil); err != nil {
 		t.Fatalf("EndAuditRun() error = %v；补偿残差应编码进终态事件而非返回", err)
 	}
 

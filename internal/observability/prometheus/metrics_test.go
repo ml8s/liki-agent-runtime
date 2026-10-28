@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/execution"
 )
 
 func TestMetricsExposeStandardRuntimeDimensions(t *testing.T) {
 	metrics := New()
 	metrics.ObserveHTTPRequest("ag_ui", "run", "200", 25*time.Millisecond)
 	metrics.StreamOpened("ag_ui")
-	metrics.ObserveLLMCall("gpt-test", "completed", domain.LLMTokenUsage{
+	metrics.ObserveLLMCall("gpt-test", "completed", execution.LLMTokenUsage{
 		PromptTokens: 10, CompletionTokens: 2, ThoughtTokens: 3, TotalTokens: 15,
 	})
 	metrics.ObserveLLMCallLatency("gpt-test", "completed", 250*time.Millisecond)

@@ -12,7 +12,7 @@ skill/project.
 | AgentDefinition | One Agent entity within a deployment: instruction, optional output schema, server-scoped tool allowlist, and per-Agent model settings with runtime-wide fallback |
 | AgentReference | A delegation edge from one AgentDefinition to another by Agent name |
 | MCP server | A logical external tool dependency bound through environment references |
-| RunExecution | One execution aggregate identified by `RunID`; `ThreadID` is caller-owned correlation, not execution identity |
+| RunExecution | One execution aggregate identified by `RunID`; `ThreadID` is caller-owned correlation, not execution identity. The aggregate is implemented by the runtime-internal `runExecution` type in `internal/agent`; the domain documents its invariants |
 | ToolCall | One allowlisted MCP tool invocation and its lifecycle within a RunExecution |
 | LLMCall | One auditable model invocation and its lifecycle within a RunExecution |
 | Delegation | A parent Agent delegating a subtask to a sub-expert; a child lifecycle of RunExecution |
@@ -61,6 +61,7 @@ lifecycles of this aggregate.
 
 | Invariant | Single implementation |
 |---|---|
+| A run's identity is durable before its in-memory lifecycle begins | `ensureDurableRunID` (`runtime_lifecycle.go`), called before `runs.begin` |
 | An active `RunID` is idempotent and exclusive | `runLifecycle` (`runtime_lifecycle.go`) |
 | Terminal evidence is appended exactly once and in order | `closeRunEvidence` (`run_evidence.go`) |
 | Closing order is close in-flight → compensate → terminal event → release state | `closeRunEvidence` (`run_evidence.go`) |

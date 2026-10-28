@@ -256,7 +256,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		},
 		AfterRunCallback: func(invocation agent.InvocationContext) {
 			if attemptID, ok := invocation.Value(auditAttemptKey{}).(string); ok && attemptID != "" {
-				callAuditor.unbindAttempt(attemptID)
+				callAuditor.unbindInvocations(attemptID)
 			}
 		},
 	})
