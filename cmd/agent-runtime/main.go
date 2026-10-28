@@ -228,6 +228,9 @@ func run() (err error) {
 	if cfg.A2ATaskRetention > 0 {
 		go retainTerminalProtocolTasks(ctx, logger, protocolDB, cfg.A2ATaskRetention)
 	}
+	if cfg.ADKSessionRetention > 0 {
+		go retainIdleADKSessions(ctx, logger, runtime, protocolDB, cfg.ADKSessionRetention)
+	}
 	errCh := make(chan error, len(servers))
 	go func() {
 		logger.Info("agent-runtime listening",
@@ -320,6 +323,50 @@ func retainTerminalProtocolTasks(
 				"retention_seconds", int(retention/time.Second),
 				"tasks", result.Tasks,
 				"push_configs", result.PushConfigs,
+			)
+		}
+	}
+	sweep()
+	ticker := time.NewTicker(sweepInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sweep()
+		}
+	}
+}
+
+// retainIdleADKSessions expires idle runtime-owned ADK sessions. Non-terminal
+// A2A ContextIDs are explicitly protected so continuation cannot be broken by
+// a background cleanup pass.
+func retainIdleADKSessions(
+	ctx context.Context,
+	logger *slog.Logger,
+	runtime *agentruntime.Runtime,
+	protocolDB *protocolstate.DB,
+	retention time.Duration,
+) {
+	const sweepInterval = time.Hour
+	sweep := func() {
+		protected, err := protocolDB.ActiveContextIDs(ctx)
+		if err != nil {
+			logger.Warn("adk_session_retention_protected_ids_failed", "error", err.Error())
+			return
+		}
+		result, err := runtime.RetainIdleSessions(ctx, retention, time.Now().UTC(), protected)
+		if err != nil {
+			logger.Warn("adk_session_retention_sweep_failed", "error", err.Error())
+			return
+		}
+		if result.Deleted > 0 || result.DeleteFailures > 0 {
+			logger.Info("adk_session_retention_sweep",
+				"retention_seconds", int(retention/time.Second),
+				"scanned", result.Scanned,
+				"deleted", result.Deleted,
+				"delete_failures", result.DeleteFailures,
 			)
 		}
 	}

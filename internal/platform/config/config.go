@@ -81,6 +81,7 @@ type Config struct {
 	A2APushTimeout              time.Duration
 	A2APushAllowPrivateNetworks bool
 	A2ATaskRetention            time.Duration
+	ADKSessionRetention         time.Duration
 }
 
 // Topology declares the process state required by the deployment.
@@ -145,6 +146,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.A2ATaskRetention, err = getOptionalDuration("AGENT_RUNTIME_A2A_TASK_RETENTION_SECONDS"); err != nil {
+		return Config{}, err
+	}
+	if cfg.ADKSessionRetention, err = getOptionalDuration("AGENT_RUNTIME_ADK_SESSION_RETENTION_SECONDS"); err != nil {
 		return Config{}, err
 	}
 	if cfg.MaxConcurrentRuns, err = getInt("AGENT_RUNTIME_MAX_CONCURRENT_RUNS", DefaultMaxConcurrentRuns); err != nil {
@@ -240,6 +244,12 @@ func validate(cfg Config) (Config, error) {
 	case "", "none", "json_schema", "json_object":
 	default:
 		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT is unsupported: %q", cfg.LLMStructuredOutput)
+	}
+	if cfg.ADKSessionRetention > 0 && cfg.ADKSessionRetention < cfg.RunTimeout {
+		return Config{}, fmt.Errorf(
+			"AGENT_RUNTIME_ADK_SESSION_RETENTION_SECONDS must be at least AGENT_RUNTIME_RUN_TIMEOUT_SECONDS (%s), got %s",
+			cfg.RunTimeout, cfg.ADKSessionRetention,
+		)
 	}
 	if cfg.RunTimeout <= 0 {
 		return Config{}, fmt.Errorf("AGENT_RUNTIME_RUN_TIMEOUT_SECONDS must be greater than zero")

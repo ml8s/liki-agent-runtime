@@ -159,6 +159,29 @@ func TestLoadA2ATaskRetention(t *testing.T) {
 	}
 }
 
+func TestLoadADKSessionRetention(t *testing.T) {
+	baseEnv(t)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.ADKSessionRetention != 0 {
+		t.Fatalf("unset ADK session retention = %s, want disabled", cfg.ADKSessionRetention)
+	}
+	t.Setenv("AGENT_RUNTIME_ADK_SESSION_RETENTION_SECONDS", "300")
+	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "must be at least AGENT_RUNTIME_RUN_TIMEOUT_SECONDS") {
+		t.Fatalf("Load(short session retention) error = %v, want run timeout protection", err)
+	}
+	t.Setenv("AGENT_RUNTIME_ADK_SESSION_RETENTION_SECONDS", "600")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("Load(valid session retention) error = %v", err)
+	}
+	if cfg.ADKSessionRetention != 10*time.Minute {
+		t.Fatalf("ADK session retention = %s, want 10m", cfg.ADKSessionRetention)
+	}
+}
+
 func TestLoadMaxOutputTokens(t *testing.T) {
 	baseEnv(t)
 	cfg, err := config.Load()

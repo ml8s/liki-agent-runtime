@@ -282,10 +282,11 @@ calls and tokens, tool calls and duration, durable record growth, and
 dependency readiness. Storage gauges are sampled outside request paths. The
 audit ledger is append-only and has no automatic deletion. Terminal A2A tasks
 and their push configs have an optional runtime retention sweep; wait states
-are preserved. ADK ContextID-owned sessions remain until an explicit A2A or
-deployment lifecycle policy is added. Structured logging uses `log/slog` with
-stable event names. Logs do not contain user prompts, raw model output, or tool
-payloads.
+are preserved. Idle ADK sessions also have an optional retention sweep that
+uses the official session service, protects non-terminal A2A ContextIDs, and
+cannot run below the configured run timeout. Structured logging uses `log/slog`
+with stable event names. Logs do not contain user prompts, raw model output, or
+tool payloads.
 
 Audit events are append-only SQLite records. They contain execution metadata,
 protocol, trace correlation, agent and deployment digests, versions, status,
