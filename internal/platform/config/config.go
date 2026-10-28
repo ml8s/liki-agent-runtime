@@ -15,6 +15,13 @@ import (
 // second-chance defaults all reference these constants so a default can
 // never drift between layers.
 const (
+	// IdentitySourceHeader trusts only channel-authenticated gateway headers.
+	IdentitySourceHeader = "trusted_header"
+	// IdentitySourceOIDC verifies a standard bearer OIDC ID token.
+	IdentitySourceOIDC = "oidc"
+
+	DefaultIdentitySource = IdentitySourceHeader
+
 	DefaultMCPTimeout        = 30 * time.Second
 	DefaultMaxConcurrentRuns = 32
 	// MaxConcurrentRunsLimit is the process-wide safety bound shared by
@@ -56,6 +63,7 @@ type Config struct {
 	TLSClientCAFile             string
 	PublicURL                   string
 	InternalToken               string
+	IdentitySource              string
 	AuditDBPath                 string
 	ProtocolStateDBPath         string
 	ADKSessionDBPath            string
@@ -71,6 +79,10 @@ type Config struct {
 	LLMModel                    string
 	LLMProvider                 string
 	LLMTimeout                  time.Duration
+	OIDCIssuer                  string
+	OIDCAudience                string
+	OIDCUsernameClaim           string
+	OIDCTenantClaim             string
 	LLMMaxOutputTokens          int
 	LLMTemperature              float64
 	LogFormat                   string
@@ -112,6 +124,7 @@ func Load() (Config, error) {
 		TLSClientCAFile:     getEnv("AGENT_RUNTIME_TLS_CLIENT_CA", ""),
 		PublicURL:           getEnv("AGENT_RUNTIME_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
 		InternalToken:       getEnv("AGENT_RUNTIME_INTERNAL_TOKEN", ""),
+		IdentitySource:      getEnv("AGENT_RUNTIME_IDENTITY_SOURCE", DefaultIdentitySource),
 		AuditDBPath:         getEnv("AGENT_RUNTIME_AUDIT_DB_PATH", "./data/agent-runtime-audit.db"),
 		ProtocolStateDBPath: getEnv("AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH", DefaultProtocolStateDBPath),
 		ADKSessionDBPath:    getEnv("AGENT_RUNTIME_ADK_SESSION_DB_PATH", DefaultADKSessionDBPath),
@@ -123,6 +136,10 @@ func Load() (Config, error) {
 		LLMModel:            getEnv("AGENT_RUNTIME_LLM_MODEL", ""),
 		LLMProvider:         getEnv("AGENT_RUNTIME_LLM_PROVIDER", ""),
 		LLMStructuredOutput: getEnv("AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", ""),
+		OIDCIssuer:          getEnv("AGENT_RUNTIME_OIDC_ISSUER", ""),
+		OIDCAudience:        getEnv("AGENT_RUNTIME_OIDC_AUDIENCE", ""),
+		OIDCUsernameClaim:   getEnv("AGENT_RUNTIME_OIDC_USERNAME_CLAIM", "sub"),
+		OIDCTenantClaim:     getEnv("AGENT_RUNTIME_OIDC_TENANT_CLAIM", ""),
 		LogFormat:           getEnv("AGENT_RUNTIME_LOG_FORMAT", "json"),
 		LogLevel:            getEnv("AGENT_RUNTIME_LOG_LEVEL", "info"),
 	}
@@ -180,8 +197,37 @@ func validate(cfg Config) (Config, error) {
 	}
 	isDevelopment := cfg.Env == "development"
 
-	if !isDevelopment && cfg.InternalToken == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_INTERNAL_TOKEN is required outside development")
+	switch cfg.IdentitySource {
+	case "", IdentitySourceHeader:
+		cfg.IdentitySource = IdentitySourceHeader
+		if !isDevelopment && cfg.InternalToken == "" {
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_INTERNAL_TOKEN is required for trusted-header identity outside development")
+		}
+	case IdentitySourceOIDC:
+		if cfg.InternalToken != "" {
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_INTERNAL_TOKEN must be empty when AGENT_RUNTIME_IDENTITY_SOURCE=oidc; the OIDC bearer token owns authentication")
+		}
+		if strings.TrimSpace(cfg.OIDCIssuer) == "" {
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_ISSUER is required when identity source is oidc")
+		}
+		if strings.TrimSpace(cfg.OIDCAudience) == "" {
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_AUDIENCE is required when identity source is oidc")
+		}
+		if strings.TrimSpace(cfg.OIDCUsernameClaim) == "" {
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_USERNAME_CLAIM must not be empty when identity source is oidc")
+		}
+		issuerURL, err := url.Parse(cfg.OIDCIssuer)
+		if err != nil || issuerURL.Scheme != "http" && issuerURL.Scheme != "https" || issuerURL.Host == "" {
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_ISSUER must be an absolute HTTP(S) URL")
+		}
+		if issuerURL.User != nil {
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_ISSUER must not contain embedded credentials")
+		}
+		if !isDevelopment && issuerURL.Scheme != "https" {
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_ISSUER must use HTTPS outside development")
+		}
+	default:
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_IDENTITY_SOURCE is unsupported: %q (expected %q or %q)", cfg.IdentitySource, IdentitySourceHeader, IdentitySourceOIDC)
 	}
 	if cfg.TLSAddr != "" {
 		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.TLSClientCAFile == "" {

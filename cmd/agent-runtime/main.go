@@ -189,6 +189,22 @@ func run() (err error) {
 	}
 	healthChecks := []platform.HealthChecker{store, protocolDB, sessionDB}
 	healthChecks = append(healthChecks, runtime.MCPHealthChecks()...)
+	var identitySource identity.RequestSource
+	switch cfg.IdentitySource {
+	case config.IdentitySourceOIDC:
+		source, sourceErr := identity.NewOIDCSource(context.Background(), identity.OIDCConfig{
+			Issuer:        cfg.OIDCIssuer,
+			Audience:      cfg.OIDCAudience,
+			UsernameClaim: cfg.OIDCUsernameClaim,
+			TenantClaim:   cfg.OIDCTenantClaim,
+		})
+		if sourceErr != nil {
+			return sourceErr
+		}
+		identitySource = source
+	default:
+		identitySource = identity.NewHeaderSource(identity.HeaderSourceConfig{})
+	}
 	protocolServer, err := transport.New(transport.Services{
 		AgentCard:      a2aServer.AgentCardHandler(),
 		A2A:            a2aServer.EndpointHandler(),
@@ -198,7 +214,7 @@ func run() (err error) {
 		Dependencies:   metricsCollector,
 		MetricsTarget:  metricsCollector.Handler(),
 		InternalToken:  cfg.InternalToken,
-		IdentitySource: identity.NewHeaderSource(identity.HeaderSourceConfig{}),
+		IdentitySource: identitySource,
 		A2APrincipal:   cfg.A2APrincipal,
 		A2ATenant:      cfg.A2ATenant,
 		Logger:         logger,

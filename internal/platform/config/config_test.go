@@ -182,6 +182,38 @@ func TestLoadADKSessionRetention(t *testing.T) {
 	}
 }
 
+func TestLoadIdentitySourceConfiguration(t *testing.T) {
+	baseEnv(t)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(default) error = %v", err)
+	}
+	if cfg.IdentitySource != config.IdentitySourceHeader {
+		t.Fatalf("default identity source = %q, want trusted_header", cfg.IdentitySource)
+	}
+	t.Setenv("AGENT_RUNTIME_IDENTITY_SOURCE", config.IdentitySourceOIDC)
+	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_OIDC_ISSUER is required") {
+		t.Fatalf("Load(oidc without issuer) error = %v", err)
+	}
+	t.Setenv("AGENT_RUNTIME_OIDC_ISSUER", "https://issuer.example.com")
+	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_OIDC_AUDIENCE is required") {
+		t.Fatalf("Load(oidc without audience) error = %v", err)
+	}
+	t.Setenv("AGENT_RUNTIME_OIDC_AUDIENCE", "agent-runtime")
+	t.Setenv("AGENT_RUNTIME_INTERNAL_TOKEN", "must-not-combine")
+	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_INTERNAL_TOKEN must be empty") {
+		t.Fatalf("Load(oidc with internal token) error = %v", err)
+	}
+	t.Setenv("AGENT_RUNTIME_INTERNAL_TOKEN", "")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("Load(oidc) error = %v", err)
+	}
+	if cfg.OIDCUsernameClaim != "sub" {
+		t.Fatalf("username claim = %q, want sub", cfg.OIDCUsernameClaim)
+	}
+}
+
 func TestLoadMaxOutputTokens(t *testing.T) {
 	baseEnv(t)
 	cfg, err := config.Load()

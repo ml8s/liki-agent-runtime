@@ -589,6 +589,75 @@ func TestPlainRequestsIgnoreRemoteUserAndLegacyHeaderOnMutualTLS(t *testing.T) {
 	}
 }
 
+type staticCallerSource struct{}
+
+func (staticCallerSource) AuthenticatesCaller() bool { return true }
+
+func (staticCallerSource) IdentityFromRequest(r *http.Request) (identity.Identity, bool) {
+	if r == nil || r.Header.Get("Authorization") != "Bearer valid-id-token" {
+		return identity.Identity{}, false
+	}
+	return identity.Identity{UserID: "oidc-alice", Tenant: "tenant-a"}, true
+}
+
+func TestOIDCCallerIdentityIsAcceptedOnBothProtocols(t *testing.T) {
+	var a2aID, aguiID identity.Identity
+	services := transport.Services{
+		AgentCard: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if id, ok := identity.FromContext(r.Context()); ok {
+				a2aID = id
+			}
+			w.WriteHeader(http.StatusAccepted)
+		}),
+		AGUI: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if id, ok := identity.FromContext(r.Context()); ok {
+				aguiID = id
+			}
+			w.WriteHeader(http.StatusAccepted)
+		}),
+		IdentitySource: staticCallerSource{},
+	}
+	server := mustNewServer(t, services)
+
+	request := httptest.NewRequest(http.MethodPost, "/a2a", nil)
+	request.Header.Set("Authorization", "Bearer valid-id-token")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted || a2aID.UserID != "oidc-alice" {
+		t.Fatalf("A2A status/identity = %d/%+v, want authenticated oidc-alice", response.Code, a2aID)
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/ag-ui", nil)
+	request.Header.Set("Authorization", "Bearer valid-id-token")
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted || aguiID.UserID != "oidc-alice" || aguiID.Tenant != "tenant-a" {
+		t.Fatalf("AG-UI status/identity = %d/%+v, want authenticated oidc-alice", response.Code, aguiID)
+	}
+}
+
+func TestOIDCMissingCredentialIsRejectedWithoutInternalToken(t *testing.T) {
+	services := transport.Services{
+		AgentCard: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A: http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			t.Fatal("A2A must not run without an OIDC credential")
+		}),
+		AGUI: http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			t.Fatal("AG-UI must not run without an OIDC credential")
+		}),
+		IdentitySource: staticCallerSource{},
+	}
+	server := mustNewServer(t, services)
+	for _, path := range []string{"/a2a", "/ag-ui"} {
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, httptest.NewRequest(http.MethodPost, path, nil))
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("%s status = %d, want unauthorized", path, response.Code)
+		}
+	}
+}
+
 func TestErrorResponsesUseRFC9457ProblemJSON(t *testing.T) {
 	server := newServer(t, "s3cr3t")
 	rec := httptest.NewRecorder()

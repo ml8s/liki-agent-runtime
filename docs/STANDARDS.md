@@ -25,6 +25,7 @@ rule is:
 | Content integrity | SHA-256 (`crypto/sha256`) with a lower-case `sha256:<64-hex>` value | Go standard library | Keep. Deployment pinning is configuration trust, not protocol. |
 | Trace correlation | W3C Trace Context / OpenTelemetry | OpenTelemetry Go SDK and `otelhttp` | Keep correlation and export through OTLP. |
 | Internal bearer authentication | HTTP `Authorization: Bearer` semantics | standard HTTP middleware and A2A security declaration | Keep internal token verification; do not place credentials in protocol payloads. |
+| OIDC identity verification | OpenID Connect Discovery and ID Token validation | `github.com/coreos/go-oidc/v3` | Keep provider discovery, JWKS lookup, signature/issuer/audience/expiry validation in the library; adapters only map verified claims. |
 
 ## Deliberate non-protocols
 

@@ -75,7 +75,8 @@ application API or ADK Launcher control plane.
 
 ## Security boundary
 
-Production protocol calls require the internal service token:
+The default trusted-header mode requires production protocol callers to present
+the internal service token:
 
 ```text
 Authorization: Bearer <AGENT_RUNTIME_INTERNAL_TOKEN>
@@ -85,6 +86,12 @@ AG-UI additionally requires `caller` to authenticate the browser user and
 inject `X-Agent-User-ID`. The header is a browser-only trust signal: it is
 adopted on `/ag-ui` only and never on A2A, so a machine client sharing the
 internal token cannot spoof a user identity into audit/provenance.
+
+Set `AGENT_RUNTIME_IDENTITY_SOURCE=oidc` to replace internal bearer + trusted
+headers with one standard OIDC ID-token credential. The runtime performs
+discovery and verifies signature, issuer, audience, and expiry through
+`coreos/go-oidc`; `sub` (or the configured claim) becomes the verified identity
+on both AG-UI and A2A.
 
 The transport consumes a pluggable `identity.RequestSource`; the bundled
 trusted-header adapter is channel-aware and accepts only headers owned by the
@@ -115,6 +122,8 @@ endpoint is HTTPS-only without embedded credentials.
 | `AGENT_RUNTIME_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
 | `AGENT_RUNTIME_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
 | `AGENT_RUNTIME_LOG_*` | structured logging |
+| `AGENT_RUNTIME_IDENTITY_SOURCE` | `trusted_header` (default) or `oidc` |
+| `AGENT_RUNTIME_OIDC_*` | OIDC issuer, audience, and verified claim mapping |
 | `AGENT_RUNTIME_A2A_TASK_RETENTION_SECONDS` | optional terminal A2A task retention; unset/zero disables cleanup |
 | `AGENT_RUNTIME_ADK_SESSION_RETENTION_SECONDS` | optional idle ADK session retention; unset/zero disables, explicit value must be at least run timeout |
 | `OTEL_*` | standard OpenTelemetry tracing settings |

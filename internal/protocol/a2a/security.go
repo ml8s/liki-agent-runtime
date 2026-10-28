@@ -10,7 +10,7 @@ func securitySchemes(config SecurityConfig) a2a.NamedSecuritySchemes {
 		schemes["agent_runtime_service_bearer"] = a2a.HTTPAuthSecurityScheme{
 			Scheme:       "Bearer",
 			BearerFormat: "opaque",
-			Description:  "Runtime internal service bearer token",
+			Description:  "Runtime bearer credential",
 		}
 	}
 	if config.MutualTLS {

@@ -85,7 +85,17 @@ func (s *Server) authorized(next http.Handler, requireIdentity bool) http.Handle
 		// An mTLS channel (client certificate already verified) uses the
 		// certificate as the channel credential; a plaintext listener
 		// (transitional relay) still requires the service token.
-		if s.services.InternalToken != "" && !identity.MutualTLSVerified(r) {
+		if callerAuthenticatedSource(s.services.IdentitySource) {
+			if _, ok := identity.FromContext(r.Context()); !ok {
+				if !s.authFailures.tryConsume(source, time.Now()) {
+					w.Header().Set("Retry-After", "60")
+					writeError(w, http.StatusTooManyRequests, domain.CodeRateLimited, "too many authentication failures")
+					return
+				}
+				writeError(w, http.StatusUnauthorized, domain.CodeUnauthorized, "valid OIDC bearer token required")
+				return
+			}
+		} else if s.services.InternalToken != "" && !identity.MutualTLSVerified(r) {
 			const prefix = "Bearer "
 			header := r.Header.Get("Authorization")
 			if !strings.HasPrefix(header, prefix) || subtle.ConstantTimeCompare([]byte(header[len(prefix):]), []byte(s.services.InternalToken)) != 1 {

@@ -104,8 +104,21 @@ func (s *Server) OpsHandler() http.Handler {
 	return s.opsRoutes
 }
 
+func callerAuthenticatedSource(source identity.RequestSource) bool {
+	authenticator, ok := source.(identity.CallerAuthenticator)
+	return ok && authenticator.AuthenticatesCaller()
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	// Caller-authenticating sources establish both the credential and the
+	// verified identity before routing. Trusted-header behavior remains
+	// route/channel-specific below.
+	if callerAuthenticatedSource(s.services.IdentitySource) {
+		if verified, ok := s.services.IdentitySource.IdentityFromRequest(r); ok {
+			r = r.WithContext(identity.WithIdentity(r.Context(), verified))
+		}
+	}
 	requestID := r.Header.Get("X-Request-ID")
 	if !validRequestID(requestID) {
 		requestID = randomID()
@@ -116,8 +129,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.URL.Path {
 	case "/ag-ui":
-		if verified, ok := s.services.IdentitySource.IdentityFromRequest(r); ok {
-			r = r.WithContext(identity.WithIdentity(r.Context(), verified))
+		if !callerAuthenticatedSource(s.services.IdentitySource) {
+			if verified, ok := s.services.IdentitySource.IdentityFromRequest(r); ok {
+				r = r.WithContext(identity.WithIdentity(r.Context(), verified))
+			}
 		}
 	case "/a2a":
 		// A2A accepts either a verified machine identity from mTLS or the
