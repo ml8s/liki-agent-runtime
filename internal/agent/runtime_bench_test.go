@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	adksqlite "github.com/ml8s/agent-runtime/internal/adksession/sqlite"
 	"github.com/ml8s/agent-runtime/internal/execution"
 
 	"github.com/ml8s/agent-runtime/internal/audit"
@@ -119,3 +121,45 @@ func BenchmarkRuntimeRun(b *testing.B) {
 
 // Compile-time guard: the benchmark exercises the real audit event type.
 var _ = audit.EventDelegationStarted
+
+// BenchmarkRuntimeRunSQLiteSessions measures the production composition shape:
+// the durable session service is SQLite-backed exactly as in the deployed
+// process, so this benchmark exposes session-storage I/O that the in-memory
+// BenchmarkRuntimeRun cannot see. It keeps the same 20-message history, tool
+// call, and in-memory audit recorder so the only variable is the session store.
+func BenchmarkRuntimeRunSQLiteSessions(b *testing.B) {
+	store, err := adksqlite.Open(filepath.Join(b.TempDir(), "sessions.db"))
+	if err != nil {
+		b.Fatalf("open sqlite session store: %v", err)
+	}
+	b.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			b.Fatalf("close sqlite session store: %v", err)
+		}
+	})
+	agentDeployment := plainTestDeployment(b)
+	events := &recordingAudit{}
+	llm := &cyclingLLM{turns: cyclingTurns()}
+	runtime := newTestRuntimeWithSessions(b, agentDeployment, events, llm, store.SessionService())
+	history := benchHistory()
+	ctx := context.Background()
+
+	var benchRunSeq atomic.Int64
+	b.Run("workers=1", func(b *testing.B) {
+		b.ReportAllocs()
+		for index := 0; index < b.N; index++ {
+			n := benchRunSeq.Add(1)
+			request := execution.RunRequest{
+				RunID:       fmt.Sprintf("run_sql_bench_%d", n),
+				ThreadID:    fmt.Sprintf("thread_sql_bench_%d", n),
+				UserID:      "user_bench",
+				UserMessage: "当前问题",
+				History:     history,
+			}
+			if _, err := runtime.Run(ctx, request, nil); err != nil {
+				b.Error(err)
+				return
+			}
+		}
+	})
+}

@@ -102,7 +102,7 @@ func (r *Runtime) Run(
 		r.callAuditor.end(handle, runErr)
 		_ = r.delegationAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
 		_ = r.toolAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
-		_ = r.sessions.Delete(context.WithoutCancel(ctx), &session.DeleteRequest{
+		_ = r.ephemeralSessions.Delete(context.WithoutCancel(ctx), &session.DeleteRequest{
 			AppName:   r.config.AppName,
 			UserID:    request.UserID,
 			SessionID: sessionID,
@@ -125,7 +125,7 @@ func (r *Runtime) Run(
 		// after this point. Cleanup failures are operational noise and do not
 		// change the durably recorded execution outcome.
 		r.callAuditor.forget(handle)
-		if deleteErr := r.sessions.Delete(auditCtx, &session.DeleteRequest{
+		if deleteErr := r.ephemeralSessions.Delete(auditCtx, &session.DeleteRequest{
 			AppName:   r.config.AppName,
 			UserID:    request.UserID,
 			SessionID: sessionID,
@@ -173,13 +173,13 @@ func (r *Runtime) seedAndStreamEvents(
 	observe func(*session.Event) error,
 	span trace.Span,
 ) (execution.RunState, error) {
-	if err := r.seedConversationHistory(ctx, request, sessionID); err != nil {
+	if err := r.seedConversationHistory(ctx, r.ephemeralSessions, request, sessionID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, runtimeError(err).Error())
 		return execution.RunState{}, err
 	}
 
-	events := r.runner.Run(
+	events := r.ephemeralRunner.Run(
 		ctx,
 		request.UserID,
 		sessionID,
@@ -364,7 +364,7 @@ func (r *Runtime) loadStructuredAnalysis(
 	sessionID string,
 	state execution.RunState,
 ) (execution.RunState, error) {
-	response, err := r.sessions.Get(ctx, &session.GetRequest{
+	response, err := r.ephemeralSessions.Get(ctx, &session.GetRequest{
 		AppName:   r.config.AppName,
 		UserID:    request.UserID,
 		SessionID: sessionID,

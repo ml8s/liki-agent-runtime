@@ -15,6 +15,7 @@ import (
 
 	"github.com/ml8s/agent-runtime/internal/audit"
 	"google.golang.org/adk/v2/model"
+	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
@@ -134,6 +135,49 @@ func newTestRuntimeWithLimit(
 	maxRuns int,
 ) *Runtime {
 	t.Helper()
+	clientTransport := connectStubMCPServer(t)
+	runtime, err := NewRuntime(Config{
+		Model:                 "fake-model",
+		AgentDeployment:       agentDeployment,
+		AuditRecorder:         events,
+		MaxConcurrentRuns:     maxRuns,
+		modelOverride:         llm,
+		mcpTransportOverrides: map[string]mcp.Transport{"test": clientTransport},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntime() error = %v", err)
+	}
+	return runtime
+}
+
+// newTestRuntimeWithSessions wires the same fake model and MCP server but
+// injects an explicit durable session service, mirroring the production
+// composition where protocol sessions are persisted.
+func newTestRuntimeWithSessions(
+	t testing.TB,
+	agentDeployment *deploymentpkg.AgentDeployment, events *recordingAudit,
+	llm model.LLM, sessions session.Service,
+) *Runtime {
+	t.Helper()
+	clientTransport := connectStubMCPServer(t)
+	runtime, err := NewRuntime(Config{
+		Model:                 "fake-model",
+		AgentDeployment:       agentDeployment,
+		AuditRecorder:         events,
+		modelOverride:         llm,
+		SessionService:        sessions,
+		mcpTransportOverrides: map[string]mcp.Transport{"test": clientTransport},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntime() error = %v", err)
+	}
+	return runtime
+}
+
+// connectStubMCPServer starts one deterministic in-memory MCP server for the
+// runtime's "test" logical server and returns the client transport.
+func connectStubMCPServer(t testing.TB) mcp.Transport {
+	t.Helper()
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	server := mcp.NewServer(&mcp.Implementation{Name: "stub-mcp", Version: "test"}, nil)
 	server.AddTool(
@@ -147,20 +191,7 @@ func newTestRuntimeWithLimit(
 		t.Fatalf("connect test MCP server: %v", err)
 	}
 	t.Cleanup(func() { _ = serverSession.Close() })
-	runtime, err := NewRuntime(Config{
-		Model:             "fake-model",
-		AgentDeployment:   agentDeployment,
-		AuditRecorder:     events,
-		MaxConcurrentRuns: maxRuns,
-		modelOverride:     llm,
-		mcpTransportOverrides: map[string]mcp.Transport{
-			"test": clientTransport,
-		},
-	})
-	if err != nil {
-		t.Fatalf("NewRuntime() error = %v", err)
-	}
-	return runtime
+	return clientTransport
 }
 
 func plainTestDeployment(t testing.TB) *deploymentpkg.AgentDeployment {

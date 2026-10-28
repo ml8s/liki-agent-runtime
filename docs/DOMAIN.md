@@ -83,7 +83,8 @@ own the append-only persistence invariants.
 1. Only allowlisted MCP tools can be exposed or invoked.
 2. Tool input/output are audited as canonical digests and sizes, never raw payload.
 3. Run, thread, and user identifiers are required; an active RunID is exclusive.
-4. AG-UI working sessions are run-scoped and removed at terminal execution. A2A
+4. AG-UI working sessions are run-scoped, held in-process, and removed at
+terminal execution. A2A
    attempt audit does not delete its ContextID-owned ADK session.
 5. Plain text is the default output mode.
 6. Structured output is optional and validated against the Agent's external

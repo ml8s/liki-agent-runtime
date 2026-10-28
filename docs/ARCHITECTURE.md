@@ -127,6 +127,16 @@ can prefix-cache every earlier turn; the seeded events are deleted with the
 session at terminal execution and the caller stays the owner of durable
 history.
 
+Session storage follows the protocol surface. Runtime.Run (AG-UI) executes on
+an ephemeral runner backed by ADK's in-process session service: run-scoped
+working state is seeded from caller history, deleted at terminal execution,
+and never outlives the process, so it pays no durable-store I/O. The A2A
+executor uses the durable runner backed by the injected session service
+(SQLite in production), because ContextID-owned sessions must survive
+attempts. Splitting the runners structurally — rather than routing on
+session-ID prefixes — removes any heuristic a client-controlled ContextID
+could abuse. The idle-session retention sweep covers only the durable store.
+
 A2A follows the official ADK mapping instead: ContextID owns the ADK session,
 TaskID owns the protocol aggregate, and a deterministic attempt ID owns runtime
 concurrency and audit scope. Attempt audit ends when the execution attempt ends;

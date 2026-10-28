@@ -56,6 +56,11 @@ type Config struct {
 	// tests. Production always uses the official Streamable HTTP transport.
 	mcpTransportOverrides map[string]mcp.Transport
 
+	// ephemeralSessionServiceOverride is an internal test seam for observing
+	// the run-scoped ephemeral session store. Production always uses ADK's
+	// official in-memory service.
+	ephemeralSessionServiceOverride session.Service
+
 	// outboundTransport is the shared, pool-tuned HTTP transport for LLM and
 	// MCP traffic. NewRuntime derives it from MaxConcurrentRuns; a nil value
 	// falls back to a per-call default so hand-built test configs keep working.

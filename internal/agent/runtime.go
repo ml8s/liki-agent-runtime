@@ -50,7 +50,9 @@ type Runtime struct {
 	entrypoint        *agentdeployment.ResolvedAgentDefinition
 	root              agent.Agent
 	sessions          session.Service
+	ephemeralSessions session.Service
 	runner            *runner.Runner
+	ephemeralRunner   *runner.Runner
 	runnerConfig      runner.Config
 	callAuditor       *llmCallAuditor
 	delegationAuditor *DelegationAuditor
@@ -189,9 +191,19 @@ func NewRuntime(config Config) (*Runtime, error) {
 	// Protocol clients own durable conversation/product history. Each ADK
 	// session is deliberately run-scoped working state and must not become a
 	// second durable conversation store.
-	sessionService := session.InMemoryService()
-	if config.SessionService != nil {
-		sessionService = config.SessionService
+	durableSessions := config.SessionService
+	if durableSessions == nil {
+		durableSessions = session.InMemoryService()
+	}
+	// Run-scoped working sessions (AG-UI) live in-process: they are seeded
+	// from caller-owned history, deleted at terminal execution, and never
+	// outlive the process. Durable protocol sessions (A2A ContextID) stay on
+	// the injected service. Splitting the runners by protocol surface, rather
+	// than routing on session-ID prefixes, removes any heuristic that a
+	// client-controlled A2A ContextID could abuse.
+	ephemeralSessions := config.ephemeralSessionServiceOverride
+	if ephemeralSessions == nil {
+		ephemeralSessions = session.InMemoryService()
 	}
 	entrypoint, err := config.AgentDeployment.EntrypointDefinition()
 	if err != nil {
@@ -266,7 +278,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	runnerConfig := runner.Config{
 		AppName:           config.AppName,
 		Agent:             root,
-		SessionService:    sessionService,
+		SessionService:    durableSessions,
 		AutoCreateSession: true,
 		PluginConfig: runner.PluginConfig{
 			Plugins:      []*plugin.Plugin{retryPlugin, attemptPlugin},
@@ -277,11 +289,19 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create ADK runner", err)
 	}
+	ephemeralRunnerConfig := runnerConfig
+	ephemeralRunnerConfig.SessionService = ephemeralSessions
+	ephemeralRunnerInstance, err := runner.New(ephemeralRunnerConfig)
+	if err != nil {
+		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create ADK ephemeral runner", err)
+	}
 	return &Runtime{
 		config:            config,
 		root:              root,
-		sessions:          sessionService,
+		sessions:          durableSessions,
+		ephemeralSessions: ephemeralSessions,
 		runner:            runnerInstance,
+		ephemeralRunner:   ephemeralRunnerInstance,
 		runnerConfig:      runnerConfig,
 		callAuditor:       callAuditor,
 		delegationAuditor: delegationAuditor,

@@ -28,11 +28,11 @@ import (
 //     chat invocation's visibility rules;
 //   - untrusted history text stays opaque inside its own structural content
 //     part; native turns have no textual framing to break out of.
-func (r *Runtime) seedConversationHistory(ctx context.Context, request execution.RunRequest, sessionID string) error {
+func (r *Runtime) seedConversationHistory(ctx context.Context, service session.Service, request execution.RunRequest, sessionID string) error {
 	if len(request.History) == 0 {
 		return nil
 	}
-	response, err := r.sessions.Create(ctx, &session.CreateRequest{
+	response, err := service.Create(ctx, &session.CreateRequest{
 		AppName:   r.config.AppName,
 		UserID:    request.UserID,
 		SessionID: sessionID,
@@ -61,7 +61,7 @@ func (r *Runtime) seedConversationHistory(ctx context.Context, request execution
 				Content: genai.NewContentFromText(message.Content, role),
 			},
 		}
-		if appendErr := r.sessions.AppendEvent(ctx, response.Session, event); appendErr != nil {
+		if appendErr := service.AppendEvent(ctx, response.Session, event); appendErr != nil {
 			return domain.NewError(domain.CodeRuntimeSessionUnavailable, "seed conversation history", appendErr)
 		}
 	}
