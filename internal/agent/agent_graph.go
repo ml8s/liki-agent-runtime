@@ -1,20 +1,16 @@
 package agent
 
-import
-
-// Builds the Agent dependency graph (from the definition aggregate) in
-// AgentDefinition dependency order as an ADK Agent graph. Memoization avoids
-// duplicate construction; the building set detects delegation cycles. MCP
-// servers not covered by an Agent's allowlist never enter that Agent's
-// toolset (deny-by-default).
-agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
+// This file builds the Agent dependency graph from the definition aggregate in
+// AgentDefinition dependency order. Memoization avoids duplicate construction;
+// the building set detects delegation cycles. MCP servers not covered by an
+// Agent's allowlist never enter that Agent's toolset (deny-by-default).
 
 import (
 	"fmt"
 
-	"github.com/ml8s/agent-runtime/internal/execution"
-
+	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/execution"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"

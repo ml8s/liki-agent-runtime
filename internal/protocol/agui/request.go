@@ -115,7 +115,7 @@ func conversationText(content any) (string, error) {
 		for _, item := range value {
 			fragment, ok := item.(map[string]any)
 			if !ok {
-				continue
+				return "", fmt.Errorf("message content contains a non-object part")
 			}
 			if kind, ok := fragment["type"].(string); ok && kind != aguitypes.InputContentTypeText {
 				return "", fmt.Errorf("input content type %q is outside the AG-UI text-chat profile", kind)

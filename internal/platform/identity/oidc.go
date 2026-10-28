@@ -99,9 +99,9 @@ func (source *OIDCSource) IdentityFromRequest(request *http.Request) (Identity, 
 }
 
 func bearerToken(request *http.Request) (string, bool) {
-	const prefix = "Bearer "
+	const prefix = "bearer "
 	header := request.Header.Get("Authorization")
-	if !strings.HasPrefix(header, prefix) {
+	if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
 		return "", false
 	}
 	token := strings.TrimSpace(header[len(prefix):])

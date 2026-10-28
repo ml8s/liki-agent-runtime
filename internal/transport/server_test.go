@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -479,6 +480,88 @@ func TestPprofRequiresServiceToken(t *testing.T) {
 	ops.ServeHTTP(response, authenticated)
 	if response.Code != http.StatusOK {
 		t.Fatalf("authenticated heap profile status = %d, want %d", response.Code, http.StatusOK)
+	}
+}
+
+func TestOpsTokenGatesMetricsAndPprofIndependently(t *testing.T) {
+	handler := mustNewServer(t, transport.Services{
+		AgentCard:     http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A:           http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		AGUI:          http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		InternalToken: "protocol-secret",
+		OpsToken:      "ops-secret",
+	})
+	ops := handler.OpsHandler()
+
+	for _, path := range []string{"/metrics", "/debug/pprof/"} {
+		protocolCredential := httptest.NewRequest(http.MethodGet, path, nil)
+		protocolCredential.Header.Set("Authorization", "Bearer protocol-secret")
+		response := httptest.NewRecorder()
+		ops.ServeHTTP(response, protocolCredential)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("%s with protocol token status = %d, want %d", path, response.Code, http.StatusUnauthorized)
+		}
+
+		opsCredential := httptest.NewRequest(http.MethodGet, path, nil)
+		opsCredential.Header.Set("Authorization", "bearer ops-secret")
+		response = httptest.NewRecorder()
+		ops.ServeHTTP(response, opsCredential)
+		if response.Code == http.StatusUnauthorized {
+			t.Fatalf("%s with ops token was rejected", path)
+		}
+	}
+
+	// The ops credential must not cross into the protocol surface.
+	protocol := httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(`{}`))
+	protocol.Header.Set("Authorization", "Bearer ops-secret")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, protocol)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("protocol request with ops token status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestMutualTLSCertificateIdentityIsFailClosedByComposition(t *testing.T) {
+	var aguiID identity.Identity
+	uri, err := url.Parse("spiffe://cluster/ns/agent/sa/direct")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := mustNewServer(t, transport.Services{
+		AgentCard: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A:       http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		AGUI: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if id, ok := identity.FromContext(r.Context()); ok {
+				aguiID = id
+			}
+			w.WriteHeader(http.StatusAccepted)
+		}),
+		InternalToken:  "secret",
+		IdentitySource: identity.NewChannelSource(identity.NewHeaderSource(identity.HeaderSourceConfig{}), identity.NewCertificateSource()),
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/ag-ui", strings.NewReader(`{}`))
+	request.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{{URIs: []*url.URL{uri}}}}
+	request.Header.Set("Remote-User", "spoofed")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("mTLS status = %d, want %d", response.Code, http.StatusAccepted)
+	}
+	if aguiID.UserID != uri.String() || !aguiID.MutualTLS {
+		t.Fatalf("mTLS identity = %+v, want the verified certificate subject", aguiID)
+	}
+}
+
+func TestServiceTokenAcceptsCaseInsensitiveBearerScheme(t *testing.T) {
+	handler := newServer(t, "secret")
+	request := httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(`{}`))
+	request.Header.Set("Authorization", "bEaReR secret")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("case-insensitive bearer status = %d, want %d", response.Code, http.StatusAccepted)
 	}
 }
 

@@ -327,21 +327,14 @@ func safeAgentSkills(deployment *deploymentpkg.AgentDeployment) []a2a.AgentSkill
 	if err != nil {
 		return nil
 	}
-	definition := &deployment.Spec.Agents[0]
-	for index := range deployment.Spec.Agents {
-		if deployment.Spec.Agents[index].Name == entrypoint.Name {
-			definition = &deployment.Spec.Agents[index]
-			break
-		}
-	}
 	tags := []string{"entrypoint"}
-	if definition.Output.Structured() {
+	if entrypoint.Output.Structured() {
 		tags = append(tags, "structured-output")
 	}
 	return []a2a.AgentSkill{{
-		ID:          definition.Name,
-		Name:        definition.Name,
-		Description: definition.Description,
+		ID:          entrypoint.Name,
+		Name:        entrypoint.Name,
+		Description: entrypoint.Description,
 		Tags:        tags,
 	}}
 }

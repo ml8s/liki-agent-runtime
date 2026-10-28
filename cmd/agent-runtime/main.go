@@ -1,7 +1,5 @@
 package main
 
-import "github.com/ml8s/agent-runtime/internal/deployment"
-
 import (
 	"context"
 	"errors"
@@ -19,6 +17,7 @@ import (
 	adksqlite "github.com/ml8s/agent-runtime/internal/adksession/sqlite"
 	agentruntime "github.com/ml8s/agent-runtime/internal/agent"
 	"github.com/ml8s/agent-runtime/internal/audit/sqlite"
+	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 	"github.com/ml8s/agent-runtime/internal/observability/otel"
 	"github.com/ml8s/agent-runtime/internal/observability/prometheus"
 	"github.com/ml8s/agent-runtime/internal/platform"
@@ -126,7 +125,7 @@ func run() (err error) {
 			err = fmt.Errorf("drain audit recorder: %w", closeErr)
 		}
 	}()
-	deployment, err := deployment.LoadAgentDeployment(cfg.DeploymentFile)
+	deployment, err := deploymentpkg.LoadAgentDeployment(cfg.DeploymentFile)
 	if err != nil {
 		return err
 	}
@@ -203,7 +202,16 @@ func run() (err error) {
 		}
 		identitySource = source
 	default:
-		identitySource = identity.NewHeaderSource(identity.HeaderSourceConfig{})
+		relay := identity.NewHeaderSource(identity.HeaderSourceConfig{})
+		if cfg.MTLSIdentitySource == config.MTLSIdentitySourceHeader {
+			// Explicit gateway-relay opt-in: the mTLS peer is trusted to
+			// relay an already authenticated end-user identity.
+			identitySource = relay
+			break
+		}
+		// Fail-closed default: direct mTLS callers are identified by their
+		// verified certificate, never by self-declared request headers.
+		identitySource = identity.NewChannelSource(relay, identity.NewCertificateSource())
 	}
 	protocolServer, err := transport.New(transport.Services{
 		AgentCard:      a2aServer.AgentCardHandler(),
@@ -214,6 +222,7 @@ func run() (err error) {
 		Dependencies:   metricsCollector,
 		MetricsTarget:  metricsCollector.Handler(),
 		InternalToken:  cfg.InternalToken,
+		OpsToken:       cfg.OpsToken,
 		IdentitySource: identitySource,
 		A2APrincipal:   cfg.A2APrincipal,
 		A2ATenant:      cfg.A2ATenant,
@@ -409,7 +418,8 @@ func newHTTPServers(cfg config.Config, protocolServer *transport.Server, protoco
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
-	// 运维面独立监听：协议面的 mTLS 不波及健康检查与指标抓取。
+	// The ops listener is separate so protocol-level mutual TLS never gates
+	// health checks or metric scrapes.
 	opsServer := &http.Server{
 		Addr:              cfg.OpsAddr,
 		Handler:           protocolServer.OpsHandler(),
@@ -462,7 +472,7 @@ func shutdownServers(servers []*http.Server, protocolServer *transport.Server, s
 	return errors.Join(shutdownErrs...)
 }
 
-func mcpServerNames(deployment *deployment.AgentDeployment) []string {
+func mcpServerNames(deployment *deploymentpkg.AgentDeployment) []string {
 	names := make([]string, 0, len(deployment.Spec.MCPServers))
 	for _, server := range deployment.Spec.MCPServers {
 		names = append(names, server.Name)

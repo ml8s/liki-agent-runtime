@@ -161,7 +161,7 @@ func (e Event) validate() error {
 		}
 	case EventRunCanceled:
 		if e.Status != StatusCanceled {
-			return NewError(CodeStatusInvalid, "paused audit event must be paused")
+			return NewError(CodeStatusInvalid, "canceled audit event must be canceled")
 		}
 	case EventRunFailed, EventLLMCallFailed, EventToolCallFailed, EventDelegationFailed:
 		if e.Status != StatusFailed {

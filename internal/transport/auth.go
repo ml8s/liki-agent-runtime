@@ -79,6 +79,25 @@ func (l *authFailureLimiter) pruneLocked(now time.Time) {
 	}
 }
 
+// bearerCredential returns the token following a case-insensitive Bearer
+// authorization scheme, as required by RFC 7235.
+func bearerCredential(header string) (string, bool) {
+	const prefix = "bearer "
+	if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
+		return "", false
+	}
+	token := strings.TrimSpace(header[len(prefix):])
+	return token, token != ""
+}
+
+// bearerMatches reports whether the header carries exactly the expected
+// bearer credential. Comparison is constant-time so tokens cannot be probed
+// byte by byte.
+func bearerMatches(header, expected string) bool {
+	token, ok := bearerCredential(header)
+	return ok && subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
+}
+
 func (s *Server) authorized(next http.Handler, requireIdentity bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		source := requestSource(r.RemoteAddr)
@@ -96,9 +115,8 @@ func (s *Server) authorized(next http.Handler, requireIdentity bool) http.Handle
 				return
 			}
 		} else if s.services.InternalToken != "" && !identity.MutualTLSVerified(r) {
-			const prefix = "Bearer "
 			header := r.Header.Get("Authorization")
-			if !strings.HasPrefix(header, prefix) || subtle.ConstantTimeCompare([]byte(header[len(prefix):]), []byte(s.services.InternalToken)) != 1 {
+			if !bearerMatches(header, s.services.InternalToken) {
 				if !s.authFailures.tryConsume(source, time.Now()) {
 					w.Header().Set("Retry-After", "60")
 					writeError(w, http.StatusTooManyRequests, domain.CodeRateLimited, "too many authentication failures")
@@ -116,6 +134,30 @@ func (s *Server) authorized(next http.Handler, requireIdentity bool) http.Handle
 				return
 			}
 			writeError(w, http.StatusUnauthorized, domain.CodeIdentityRequired, "verified user identity required")
+			return
+		}
+		s.authFailures.clear(source)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// authorizedOps gates the operational surface. A dedicated ops token, when
+// configured, is the only accepted credential there: metric scrapers and
+// profilers must not hold the protocol service token. Without it, the
+// composed protocol authentication policy continues to own the surface.
+func (s *Server) authorizedOps(next http.Handler) http.Handler {
+	if s.services.OpsToken == "" {
+		return s.authorized(next, false)
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		source := requestSource(r.RemoteAddr)
+		if !bearerMatches(r.Header.Get("Authorization"), s.services.OpsToken) {
+			if !s.authFailures.tryConsume(source, time.Now()) {
+				w.Header().Set("Retry-After", "60")
+				writeError(w, http.StatusTooManyRequests, domain.CodeRateLimited, "too many authentication failures")
+				return
+			}
+			writeError(w, http.StatusUnauthorized, domain.CodeUnauthorized, "valid ops token required")
 			return
 		}
 		s.authFailures.clear(source)

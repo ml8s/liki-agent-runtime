@@ -69,9 +69,12 @@ configured by the environment.
 | Machine discovery | A2A Agent Card | `GET /.well-known/agent-card.json` | standard capability metadata |
 | Tool server | MCP Streamable HTTP | outbound | deterministic tools |
 
-Operational endpoints are public `/readyz` and `/version`, plus `/metrics`
-(token-gated when an internal token is configured). There is no private
-application API or ADK Launcher control plane.
+Operational endpoints are public `/readyz` and `/version`, plus `/metrics` and
+`/debug/pprof`. Set `AGENT_RUNTIME_OPS_TOKEN` to give metric scrapers and
+profilers a credential separate from the protocol service token; when unset,
+the composed protocol authentication policy gates the operational surface
+(it is required in production with OIDC, where user ID tokens are short-lived).
+There is no private application API or ADK Launcher control plane.
 
 ## Security boundary
 
@@ -97,6 +100,16 @@ The transport consumes a pluggable `identity.RequestSource`; the bundled
 trusted-header adapter is channel-aware and accepts only headers owned by the
 authenticated channel. Future OIDC or certificate-identity adapters implement
 the same port without changing protocol handlers.
+
+On the optional mutual-TLS listener, the default
+`AGENT_RUNTIME_MTLS_IDENTITY_SOURCE=certificate` maps the identity from the
+verified client certificate (first URI SAN, then email SAN, then common name;
+certificate organization maps to the tenant). A certificate holder therefore
+cannot claim another user through `Remote-User` headers. Deployments whose mTLS
+peer is a gateway that has already authenticated the end user may opt into
+`AGENT_RUNTIME_MTLS_IDENTITY_SOURCE=header`, which restores the relay-header
+contract on that listener; the opt-in requires the TLS listener and documents
+that trust assumption explicitly.
 
 The runtime is never directly public and never authenticates end users, issues
 sessions, stores conversations, or trusts unverified identities. Internet-facing

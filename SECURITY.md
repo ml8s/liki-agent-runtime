@@ -7,10 +7,16 @@ Required controls:
 
 - Internal bearer token between the gateway and `agent-runtime` outside local
   development.
-- The same internal token for protocol calls and `/metrics`.
+- A dedicated ops token for `/metrics` and `/debug/pprof` when operational
+  separation is required; it must differ from the protocol token and is
+  mandatory in production with OIDC identity.
 - Verified user context supplied by the gateway for AG-UI.
 - The browser identity header is adopted on AG-UI only; A2A machine callers
   sharing the internal token cannot spoof a user identity.
+- Direct mutual-TLS callers are identified by their verified certificate
+  subject by default. Trusting relayed identity headers on that listener
+  (`AGENT_RUNTIME_MTLS_IDENTITY_SOURCE=header`) is an explicit deployment
+  opt-in for gateway peers and must be documented as such.
 - Internet-facing request rate limiting is owned by the gateway; the runtime's
   internal per-source limiter only resists token brute force.
 - Bounded per-source throttling of invalid bearer or identity attempts.

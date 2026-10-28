@@ -49,6 +49,25 @@ func TestOIDCSourceMapsVerifiedClaims(t *testing.T) {
 	}
 }
 
+func TestOIDCSourceAcceptsCaseInsensitiveBearerScheme(t *testing.T) {
+	key := testRSAKey(t)
+	issuer := testIssuer(t, key, testJWKS(t, key))
+	source, err := NewOIDCSource(testContext(t), OIDCConfig{Issuer: issuer.URL, Audience: "agent-runtime"})
+	if err != nil {
+		t.Fatalf("NewOIDCSource() error = %v", err)
+	}
+	raw := testJWT(t, key, map[string]any{
+		"iss": issuer.URL, "aud": "agent-runtime", "sub": "alice",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	request := httptest.NewRequest(http.MethodPost, "/ag-ui", nil)
+	request.Header.Set("Authorization", "bEaReR "+raw)
+	identity, ok := source.IdentityFromRequest(request)
+	if !ok || identity.UserID != "alice" {
+		t.Fatalf("identity = %+v ok=%v, want alice via case-insensitive scheme", identity, ok)
+	}
+}
+
 func TestOIDCSourceRejectsInvalidCredentials(t *testing.T) {
 	key := testRSAKey(t)
 	issuer := testIssuer(t, key, testJWKS(t, key))

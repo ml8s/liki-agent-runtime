@@ -20,7 +20,23 @@ const (
 	// IdentitySourceOIDC verifies a standard bearer OIDC ID token.
 	IdentitySourceOIDC = "oidc"
 
+	// MTLSIdentitySourceCertificate maps the verified client certificate to
+	// the runtime identity on the mutual-TLS listener. It is the fail-closed
+	// default: a certificate holder cannot claim another subject by headers.
+	MTLSIdentitySourceCertificate = "certificate"
+	// MTLSIdentitySourceHeader keeps the gateway relay-header contract on the
+	// mutual-TLS listener. Deployments whose mTLS peer is a gateway that has
+	// already authenticated the end user opt in explicitly.
+	MTLSIdentitySourceHeader = "header"
+
 	DefaultIdentitySource = IdentitySourceHeader
+	// DefaultMTLSIdentitySource is fail-closed: direct mTLS callers are
+	// identified by their certificate, not by self-declared headers.
+	DefaultMTLSIdentitySource = MTLSIdentitySourceCertificate
+
+	// EnvMTLSIdentitySource is read directly so validation can distinguish an
+	// explicit opt-in from the fail-closed default.
+	EnvMTLSIdentitySource = "AGENT_RUNTIME_MTLS_IDENTITY_SOURCE"
 
 	DefaultMCPTimeout        = 30 * time.Second
 	DefaultMaxConcurrentRuns = 32
@@ -63,7 +79,9 @@ type Config struct {
 	TLSClientCAFile             string
 	PublicURL                   string
 	InternalToken               string
+	OpsToken                    string
 	IdentitySource              string
+	MTLSIdentitySource          string
 	AuditDBPath                 string
 	ProtocolStateDBPath         string
 	ADKSessionDBPath            string
@@ -124,7 +142,9 @@ func Load() (Config, error) {
 		TLSClientCAFile:     getEnv("AGENT_RUNTIME_TLS_CLIENT_CA", ""),
 		PublicURL:           getEnv("AGENT_RUNTIME_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
 		InternalToken:       getEnv("AGENT_RUNTIME_INTERNAL_TOKEN", ""),
+		OpsToken:            getEnv("AGENT_RUNTIME_OPS_TOKEN", ""),
 		IdentitySource:      getEnv("AGENT_RUNTIME_IDENTITY_SOURCE", DefaultIdentitySource),
+		MTLSIdentitySource:  getEnv(EnvMTLSIdentitySource, DefaultMTLSIdentitySource),
 		AuditDBPath:         getEnv("AGENT_RUNTIME_AUDIT_DB_PATH", "./data/agent-runtime-audit.db"),
 		ProtocolStateDBPath: getEnv("AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH", DefaultProtocolStateDBPath),
 		ADKSessionDBPath:    getEnv("AGENT_RUNTIME_ADK_SESSION_DB_PATH", DefaultADKSessionDBPath),
@@ -228,6 +248,29 @@ func validate(cfg Config) (Config, error) {
 		}
 	default:
 		return Config{}, fmt.Errorf("AGENT_RUNTIME_IDENTITY_SOURCE is unsupported: %q (expected %q or %q)", cfg.IdentitySource, IdentitySourceHeader, IdentitySourceOIDC)
+	}
+	// OIDC owns caller authentication on both protocol surfaces; a separate
+	// mTLS identity mapping would be dead, misleading configuration.
+	if os.Getenv(EnvMTLSIdentitySource) != "" && cfg.IdentitySource == IdentitySourceOIDC {
+		return Config{}, fmt.Errorf("%s is only valid with %s=%s; OIDC verifies the caller credential directly", EnvMTLSIdentitySource, "AGENT_RUNTIME_IDENTITY_SOURCE", IdentitySourceHeader)
+	}
+	switch cfg.MTLSIdentitySource {
+	case "", MTLSIdentitySourceCertificate:
+		cfg.MTLSIdentitySource = MTLSIdentitySourceCertificate
+	case MTLSIdentitySourceHeader:
+		// The header contract trusts the mTLS peer to relay an authenticated
+		// end user, so it must not be configured without that listener.
+		if cfg.TLSAddr == "" {
+			return Config{}, fmt.Errorf("%s=%s requires AGENT_RUNTIME_TLS_ADDR to be configured", EnvMTLSIdentitySource, MTLSIdentitySourceHeader)
+		}
+	default:
+		return Config{}, fmt.Errorf("%s is unsupported: %q (expected %q or %q)", EnvMTLSIdentitySource, cfg.MTLSIdentitySource, MTLSIdentitySourceCertificate, MTLSIdentitySourceHeader)
+	}
+	if cfg.OpsToken != "" && cfg.OpsToken == cfg.InternalToken {
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_OPS_TOKEN must differ from AGENT_RUNTIME_INTERNAL_TOKEN so operational scrapers cannot reuse the protocol credential")
+	}
+	if !isDevelopment && cfg.IdentitySource == IdentitySourceOIDC && cfg.OpsToken == "" {
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_OPS_TOKEN is required in production when AGENT_RUNTIME_IDENTITY_SOURCE=oidc; operational endpoints cannot rely on short-lived user ID tokens")
 	}
 	if cfg.TLSAddr != "" {
 		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.TLSClientCAFile == "" {

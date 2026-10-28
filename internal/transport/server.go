@@ -28,6 +28,7 @@ type Services struct {
 	Dependencies   observability.DependencyMetrics
 	MetricsTarget  http.Handler
 	InternalToken  string
+	OpsToken       string
 	IdentitySource identity.RequestSource
 	A2APrincipal   string
 	A2ATenant      string
@@ -82,15 +83,16 @@ func New(services Services) (*Server, error) {
 	ops := http.NewServeMux()
 	ops.HandleFunc("GET /readyz", server.ready)
 	ops.HandleFunc("GET /version", server.version)
-	ops.Handle("GET /metrics", server.authorized(server.metricsHandler(), false))
+	ops.Handle("GET /metrics", server.authorizedOps(server.metricsHandler()))
 	// Profiling shares the ops listener and the metrics authentication policy:
-	// open to operators, token-gated whenever the internal token is set.
+	// open to operators, gated by the ops token when one is configured (and by
+	// the composed protocol credential otherwise).
 	// pprof.Index also serves named profiles such as /debug/pprof/heap.
-	ops.Handle("/debug/pprof/", server.authorized(http.HandlerFunc(pprof.Index), false))
-	ops.Handle("/debug/pprof/cmdline", server.authorized(http.HandlerFunc(pprof.Cmdline), false))
-	ops.Handle("/debug/pprof/profile", server.authorized(http.HandlerFunc(pprof.Profile), false))
-	ops.Handle("/debug/pprof/symbol", server.authorized(http.HandlerFunc(pprof.Symbol), false))
-	ops.Handle("/debug/pprof/trace", server.authorized(http.HandlerFunc(pprof.Trace), false))
+	ops.Handle("/debug/pprof/", server.authorizedOps(http.HandlerFunc(pprof.Index)))
+	ops.Handle("/debug/pprof/cmdline", server.authorizedOps(http.HandlerFunc(pprof.Cmdline)))
+	ops.Handle("/debug/pprof/profile", server.authorizedOps(http.HandlerFunc(pprof.Profile)))
+	ops.Handle("/debug/pprof/symbol", server.authorizedOps(http.HandlerFunc(pprof.Symbol)))
+	ops.Handle("/debug/pprof/trace", server.authorizedOps(http.HandlerFunc(pprof.Trace)))
 
 	server.routes = api
 	server.opsRoutes = ops

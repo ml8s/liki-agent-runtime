@@ -333,3 +333,53 @@ func TestMCPHealthTimeoutFollowsToolBudget(t *testing.T) {
 		t.Fatalf("health timeout = %v, want 45s", cfg.MCPHealthTimeout)
 	}
 }
+
+func TestMTLSIdentitySourceDefaultsToCertificate(t *testing.T) {
+	baseEnv(t)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.MTLSIdentitySource != config.MTLSIdentitySourceCertificate {
+		t.Fatalf("mTLS identity source = %q, want %q", cfg.MTLSIdentitySource, config.MTLSIdentitySourceCertificate)
+	}
+}
+
+func TestMTLSIdentitySourceHeaderRequiresTLSListener(t *testing.T) {
+	baseEnv(t)
+	t.Setenv(config.EnvMTLSIdentitySource, config.MTLSIdentitySourceHeader)
+	if _, err := config.Load(); err == nil {
+		t.Fatal("header identity source was accepted without a mutual-TLS listener")
+	}
+}
+
+func TestMTLSIdentitySourceIsRejectedWithOIDC(t *testing.T) {
+	baseEnv(t)
+	t.Setenv("AGENT_RUNTIME_IDENTITY_SOURCE", config.IdentitySourceOIDC)
+	t.Setenv("AGENT_RUNTIME_OIDC_ISSUER", "https://issuer.example.com")
+	t.Setenv("AGENT_RUNTIME_OIDC_AUDIENCE", "agent-runtime")
+	t.Setenv(config.EnvMTLSIdentitySource, config.MTLSIdentitySourceCertificate)
+	if _, err := config.Load(); err == nil {
+		t.Fatal("mTLS identity source was accepted while OIDC owns caller authentication")
+	}
+}
+
+func TestOpsTokenMustDifferFromInternalToken(t *testing.T) {
+	baseEnv(t)
+	t.Setenv("AGENT_RUNTIME_INTERNAL_TOKEN", "protocol-secret")
+	t.Setenv("AGENT_RUNTIME_OPS_TOKEN", "protocol-secret")
+	if _, err := config.Load(); err == nil {
+		t.Fatal("ops token equal to the protocol token was accepted")
+	}
+}
+
+func TestProductionOIDCRequiresOpsToken(t *testing.T) {
+	baseEnv(t)
+	t.Setenv("AGENT_RUNTIME_ENV", "production")
+	t.Setenv("AGENT_RUNTIME_IDENTITY_SOURCE", config.IdentitySourceOIDC)
+	t.Setenv("AGENT_RUNTIME_OIDC_ISSUER", "https://issuer.example.com")
+	t.Setenv("AGENT_RUNTIME_OIDC_AUDIENCE", "agent-runtime")
+	if _, err := config.Load(); err == nil {
+		t.Fatal("production OIDC without an ops token was accepted")
+	}
+}
