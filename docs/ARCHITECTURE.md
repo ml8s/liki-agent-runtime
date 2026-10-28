@@ -253,14 +253,16 @@ canonical JSON on the wire is unchanged.
 
 ## Operations
 
-The operational surface (`/readyz`, `/version`, `/metrics`) is served on a
-dedicated ops listener (`AGENT_RUNTIME_OPS_ADDR`, default `:8085`) so
-protocol mutual TLS never gates healthchecks or scrapers; `/metrics` keeps the
-same bearer-token boundary as protocol calls whenever an internal token is
-configured. The protocol listener can additionally expose a mutual-TLS
-endpoint (`AGENT_RUNTIME_TLS_ADDR` plus the certificate trio, client
-certificates verified against the CA). All POST endpoints enforce a 2 MB body
-limit.
+The operational surface (`/readyz`, `/version`, `/metrics`, `/debug/pprof`) is
+served on a dedicated ops listener (`AGENT_RUNTIME_OPS_ADDR`, default `:8085`)
+so protocol mutual TLS never gates healthchecks or scrapers; `/metrics` keeps
+the same bearer-token boundary as protocol calls whenever an internal token is
+configured, or is owned by the dedicated `AGENT_RUNTIME_OPS_TOKEN` when that
+separation is configured (mandatory in production with OIDC identity, whose
+user ID tokens are unsuitable for long-lived scraper credentials). The
+protocol listener can additionally expose a mutual-TLS endpoint
+(`AGENT_RUNTIME_TLS_ADDR` plus the certificate trio, client certificates
+verified against the CA). All POST endpoints enforce a 2 MB body limit.
 
 Bearer-token failures and missing verified identities are counted in a bounded
 fixed window per TCP socket source. Untrusted forwarding headers never change
@@ -271,6 +273,10 @@ token authenticates the caller; a pluggable `identity.RequestSource` supplies
 the verified end-user identity. The bundled trusted-header adapter maps only
 channel-owned headers. The OIDC adapter verifies one standard bearer ID token
 through a mature OIDC/JWKS library and authenticates both protocol surfaces.
+On the mutual-TLS listener the default `CertificateSource` maps the verified
+client-certificate subject (URI SAN, then email SAN, then common name;
+organization maps to the tenant); the relay-header mapping on that listener is
+an explicit `AGENT_RUNTIME_MTLS_IDENTITY_SOURCE=header` deployment opt-in.
 
 Readiness checks SQLite and every declared MCP dependency through the official
 MCP discovery RPC. It requires the configured MCP revision, server identity,

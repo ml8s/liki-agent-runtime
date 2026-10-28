@@ -27,6 +27,8 @@ docker run -d --name "$NAME" \
   -e AGENT_RUNTIME_TOPOLOGY=single \
   -e AGENT_RUNTIME_PROTOCOL_ADDR=:8083 \
   -e AGENT_RUNTIME_OPS_ADDR=:8085 \
+  -e AGENT_RUNTIME_INTERNAL_TOKEN=dev-protocol-token \
+  -e AGENT_RUNTIME_OPS_TOKEN=dev-ops-token \
   -e AGENT_RUNTIME_PUBLIC_URL=http://127.0.0.1:8083 \
   -e AGENT_RUNTIME_AUDIT_DB_PATH=/data/agent-runtime-audit.db \
   -e AGENT_RUNTIME_DEPLOYMENT_FILE=/agent-deployment/deployment.json \
@@ -60,4 +62,32 @@ fi
 
 curl -fsS "http://127.0.0.1:$OPS_PORT/version" | grep -q 'version'
 curl -fsS "http://127.0.0.1:$PORT/.well-known/agent-card.json" | grep -q '"protocolBinding":"JSONRPC"'
+
+# Credential separation with both tokens configured: the ops token owns
+# /metrics (accepted with standard case-insensitive Bearer semantics), and
+# neither credential crosses into the other surface.
+ops_status="$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$OPS_PORT/metrics")"
+if [ "$ops_status" != "401" ]; then
+  echo "❌ unauthenticated /metrics returned HTTP $ops_status, want 401" >&2
+  exit 1
+fi
+ops_status="$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H 'Authorization: bearer dev-ops-token' "http://127.0.0.1:$OPS_PORT/metrics")"
+if [ "$ops_status" != "200" ]; then
+  echo "❌ ops-token /metrics returned HTTP $ops_status, want 200" >&2
+  exit 1
+fi
+ops_status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+  -H 'Authorization: Bearer dev-ops-token' -H 'Content-Type: application/json' \
+  --data '{}' "http://127.0.0.1:$PORT/a2a")"
+if [ "$ops_status" != "401" ]; then
+  echo "❌ protocol surface accepted the ops token (HTTP $ops_status), want 401" >&2
+  exit 1
+fi
+ops_status="$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H 'Authorization: Bearer dev-protocol-token' "http://127.0.0.1:$OPS_PORT/metrics")"
+if [ "$ops_status" != "401" ]; then
+  echo "❌ ops surface accepted the protocol token (HTTP $ops_status), want 401" >&2
+  exit 1
+fi
 echo "✅ agent-runtime image smoke passed"

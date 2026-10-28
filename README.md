@@ -131,11 +131,13 @@ endpoint is HTTPS-only without embedded credentials.
 | Prefix / variable | Purpose |
 |---|---|
 | `AGENT_RUNTIME_*` | service address, token, audit DB path, topology, deployment file, ops address (`OPS_ADDR`, default `:8085`), mutual-TLS listener (`TLS_ADDR` + `TLS_CERT`/`TLS_KEY`/`TLS_CLIENT_CA`) |
+| `AGENT_RUNTIME_INTERNAL_TOKEN` / `AGENT_RUNTIME_OPS_TOKEN` | protocol service credential; dedicated ops credential for `/metrics` and `/debug/pprof` (must differ; ops token required in production with OIDC) |
 | `AGENT_RUNTIME_MCP_*` | endpoint/token bindings for logical MCP servers (`AGENT_RUNTIME_MCP_<NAME>_URL` / `AGENT_RUNTIME_MCP_<NAME>_TOKEN`) |
 | `AGENT_RUNTIME_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
 | `AGENT_RUNTIME_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
 | `AGENT_RUNTIME_LOG_*` | structured logging |
 | `AGENT_RUNTIME_IDENTITY_SOURCE` | `trusted_header` (default) or `oidc` |
+| `AGENT_RUNTIME_MTLS_IDENTITY_SOURCE` | mutual-TLS identity mapping: `certificate` (default, fail-closed) or explicit `header` gateway-relay opt-in |
 | `AGENT_RUNTIME_OIDC_*` | OIDC issuer, audience, and verified claim mapping |
 | `AGENT_RUNTIME_A2A_TASK_RETENTION_SECONDS` | optional terminal A2A task retention; unset/zero disables cleanup |
 | `AGENT_RUNTIME_ADK_SESSION_RETENTION_SECONDS` | optional idle ADK session retention; unset/zero disables, explicit value must be at least run timeout |
@@ -157,7 +159,8 @@ is an advanced host-mode command and requires a host-specific deployment
 artifact. The ops surface (`/readyz`, `/version`, `/metrics`,
 `/debug/pprof/`) listens on `AGENT_RUNTIME_OPS_ADDR` (default `:8085`) so
 protocol mutual TLS never gates healthchecks; `/metrics` and profiling require
-the service token. `/readyz` reuses one dependency-check round for 10 seconds
+`AGENT_RUNTIME_OPS_TOKEN` when it is configured, otherwise the composed
+protocol credential. `/readyz` reuses one dependency-check round for 10 seconds
 and fails closed, so probes never amplify into outbound MCP discovery storms.
 Release images probe `/readyz` via the built-in `healthcheck` subcommand; the
 runtime is single-replica (see
