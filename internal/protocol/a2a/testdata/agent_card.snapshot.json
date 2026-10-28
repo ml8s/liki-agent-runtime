@@ -1,0 +1,33 @@
+{
+  "capabilities": {
+    "streaming": true
+  },
+  "defaultInputModes": [
+    "text/plain"
+  ],
+  "defaultOutputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "description": "generic test agent",
+  "name": "main",
+  "skills": [
+    {
+      "description": "generic test agent",
+      "id": "main",
+      "name": "main",
+      "tags": [
+        "entrypoint",
+        "structured-output"
+      ]
+    }
+  ],
+  "supportedInterfaces": [
+    {
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0",
+      "url": "https://agent.internal/a2a"
+    }
+  ],
+  "version": "1.0.0"
+}
