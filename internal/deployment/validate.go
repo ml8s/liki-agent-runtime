@@ -70,9 +70,6 @@ func (s *MCPServerDefinition) validate() error {
 	if strings.TrimSpace(s.EndpointEnv) == "" || s.EndpointEnv != strings.TrimSpace(s.EndpointEnv) {
 		return fmt.Errorf("endpointEnv is required")
 	}
-	if s.TokenEnv != "" && s.TokenEnv != strings.TrimSpace(s.TokenEnv) {
-		return fmt.Errorf("tokenEnv cannot contain padding whitespace")
-	}
 	return nil
 }
 

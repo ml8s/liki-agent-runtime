@@ -12,7 +12,7 @@ import (
 func TestA2AServiceIdentityPropagation(t *testing.T) {
 	authenticated := false
 	server := &Server{services: Services{
-		InternalToken: "token",
+		ProtocolToken: "token",
 		A2APrincipal:  "svc-a2a",
 		A2ATenant:     "tenant-a",
 	}, authFailures: newAuthFailureLimiter(), readinessCache: &readinessCache{ttl: time.Minute}}

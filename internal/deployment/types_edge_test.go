@@ -151,24 +151,6 @@ func TestMCPServerDefinitionValidation(t *testing.T) {
 		}
 	}
 
-	tokenCases := []struct {
-		token string
-		valid bool
-	}{
-		{token: "", valid: true},
-		{token: "TOKEN", valid: true},
-		{token: " padded ", valid: false},
-	}
-	for _, testCase := range tokenCases {
-		server := &MCPServerDefinition{Name: "mcp-a", EndpointEnv: "URL", TokenEnv: testCase.token}
-		err := server.validate()
-		if testCase.valid && err != nil {
-			t.Fatalf("validate(TokenEnv=%q) error = %v", testCase.token, err)
-		}
-		if !testCase.valid && err == nil {
-			t.Fatalf("validate(TokenEnv=%q) accepted padding", testCase.token)
-		}
-	}
 }
 
 func TestValidateOutputPointerEdgeCases(t *testing.T) {

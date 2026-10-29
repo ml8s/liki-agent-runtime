@@ -78,8 +78,8 @@ type Config struct {
 	TLSKeyFile                  string
 	TLSClientCAFile             string
 	PublicURL                   string
-	InternalToken               string
-	OpsToken                    string
+	ProtocolToken               string
+	PprofEnabled                bool
 	IdentitySource              string
 	MTLSIdentitySource          string
 	AuditDBPath                 string
@@ -141,8 +141,8 @@ func Load() (Config, error) {
 		TLSKeyFile:          getEnv("AGENT_RUNTIME_TLS_KEY", ""),
 		TLSClientCAFile:     getEnv("AGENT_RUNTIME_TLS_CLIENT_CA", ""),
 		PublicURL:           getEnv("AGENT_RUNTIME_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
-		InternalToken:       getEnv("AGENT_RUNTIME_INTERNAL_TOKEN", ""),
-		OpsToken:            getEnv("AGENT_RUNTIME_OPS_TOKEN", ""),
+		ProtocolToken:       getEnv("AGENT_RUNTIME_PROTOCOL_TOKEN", ""),
+		PprofEnabled:        getEnv("AGENT_RUNTIME_PPROF_ENABLED", "") == "1",
 		IdentitySource:      getEnv("AGENT_RUNTIME_IDENTITY_SOURCE", DefaultIdentitySource),
 		MTLSIdentitySource:  getEnv(EnvMTLSIdentitySource, DefaultMTLSIdentitySource),
 		AuditDBPath:         getEnv("AGENT_RUNTIME_AUDIT_DB_PATH", "./data/agent-runtime-audit.db"),
@@ -220,12 +220,12 @@ func validate(cfg Config) (Config, error) {
 	switch cfg.IdentitySource {
 	case "", IdentitySourceHeader:
 		cfg.IdentitySource = IdentitySourceHeader
-		if !isDevelopment && cfg.InternalToken == "" {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_INTERNAL_TOKEN is required for trusted-header identity outside development")
+		if !isDevelopment && cfg.ProtocolToken == "" {
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_PROTOCOL_TOKEN is required for trusted-header identity outside development")
 		}
 	case IdentitySourceOIDC:
-		if cfg.InternalToken != "" {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_INTERNAL_TOKEN must be empty when AGENT_RUNTIME_IDENTITY_SOURCE=oidc; the OIDC bearer token owns authentication")
+		if cfg.ProtocolToken != "" {
+			return Config{}, fmt.Errorf("AGENT_RUNTIME_PROTOCOL_TOKEN must be empty when AGENT_RUNTIME_IDENTITY_SOURCE=oidc; the OIDC bearer token owns authentication")
 		}
 		if strings.TrimSpace(cfg.OIDCIssuer) == "" {
 			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_ISSUER is required when identity source is oidc")
@@ -265,12 +265,6 @@ func validate(cfg Config) (Config, error) {
 		}
 	default:
 		return Config{}, fmt.Errorf("%s is unsupported: %q (expected %q or %q)", EnvMTLSIdentitySource, cfg.MTLSIdentitySource, MTLSIdentitySourceCertificate, MTLSIdentitySourceHeader)
-	}
-	if cfg.OpsToken != "" && cfg.OpsToken == cfg.InternalToken {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_OPS_TOKEN must differ from AGENT_RUNTIME_INTERNAL_TOKEN so operational scrapers cannot reuse the protocol credential")
-	}
-	if !isDevelopment && cfg.IdentitySource == IdentitySourceOIDC && cfg.OpsToken == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_OPS_TOKEN is required in production when AGENT_RUNTIME_IDENTITY_SOURCE=oidc; operational endpoints cannot rely on short-lived user ID tokens")
 	}
 	if cfg.TLSAddr != "" {
 		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.TLSClientCAFile == "" {

@@ -97,7 +97,7 @@ func TestLoadRejectsInvalidSettings(t *testing.T) {
 func TestProductionConfigurationHardening(t *testing.T) {
 	baseEnv(t)
 	t.Setenv("AGENT_RUNTIME_ENV", "production")
-	t.Setenv("AGENT_RUNTIME_INTERNAL_TOKEN", "production-service-token")
+	t.Setenv("AGENT_RUNTIME_PROTOCOL_TOKEN", "production-service-token")
 	t.Setenv("AGENT_RUNTIME_LLM_API_KEY", "production-model-key")
 
 	_, err := config.Load()
@@ -200,11 +200,11 @@ func TestLoadIdentitySourceConfiguration(t *testing.T) {
 		t.Fatalf("Load(oidc without audience) error = %v", err)
 	}
 	t.Setenv("AGENT_RUNTIME_OIDC_AUDIENCE", "agent-runtime")
-	t.Setenv("AGENT_RUNTIME_INTERNAL_TOKEN", "must-not-combine")
-	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_INTERNAL_TOKEN must be empty") {
+	t.Setenv("AGENT_RUNTIME_PROTOCOL_TOKEN", "must-not-combine")
+	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_PROTOCOL_TOKEN must be empty") {
 		t.Fatalf("Load(oidc with internal token) error = %v", err)
 	}
-	t.Setenv("AGENT_RUNTIME_INTERNAL_TOKEN", "")
+	t.Setenv("AGENT_RUNTIME_PROTOCOL_TOKEN", "")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(oidc) error = %v", err)
@@ -364,16 +364,17 @@ func TestMTLSIdentitySourceIsRejectedWithOIDC(t *testing.T) {
 	}
 }
 
-func TestOpsTokenMustDifferFromInternalToken(t *testing.T) {
+func TestPprofDisabledByDefault(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("AGENT_RUNTIME_INTERNAL_TOKEN", "protocol-secret")
-	t.Setenv("AGENT_RUNTIME_OPS_TOKEN", "protocol-secret")
-	if _, err := config.Load(); err == nil {
-		t.Fatal("ops token equal to the protocol token was accepted")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PprofEnabled {
+		t.Fatal("pprof enabled by default")
 	}
 }
-
-func TestProductionOIDCRequiresOpsToken(t *testing.T) {
+func TestProductionOIDCConfiguresTrustedHeaderToken(t *testing.T) {
 	baseEnv(t)
 	t.Setenv("AGENT_RUNTIME_ENV", "production")
 	t.Setenv("AGENT_RUNTIME_IDENTITY_SOURCE", config.IdentitySourceOIDC)

@@ -43,7 +43,6 @@ type DeploymentSpec struct {
 type MCPServerDefinition struct {
 	Name        string `json:"name"`
 	EndpointEnv string `json:"endpointEnv"`
-	TokenEnv    string `json:"tokenEnv,omitempty"`
 }
 
 // AgentMode selects an ADK execution mode for an Agent.

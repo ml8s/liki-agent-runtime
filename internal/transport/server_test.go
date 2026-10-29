@@ -42,8 +42,9 @@ func newServer(t *testing.T, token string) *transport.Server {
 		A2A:            http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
 		AGUI:           http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
 		HealthChecks:   []platform.HealthChecker{healthy{}},
+		MetricsTarget:  http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
 		IdentitySource: identity.NewHeaderSource(identity.HeaderSourceConfig{}),
-		InternalToken:  token,
+		ProtocolToken:  token,
 	})
 	if err != nil {
 		t.Fatalf("transport.New() error = %v", err)
@@ -147,25 +148,19 @@ func TestOperationalEndpointsAreOwnedByOpsHandler(t *testing.T) {
 	}
 }
 
-func TestMetricsRequiresServiceToken(t *testing.T) {
+func TestMetricsIsAlwaysOn(t *testing.T) {
 	handler := mustNewServer(t, transport.Services{
 		AgentCard:     http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
 		A2A:           http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
 		AGUI:          http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
 		MetricsTarget: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) }),
-		InternalToken: "secret",
+		ProtocolToken: "secret",
 	})
 
-	unauthenticated := httptest.NewRecorder()
-	handler.OpsHandler().ServeHTTP(unauthenticated, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if unauthenticated.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated metrics status = %d", unauthenticated.Code)
-	}
-
-	authenticated := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	authenticated.Header.Set("Authorization", "Bearer secret")
+	unauthenticated := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	unauthenticated.Header.Set("Authorization", "Bearer wrong")
 	response := httptest.NewRecorder()
-	handler.OpsHandler().ServeHTTP(response, authenticated)
+	handler.OpsHandler().ServeHTTP(response, unauthenticated)
 	if response.Code != http.StatusTeapot {
 		t.Fatalf("authenticated metrics status = %d", response.Code)
 	}
@@ -315,7 +310,7 @@ func TestAuthenticationRunsBeforeRequestBodyIsConsumed(t *testing.T) {
 			w.WriteHeader(http.StatusAccepted)
 		}),
 		AGUI:          http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
-		InternalToken: "secret",
+		ProtocolToken: "secret",
 	})
 	request := httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(strings.Repeat("x", 2<<20+1)))
 	response := httptest.NewRecorder()
@@ -464,60 +459,42 @@ func TestReadinessCacheCanBeDisabled(t *testing.T) {
 	}
 }
 
-func TestPprofRequiresServiceToken(t *testing.T) {
+func TestPprofIsDisabledByDefault(t *testing.T) {
 	handler := newServer(t, "secret")
 	ops := handler.OpsHandler()
-
-	unauthenticated := httptest.NewRecorder()
-	ops.ServeHTTP(unauthenticated, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
-	if unauthenticated.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated pprof status = %d, want %d", unauthenticated.Code, http.StatusUnauthorized)
-	}
-
-	authenticated := httptest.NewRequest(http.MethodGet, "/debug/pprof/heap?debug=1", nil)
-	authenticated.Header.Set("Authorization", "Bearer secret")
 	response := httptest.NewRecorder()
-	ops.ServeHTTP(response, authenticated)
-	if response.Code != http.StatusOK {
-		t.Fatalf("authenticated heap profile status = %d, want %d", response.Code, http.StatusOK)
+	ops.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("disabled pprof status = %d, want %d", response.Code, http.StatusNotFound)
 	}
 }
 
-func TestOpsTokenGatesMetricsAndPprofIndependently(t *testing.T) {
+func TestPprofIsExplicitOptIn(t *testing.T) {
+	handler := mustNewServer(t, transport.Services{
+		AgentCard:    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		A2A:          http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		AGUI:         http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
+		PprofEnabled: true,
+	})
+	response := httptest.NewRecorder()
+	handler.OpsHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/heap?debug=1", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("enabled pprof status = %d, want %d", response.Code, http.StatusOK)
+	}
+}
+
+func TestMetricsDoNotRequireProtocolToken(t *testing.T) {
 	handler := mustNewServer(t, transport.Services{
 		AgentCard:     http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
 		A2A:           http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
 		AGUI:          http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
-		InternalToken: "protocol-secret",
-		OpsToken:      "ops-secret",
+		MetricsTarget: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		ProtocolToken: "protocol-secret",
 	})
-	ops := handler.OpsHandler()
-
-	for _, path := range []string{"/metrics", "/debug/pprof/"} {
-		protocolCredential := httptest.NewRequest(http.MethodGet, path, nil)
-		protocolCredential.Header.Set("Authorization", "Bearer protocol-secret")
-		response := httptest.NewRecorder()
-		ops.ServeHTTP(response, protocolCredential)
-		if response.Code != http.StatusUnauthorized {
-			t.Fatalf("%s with protocol token status = %d, want %d", path, response.Code, http.StatusUnauthorized)
-		}
-
-		opsCredential := httptest.NewRequest(http.MethodGet, path, nil)
-		opsCredential.Header.Set("Authorization", "bearer ops-secret")
-		response = httptest.NewRecorder()
-		ops.ServeHTTP(response, opsCredential)
-		if response.Code == http.StatusUnauthorized {
-			t.Fatalf("%s with ops token was rejected", path)
-		}
-	}
-
-	// The ops credential must not cross into the protocol surface.
-	protocol := httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(`{}`))
-	protocol.Header.Set("Authorization", "Bearer ops-secret")
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, protocol)
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("protocol request with ops token status = %d, want %d", response.Code, http.StatusUnauthorized)
+	handler.OpsHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d, want 200", response.Code)
 	}
 }
 
@@ -536,7 +513,7 @@ func TestMutualTLSCertificateIdentityIsFailClosedByComposition(t *testing.T) {
 			}
 			w.WriteHeader(http.StatusAccepted)
 		}),
-		InternalToken:  "secret",
+		ProtocolToken:  "secret",
 		IdentitySource: identity.NewChannelSource(identity.NewHeaderSource(identity.HeaderSourceConfig{}), identity.NewCertificateSource()),
 	})
 
@@ -634,7 +611,7 @@ func TestMutualTLSRequestsTrustRemoteUserAndSkipToken(t *testing.T) {
 			}
 			w.WriteHeader(http.StatusAccepted)
 		}),
-		InternalToken: "secret",
+		ProtocolToken: "secret",
 	})
 
 	request := httptest.NewRequest(http.MethodPost, "/ag-ui", strings.NewReader(`{}`))
@@ -720,7 +697,7 @@ func TestOIDCCallerIdentityIsAcceptedOnBothProtocols(t *testing.T) {
 	}
 }
 
-func TestOIDCMissingCredentialIsRejectedWithoutInternalToken(t *testing.T) {
+func TestOIDCMissingCredentialIsRejectedWithoutProtocolToken(t *testing.T) {
 	services := transport.Services{
 		AgentCard: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
 		A2A: http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {

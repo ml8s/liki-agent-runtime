@@ -8,13 +8,11 @@
     "mcpServers": [
       {
         "name": "tools-a",
-        "endpointEnv": "AGENT_RUNTIME_MCP_TOOLS_A_URL",
-        "tokenEnv": "AGENT_RUNTIME_MCP_TOOLS_A_TOKEN"
+        "endpointEnv": "AGENT_RUNTIME_MCP_TOOLS_A_URL"
       },
       {
         "name": "tools-b",
-        "endpointEnv": "AGENT_RUNTIME_MCP_TOOLS_B_URL",
-        "tokenEnv": "AGENT_RUNTIME_MCP_TOOLS_B_TOKEN"
+        "endpointEnv": "AGENT_RUNTIME_MCP_TOOLS_B_URL"
       }
     ],
     "agents": [

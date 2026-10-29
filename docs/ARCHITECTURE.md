@@ -278,16 +278,14 @@ explicit, lock-annotated state — do not move mutation into `domain` or
 
 ## Operations
 
-The operational surface (`/readyz`, `/version`, `/metrics`, `/debug/pprof`) is
-served on a dedicated ops listener (`AGENT_RUNTIME_OPS_ADDR`, default `:8085`)
-so protocol mutual TLS never gates healthchecks or scrapers; `/metrics` keeps
-the same bearer-token boundary as protocol calls whenever an internal token is
-configured, or is owned by the dedicated `AGENT_RUNTIME_OPS_TOKEN` when that
-separation is configured (mandatory in production with OIDC identity, whose
-user ID tokens are unsuitable for long-lived scraper credentials). The
-protocol listener can additionally expose a mutual-TLS endpoint
-(`AGENT_RUNTIME_TLS_ADDR` plus the certificate trio, client certificates
-verified against the CA). All POST endpoints enforce a 2 MB body limit.
+The operational surface (`/readyz`, `/version`, `/metrics`) is served on a
+dedicated ops listener (`AGENT_RUNTIME_OPS_ADDR`, default `:8085`) so protocol
+mutual TLS never gates healthchecks or scrapers; `/metrics` is internal and
+credential-free. `/debug/pprof` is disabled unless explicitly enabled for
+internal debugging. The protocol listener can additionally expose a mutual-TLS
+endpoint (`AGENT_RUNTIME_TLS_ADDR` plus the certificate trio, client
+certificates verified against the CA). All POST endpoints enforce a 2 MB body
+limit.
 
 Bearer-token failures and missing verified identities are counted in a bounded
 fixed window per TCP socket source. Untrusted forwarding headers never change

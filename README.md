@@ -70,10 +70,8 @@ configured by the environment.
 | Tool server | MCP Streamable HTTP | outbound | deterministic tools |
 
 Operational endpoints are public `/readyz` and `/version`, plus `/metrics` and
-`/debug/pprof`. Set `AGENT_RUNTIME_OPS_TOKEN` to give metric scrapers and
-profilers a credential separate from the protocol service token; when unset,
-the composed protocol authentication policy gates the operational surface
-(it is required in production with OIDC, where user ID tokens are short-lived).
+`/debug/pprof`. Metrics are internal and credential-free; profiling is disabled
+unless `AGENT_RUNTIME_PPROF_ENABLED=1`.
 There is no private application API or ADK Launcher control plane.
 
 ## Security boundary
@@ -82,7 +80,7 @@ The default trusted-header mode requires production protocol callers to present
 the internal service token:
 
 ```text
-Authorization: Bearer <AGENT_RUNTIME_INTERNAL_TOKEN>
+Authorization: Bearer <AGENT_RUNTIME_PROTOCOL_TOKEN>
 ```
 
 AG-UI additionally requires `caller` to authenticate the browser user and
@@ -116,7 +114,7 @@ sessions, stores conversations, or trusts unverified identities. Internet-facing
 rate limiting is the gateway's job; the internal per-source limiter only resists
 token brute force, while `AGENT_RUNTIME_MAX_CONCURRENT_RUNS` bounds run concurrency.
 
-Local development may leave `AGENT_RUNTIME_INTERNAL_TOKEN` empty, disabling bearer
+Local development may leave `AGENT_RUNTIME_PROTOCOL_TOKEN` empty, disabling bearer
 authentication, while AG-UI still requires `X-Agent-User-ID`. Invalid attempts
 are throttled per socket source and return HTTP 429 (`rate_limited`).
 
@@ -131,7 +129,7 @@ endpoint is HTTPS-only without embedded credentials.
 | Prefix / variable | Purpose |
 |---|---|
 | `AGENT_RUNTIME_*` | service address, token, audit DB path, topology, deployment file, ops address (`OPS_ADDR`, default `:8085`), mutual-TLS listener (`TLS_ADDR` + `TLS_CERT`/`TLS_KEY`/`TLS_CLIENT_CA`) |
-| `AGENT_RUNTIME_INTERNAL_TOKEN` / `AGENT_RUNTIME_OPS_TOKEN` | protocol service credential; dedicated ops credential for `/metrics` and `/debug/pprof` (must differ; ops token required in production with OIDC) |
+| `AGENT_RUNTIME_PROTOCOL_TOKEN` / `AGENT_RUNTIME_PPROF_ENABLED` | protocol service credential; explicit opt-in for `/debug/pprof` |
 | `AGENT_RUNTIME_MCP_*` | endpoint/token bindings for logical MCP servers (`AGENT_RUNTIME_MCP_<NAME>_URL` / `AGENT_RUNTIME_MCP_<NAME>_TOKEN`) |
 | `AGENT_RUNTIME_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
 | `AGENT_RUNTIME_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
@@ -156,11 +154,10 @@ alone permits local HTTP LLMs.
 
 Use `make dev` for Compose; `make dev-down` removes the workload. `make run`
 is an advanced host-mode command and requires a host-specific deployment
-artifact. The ops surface (`/readyz`, `/version`, `/metrics`,
-`/debug/pprof/`) listens on `AGENT_RUNTIME_OPS_ADDR` (default `:8085`) so
-protocol mutual TLS never gates healthchecks; `/metrics` and profiling require
-`AGENT_RUNTIME_OPS_TOKEN` when it is configured, otherwise the composed
-protocol credential. `/readyz` reuses one dependency-check round for 10 seconds
+artifact. The ops surface (`/readyz`, `/version`, `/metrics`) listens on
+`AGENT_RUNTIME_OPS_ADDR` (default `:8085`) so protocol mutual TLS never gates
+healthchecks; metrics are internal and credential-free, while profiling is an
+explicit opt-in. `/readyz` reuses one dependency-check round for 10 seconds
 and fails closed, so probes never amplify into outbound MCP discovery storms.
 Release images probe `/readyz` via the built-in `healthcheck` subcommand; the
 runtime is single-replica (see

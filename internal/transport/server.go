@@ -27,8 +27,8 @@ type Services struct {
 	Metrics        observability.ProtocolMetrics
 	Dependencies   observability.DependencyMetrics
 	MetricsTarget  http.Handler
-	InternalToken  string
-	OpsToken       string
+	ProtocolToken  string
+	PprofEnabled   bool
 	IdentitySource identity.RequestSource
 	A2APrincipal   string
 	A2ATenant      string
@@ -83,16 +83,17 @@ func New(services Services) (*Server, error) {
 	ops := http.NewServeMux()
 	ops.HandleFunc("GET /readyz", server.ready)
 	ops.HandleFunc("GET /version", server.version)
-	ops.Handle("GET /metrics", server.authorizedOps(server.metricsHandler()))
-	// Profiling shares the ops listener and the metrics authentication policy:
-	// open to operators, gated by the ops token when one is configured (and by
-	// the composed protocol credential otherwise).
-	// pprof.Index also serves named profiles such as /debug/pprof/heap.
-	ops.Handle("/debug/pprof/", server.authorizedOps(http.HandlerFunc(pprof.Index)))
-	ops.Handle("/debug/pprof/cmdline", server.authorizedOps(http.HandlerFunc(pprof.Cmdline)))
-	ops.Handle("/debug/pprof/profile", server.authorizedOps(http.HandlerFunc(pprof.Profile)))
-	ops.Handle("/debug/pprof/symbol", server.authorizedOps(http.HandlerFunc(pprof.Symbol)))
-	ops.Handle("/debug/pprof/trace", server.authorizedOps(http.HandlerFunc(pprof.Trace)))
+	ops.Handle("GET /metrics", server.metricsHandler())
+	// Profiling is an explicit internal debugging opt-in, never a public or
+	// token-gated production surface. pprof.Index also serves named profiles
+	// such as /debug/pprof/heap.
+	if services.PprofEnabled {
+		ops.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
+		ops.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+		ops.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+		ops.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+		ops.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+	}
 
 	server.routes = api
 	server.opsRoutes = ops
@@ -150,7 +151,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					MutualTLS: true,
 				}))
 			}
-		} else if s.services.InternalToken != "" && s.services.A2APrincipal != "" {
+		} else if s.services.ProtocolToken != "" && s.services.A2APrincipal != "" {
 			r = r.WithContext(identity.WithIdentity(r.Context(), identity.Identity{
 				UserID: s.services.A2APrincipal,
 				Tenant: s.services.A2ATenant,

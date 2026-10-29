@@ -14,7 +14,6 @@ import (
 	"github.com/ml8s/agent-runtime/internal/platform/buildinfo"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"google.golang.org/adk/v2/auth"
 )
 
 // mcpProtocolVersion returns the latest stateless MCP revision supported by
@@ -182,12 +181,6 @@ func newMCPTransport(config Config, server resolvedMCPServer) *mcp.StreamableCli
 	}
 	traced := otelhttp.NewTransport(base)
 	var transport http.RoundTripper = traced
-	if server.Token != "" {
-		transport = &auth.Transport{
-			Provider: auth.StaticToken(server.Token),
-			Base:     traced,
-		}
-	}
 	httpClient := &http.Client{Timeout: config.MCPTimeout, Transport: transport}
 	return &mcp.StreamableClientTransport{
 		Endpoint:   server.Endpoint,

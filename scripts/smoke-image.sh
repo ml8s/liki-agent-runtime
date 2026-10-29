@@ -27,8 +27,7 @@ docker run -d --name "$NAME" \
   -e AGENT_RUNTIME_TOPOLOGY=single \
   -e AGENT_RUNTIME_PROTOCOL_ADDR=:8083 \
   -e AGENT_RUNTIME_OPS_ADDR=:8085 \
-  -e AGENT_RUNTIME_INTERNAL_TOKEN=dev-protocol-token \
-  -e AGENT_RUNTIME_OPS_TOKEN=dev-ops-token \
+  -e AGENT_RUNTIME_PROTOCOL_TOKEN=dev-protocol-token \
   -e AGENT_RUNTIME_PUBLIC_URL=http://127.0.0.1:8083 \
   -e AGENT_RUNTIME_AUDIT_DB_PATH=/data/agent-runtime-audit.db \
   -e AGENT_RUNTIME_DEPLOYMENT_FILE=/agent-deployment/deployment.json \

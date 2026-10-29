@@ -47,7 +47,7 @@ services:
     environment:
       AGENT_RUNTIME_ENV: development
       AGENT_RUNTIME_TOPOLOGY: ${AGENT_RUNTIME_TOPOLOGY:-single}
-      AGENT_RUNTIME_INTERNAL_TOKEN: ${AGENT_RUNTIME_INTERNAL_TOKEN:-dev-agent-token}
+      AGENT_RUNTIME_PROTOCOL_TOKEN: ${AGENT_RUNTIME_PROTOCOL_TOKEN:-dev-agent-token}
       # The Compose profile is the trusted-header relay topology. The mutual
       # TLS listener (address + certificate trio + identity mapping) is wired
       # by the deployment system, not by this development workload.
@@ -56,9 +56,6 @@ services:
       AGENT_RUNTIME_OIDC_AUDIENCE: ${AGENT_RUNTIME_OIDC_AUDIENCE:-}
       AGENT_RUNTIME_OIDC_USERNAME_CLAIM: ${AGENT_RUNTIME_OIDC_USERNAME_CLAIM:-sub}
       AGENT_RUNTIME_OIDC_TENANT_CLAIM: ${AGENT_RUNTIME_OIDC_TENANT_CLAIM:-}
-      # Optional dedicated credential for /metrics and /debug/pprof. Unset
-      # keeps the composed protocol policy (internal token) on the ops port.
-      AGENT_RUNTIME_OPS_TOKEN: ${AGENT_RUNTIME_OPS_TOKEN:-}
       AGENT_RUNTIME_PUBLIC_URL: ${AGENT_RUNTIME_PUBLIC_URL:-http://127.0.0.1:8083}
       AGENT_RUNTIME_MCP_TOOLS_A_URL: http://mcp-tools-a:8085/mcp
       AGENT_RUNTIME_MCP_TOOLS_B_URL: http://mcp-tools-b:8086/mcp

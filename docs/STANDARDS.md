@@ -27,7 +27,7 @@ rule is:
 | Internal bearer authentication | HTTP `Authorization: Bearer` semantics | standard HTTP middleware and A2A security declaration | Keep internal token verification; do not place credentials in protocol payloads. |
 | OIDC identity verification | OpenID Connect Discovery and ID Token validation | `github.com/coreos/go-oidc/v3` | Keep provider discovery, JWKS lookup, signature/issuer/audience/expiry validation in the library; adapters only map verified claims. |
 | Mutual-TLS caller identity | X.509 certificate subject (URI SAN > email SAN > CN; organization as tenant) | Go `crypto/x509` | Keep certificate-derived identity as the fail-closed default on the mTLS listener; relayed identity headers there are an explicit deployment opt-in. |
-| Operational-surface authentication | HTTP `Authorization: Bearer` with a dedicated ops credential | standard HTTP middleware | Keep `/metrics` and `/debug/pprof` on `AGENT_RUNTIME_OPS_TOKEN` when configured; it must differ from the protocol token and is required in production with OIDC. |
+| Operational-surface exposure | dedicated internal listener and explicit debug opt-in | deployment topology | Keep `/metrics` internal and credential-free; keep `/debug/pprof` disabled unless explicitly enabled for internal debugging. |
 
 ## Deliberate non-protocols
 

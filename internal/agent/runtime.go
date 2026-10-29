@@ -347,7 +347,6 @@ func newMCPToolsets(config Config) ([]tool.Toolset, error) {
 type resolvedMCPServer struct {
 	definition agentdeployment.MCPServerDefinition
 	Endpoint   string
-	Token      string
 }
 
 func resolveMCPServer(definition agentdeployment.MCPServerDefinition) (resolvedMCPServer, error) {
@@ -360,18 +359,6 @@ func resolveMCPServer(definition agentdeployment.MCPServerDefinition) (resolvedM
 		)
 	}
 	resolved := resolvedMCPServer{definition: definition, Endpoint: strings.TrimSpace(endpoint)}
-	if definition.TokenEnv == "" {
-		return resolved, nil
-	}
-	token, ok := os.LookupEnv(definition.TokenEnv)
-	if !ok {
-		return resolvedMCPServer{}, domain.NewError(
-			domain.CodeMCPEndpointEnvMissing,
-			fmt.Sprintf("MCP token environment %q is required for server %q", definition.TokenEnv, definition.Name),
-			nil,
-		)
-	}
-	resolved.Token = token
 	return resolved, nil
 }
 

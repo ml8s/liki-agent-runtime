@@ -18,14 +18,14 @@ func TestDevelopmentAgentDeploymentRegistersComplementaryMCPTools(t *testing.T) 
 	for _, server := range artifact.Spec.MCPServers {
 		servers[server.Name] = server
 	}
-	// Endpoint and token variables share the AGENT_RUNTIME_MCP_<NAME> prefix so a
-	// server's binding can be found by name.
+	// MCP endpoints share the AGENT_RUNTIME_MCP_<NAME> prefix so a server's
+	// binding can be found by name. MCP is token-free.
 	engine, ok := servers["tools-a"]
-	if !ok || engine.EndpointEnv != "AGENT_RUNTIME_MCP_TOOLS_A_URL" || engine.TokenEnv != "AGENT_RUNTIME_MCP_TOOLS_A_TOKEN" {
+	if !ok || engine.EndpointEnv != "AGENT_RUNTIME_MCP_TOOLS_A_URL" {
 		t.Fatalf("Tools A MCP declaration = %+v", engine)
 	}
 	counsel, ok := servers["tools-b"]
-	if !ok || counsel.EndpointEnv != "AGENT_RUNTIME_MCP_TOOLS_B_URL" || counsel.TokenEnv != "AGENT_RUNTIME_MCP_TOOLS_B_TOKEN" {
+	if !ok || counsel.EndpointEnv != "AGENT_RUNTIME_MCP_TOOLS_B_URL" {
 		t.Fatalf("Tools B MCP declaration = %+v", counsel)
 	}
 

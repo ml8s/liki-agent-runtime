@@ -102,9 +102,9 @@ func (s *Server) authorized(next http.Handler, requireIdentity bool) http.Handle
 				writeError(w, http.StatusUnauthorized, domain.CodeUnauthorized, "valid OIDC bearer token required")
 				return
 			}
-		} else if s.services.InternalToken != "" && !identity.MutualTLSVerified(r) {
+		} else if s.services.ProtocolToken != "" && !identity.MutualTLSVerified(r) {
 			header := r.Header.Get("Authorization")
-			if !bearerMatches(header, s.services.InternalToken) {
+			if !bearerMatches(header, s.services.ProtocolToken) {
 				if !s.authFailures.tryConsume(source, time.Now()) {
 					w.Header().Set("Retry-After", "60")
 					writeError(w, http.StatusTooManyRequests, domain.CodeRateLimited, "too many authentication failures")
@@ -122,30 +122,6 @@ func (s *Server) authorized(next http.Handler, requireIdentity bool) http.Handle
 				return
 			}
 			writeError(w, http.StatusUnauthorized, domain.CodeIdentityRequired, "verified user identity required")
-			return
-		}
-		s.authFailures.clear(source)
-		next.ServeHTTP(w, r)
-	})
-}
-
-// authorizedOps gates the operational surface. A dedicated ops token, when
-// configured, is the only accepted credential there: metric scrapers and
-// profilers must not hold the protocol service token. Without it, the
-// composed protocol authentication policy continues to own the surface.
-func (s *Server) authorizedOps(next http.Handler) http.Handler {
-	if s.services.OpsToken == "" {
-		return s.authorized(next, false)
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		source := requestSource(r.RemoteAddr)
-		if !bearerMatches(r.Header.Get("Authorization"), s.services.OpsToken) {
-			if !s.authFailures.tryConsume(source, time.Now()) {
-				w.Header().Set("Retry-After", "60")
-				writeError(w, http.StatusTooManyRequests, domain.CodeRateLimited, "too many authentication failures")
-				return
-			}
-			writeError(w, http.StatusUnauthorized, domain.CodeUnauthorized, "valid ops token required")
 			return
 		}
 		s.authFailures.clear(source)
