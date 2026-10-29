@@ -8,7 +8,6 @@ export RELEASE_VERSION
 
 GO ?= go
 NPM ?= npm
-GOLANGCI_LINT ?= golangci-lint
 PYTHON ?= python3
 export GOTOOLCHAIN ?= go1.26.10
 VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo local)
@@ -52,8 +51,9 @@ check: ## Run static checks.
 	$(NPM) run lint:docs
 	$(PYTHON) scripts/check_docs_paths.py
 	$(PYTHON) scripts/check_generic_boundary.py
-	$(GOLANGCI_LINT) fmt --diff ./...
-	$(GOLANGCI_LINT) run ./...
+	$(PYTHON) scripts/check-lint-toolchain.py
+	scripts/lint.sh fmt --diff ./...
+	scripts/lint.sh run ./...
 	$(GO) vet ./...
 	$(GO) run ./cmd/agent-runtime validate -deployment $(if $(AGENT_RUNTIME_DEPLOYMENT_FILE),$(AGENT_RUNTIME_DEPLOYMENT_FILE),./dev/agent-deployment/deployment.json)
 	$(PYTHON) scripts/check_actions_pinned.py

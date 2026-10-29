@@ -150,7 +150,6 @@ func TestMCPServerDefinitionValidation(t *testing.T) {
 			t.Fatalf("validate(%q,%q) accepted invalid server", testCase.name, testCase.endpoint)
 		}
 	}
-
 }
 
 func TestValidateOutputPointerEdgeCases(t *testing.T) {

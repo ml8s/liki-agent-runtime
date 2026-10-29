@@ -374,13 +374,19 @@ func TestPprofDisabledByDefault(t *testing.T) {
 		t.Fatal("pprof enabled by default")
 	}
 }
+
 func TestProductionOIDCConfiguresTrustedHeaderToken(t *testing.T) {
 	baseEnv(t)
 	t.Setenv("AGENT_RUNTIME_ENV", "production")
 	t.Setenv("AGENT_RUNTIME_IDENTITY_SOURCE", config.IdentitySourceOIDC)
 	t.Setenv("AGENT_RUNTIME_OIDC_ISSUER", "https://issuer.example.com")
 	t.Setenv("AGENT_RUNTIME_OIDC_AUDIENCE", "agent-runtime")
-	if _, err := config.Load(); err == nil {
-		t.Fatal("production OIDC without an ops token was accepted")
+	t.Setenv("AGENT_RUNTIME_LLM_API_KEY", "test-key")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProtocolToken != "" {
+		t.Fatalf("protocol token = %q, want empty under OIDC", cfg.ProtocolToken)
 	}
 }
