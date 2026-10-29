@@ -37,7 +37,7 @@ def main() -> int:
     ci = workflow.read_text(encoding="utf-8")
     if "golangci/golangci-lint-action" in ci:
         fail("CI must use scripts/lint.sh, not a separate golangci-lint action")
-    if "make check test conformance" not in ci:
+    if "make gate" not in ci:
         fail("CI must run the same local gate")
 
     print(f"✓ golangci-lint toolchain pinned to {version}")
