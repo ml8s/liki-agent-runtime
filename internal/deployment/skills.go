@@ -1,7 +1,6 @@
 package deployment
 
 import (
-	"fmt"
 	"slices"
 )
 
@@ -18,12 +17,12 @@ var skillToolsetToolNames = []string{"list_skills", "load_skill", "load_skill_re
 func ValidateSkillToolsetAllow(tools []string) error {
 	for _, name := range skillToolsetToolNames {
 		if !slices.Contains(tools, name) {
-			return fmt.Errorf("missing builtin tool %q (required set: %v)", name, skillToolsetToolNames)
+			return validationError(CodeDeploymentSkillsBindingInvalid, "missing builtin tool %q (required set: %v)", name, skillToolsetToolNames)
 		}
 	}
 	for _, name := range tools {
 		if !slices.Contains(skillToolsetToolNames, name) {
-			return fmt.Errorf("unknown builtin tool %q (allowed: %v)", name, skillToolsetToolNames)
+			return validationError(CodeDeploymentSkillsBindingInvalid, "unknown builtin tool %q (allowed: %v)", name, skillToolsetToolNames)
 		}
 	}
 	return nil

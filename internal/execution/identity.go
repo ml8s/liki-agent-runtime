@@ -35,7 +35,7 @@ func (i RunIdentity) Validate() error {
 // RunProvenance records where and how an execution entered the runtime. These
 // fields are evidence metadata, not aggregate identity.
 type RunProvenance struct {
-	Protocol  string
+	Protocol  domain.Protocol
 	TraceID   string
 	SpanID    string
 	TaskID    string

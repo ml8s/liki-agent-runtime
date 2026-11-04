@@ -1,9 +1,11 @@
-package execution
+package agent
 
 import (
 	"testing"
 
 	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	"github.com/ml8s/agent-runtime/internal/execution"
+	testagentpkg "github.com/ml8s/agent-runtime/internal/testagent"
 
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
@@ -60,7 +62,7 @@ func BenchmarkEventProjectorPartialText(b *testing.B) {
 func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 	agentDeployment := &deploymentpkg.AgentDeployment{
 		Metadata: deploymentpkg.DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: deploymentpkg.DeploymentSpec{Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+		Spec: deploymentpkg.DeploymentSpec{Agents: testagentpkg.ResolvedAgents([]deploymentpkg.AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "plain text agent",
@@ -88,7 +90,7 @@ func TestEventProjectorStreamsPlainTextDeltas(t *testing.T) {
 func TestEventProjectorHidesStructuredPayload(t *testing.T) {
 	agentDeployment := &deploymentpkg.AgentDeployment{
 		Metadata: deploymentpkg.DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: deploymentpkg.DeploymentSpec{Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+		Spec: deploymentpkg.DeploymentSpec{Agents: testagentpkg.ResolvedAgents([]deploymentpkg.AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "structured agent",
@@ -123,7 +125,7 @@ func TestEventProjectorPreservesStateOnlyFinalEvent(t *testing.T) {
 	event := &session.Event{
 		Author: "main",
 		Actions: session.EventActions{
-			StateDelta: map[string]any{StructuredOutputStateKey("main"): map[string]any{}},
+			StateDelta: map[string]any{execution.StructuredOutputStateKey("main"): map[string]any{}},
 		},
 	}
 
@@ -233,7 +235,7 @@ func TestEventProjectorKeepsToolFactWhenSuppressingFinalText(t *testing.T) {
 func plainTextDeployment() *deploymentpkg.AgentDeployment {
 	return &deploymentpkg.AgentDeployment{
 		Metadata: deploymentpkg.DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: deploymentpkg.DeploymentSpec{Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+		Spec: deploymentpkg.DeploymentSpec{Agents: testagentpkg.ResolvedAgents([]deploymentpkg.AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "plain text agent",
@@ -247,7 +249,7 @@ func plainTextDeployment() *deploymentpkg.AgentDeployment {
 func structuredTextDeployment() *deploymentpkg.AgentDeployment {
 	return &deploymentpkg.AgentDeployment{
 		Metadata: deploymentpkg.DeploymentMetadata{Name: "test", Version: "1.0.0"},
-		Spec: deploymentpkg.DeploymentSpec{Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+		Spec: deploymentpkg.DeploymentSpec{Agents: testagentpkg.ResolvedAgents([]deploymentpkg.AgentDefinition{{
 			Name:        "main",
 			Version:     "1.0.0",
 			Description: "structured agent",

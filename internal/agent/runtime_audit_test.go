@@ -326,8 +326,8 @@ func TestEndAuditRunRecordsPausedAndCanceledAttempts(t *testing.T) {
 	if len(paused) != 1 || paused[0].Status != audit.StatusPaused {
 		t.Fatalf("paused events = %#v", paused)
 	}
-	if string(paused[0].ParentRunID) != "task_pause" {
-		t.Fatalf("paused parent task = %q", paused[0].ParentRunID)
+	if string(paused[0].TaskID) != "task_pause" {
+		t.Fatalf("paused task = %q", paused[0].TaskID)
 	}
 
 	canceledScope := agent.RunAuditIdentity{
@@ -346,7 +346,7 @@ func TestEndAuditRunRecordsPausedAndCanceledAttempts(t *testing.T) {
 	if len(canceled) != 1 || canceled[0].Status != audit.StatusCanceled {
 		t.Fatalf("canceled events = %#v", canceled)
 	}
-	if string(canceled[0].ParentRunID) != "task_cancel" {
-		t.Fatalf("canceled parent task = %q", canceled[0].ParentRunID)
+	if string(canceled[0].TaskID) != "task_cancel" {
+		t.Fatalf("canceled task = %q", canceled[0].TaskID)
 	}
 }

@@ -5,6 +5,8 @@ import (
 
 	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 
+	"github.com/ml8s/agent-runtime/internal/domain"
+
 	"google.golang.org/genai"
 )
 
@@ -26,23 +28,19 @@ func NewRuntimeAgentDefinition(
 		return RuntimeAgentDefinition{Definition: resolved}, nil
 	}
 	if resolved.OutputSchema == nil {
-		return RuntimeAgentDefinition{}, fmt.Errorf(
-			"agent %q has structured output without a resolved schema",
-			resolved.Name,
+		return RuntimeAgentDefinition{}, domain.NewError(domain.CodeStructuredSchemaInvalid,
+			fmt.Sprintf("agent %q has structured output without a resolved schema", resolved.Name), nil,
 		)
 	}
 	genaiSchema, err := ConvertJSONSchemaToGenai(resolved.OutputSchema)
 	if err != nil {
-		return RuntimeAgentDefinition{}, fmt.Errorf(
-			"agent %q output schema: %w",
-			resolved.Name,
-			err,
+		return RuntimeAgentDefinition{}, domain.NewError(domain.CodeStructuredSchemaInvalid,
+			fmt.Sprintf("agent %q output schema", resolved.Name), err,
 		)
 	}
 	if genaiSchema.Type != genai.TypeObject {
-		return RuntimeAgentDefinition{}, fmt.Errorf(
-			"agent %q output schema root must be an object",
-			resolved.Name,
+		return RuntimeAgentDefinition{}, domain.NewError(domain.CodeStructuredSchemaInvalid,
+			fmt.Sprintf("agent %q output schema root must be an object", resolved.Name), nil,
 		)
 	}
 	return RuntimeAgentDefinition{

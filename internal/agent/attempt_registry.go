@@ -34,7 +34,7 @@ func newAttemptRegistry() *attemptRegistry {
 
 // begin registers one attempt. It fails closed when the attempt identity is
 // already active, so one execution attempt can never gain a second audit
-// scope. Run identity exclusivity is owned by runLifecycle.
+// scope. Run identity exclusivity is owned by runExecutionManager.
 func (r *attemptRegistry) begin(attemptID, contextID string, scope *runExecution) bool {
 	if attemptID == "" || scope == nil {
 		return false

@@ -20,7 +20,7 @@ func scopedEvent(scope *runExecution) audit.Event {
 		ThreadID:          scope.identity.ThreadID,
 		UserID:            scope.identity.UserID,
 		Protocol:          scope.provenance.Protocol,
-		ParentRunID:       domain.ID(scope.taskID),
+		TaskID:            domain.ID(scope.taskID),
 		DefinitionName:    scope.definitionName,
 		DefinitionVersion: scope.definitionVersion,
 		DefinitionDigest:  scope.definitionDigest,

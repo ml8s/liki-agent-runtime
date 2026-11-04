@@ -8,9 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"os"
-	"strings"
 	"time"
 
 	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
@@ -19,8 +16,8 @@ import (
 
 	"github.com/ml8s/agent-runtime/internal/audit"
 	"github.com/ml8s/agent-runtime/internal/domain"
+	mcppkg "github.com/ml8s/agent-runtime/internal/mcp"
 	platformconfig "github.com/ml8s/agent-runtime/internal/platform/config"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -31,8 +28,6 @@ import (
 	"google.golang.org/adk/v2/plugin/retryandreflect"
 	"google.golang.org/adk/v2/runner"
 	"google.golang.org/adk/v2/session"
-	"google.golang.org/adk/v2/tool"
-	"google.golang.org/adk/v2/tool/mcptoolset"
 	"google.golang.org/genai"
 )
 
@@ -58,8 +53,8 @@ type Runtime struct {
 	delegationAuditor *DelegationAuditor
 	toolAuditor       *ToolExecutionAuditor
 	tracer            trace.Tracer
-	projectorIndex    execution.EventProjectorIndex
-	runs              *runLifecycle
+	projectorIndex    EventProjectorIndex
+	runs              *runExecutionManager
 	runSlots          chan struct{}
 }
 
@@ -84,6 +79,14 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 	if config.AuditRecorder == nil {
 		return Config{}, domain.NewError(domain.CodeAuditRecorderMissing, "audit recorder is required", domain.ErrInvalidInput)
 	}
+	if config.RequireDurableRunIDs {
+		if _, ok := config.AuditRecorder.(audit.RunExistenceChecker); !ok {
+			return Config{}, domain.NewError(domain.CodeRuntimeInitFailed, "durable run-id existence checking is required", nil)
+		}
+		if _, ok := config.AuditRecorder.(audit.RunReservationStore); !ok {
+			return Config{}, domain.NewError(domain.CodeRuntimeInitFailed, "durable run-id reservation is required", nil)
+		}
+	}
 	if config.AgentDeployment == nil {
 		return Config{}, domain.NewError(domain.CodeAgentDefinitionMissing, "AgentDefinition is required", domain.ErrInvalidInput)
 	}
@@ -93,7 +96,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output capability is invalid", domain.ErrInvalidInput)
 	}
 	structuredAgents := 0
-	for _, candidate := range config.AgentDeployment.Spec.Agents {
+	for _, candidate := range config.AgentDeployment.AgentDeclarations() {
 		if candidate.Output.Structured() {
 			structuredAgents++
 		}
@@ -184,6 +187,14 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Runtime owns an aggregate snapshot, never a mutable artifact owned by
+	// startup/CLI/test code. Loaded aggregates are also integrity-checked from
+	// their retained manifest bytes before execution graph construction.
+	aggregate, err := config.AgentDeployment.Clone()
+	if err != nil {
+		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "snapshot agent deployment", err)
+	}
+	config.AgentDeployment = aggregate
 	if err := recoverInterruptedAudits(config); err != nil {
 		return nil, err
 	}
@@ -205,38 +216,39 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if ephemeralSessions == nil {
 		ephemeralSessions = session.InMemoryService()
 	}
-	entrypoint, err := config.AgentDeployment.EntrypointDefinition()
+	entrypoint, err := aggregate.EntrypointDefinition()
 	if err != nil {
 		return nil, domain.NewError(domain.CodeAgentDefinitionInvalid, "select entrypoint AgentDefinition", err)
 	}
-	models, err := newModelRegistry(config, config.AgentDeployment)
+	models, err := newModelRegistry(config, aggregate)
 	if err != nil {
 		return nil, err
 	}
 	temperature := float32(config.Temperature)
-	callAuditor := newLLMCallAuditor(config.AuditRecorder, config.Metrics, config.Provider, config.AgentDeployment, config.Now)
-	mcpToolsets, err := newMCPToolsets(config)
+	callAuditor := newLLMCallAuditor(config.AuditRecorder, config.Metrics, config.Provider, aggregate, config.Now)
+	mcpClientConfig := newMCPClientConfig(config)
+	mcpToolsets, err := mcppkg.NewToolsets(mcpClientConfig, aggregate.Spec.MCPServers)
 	if err != nil {
 		return nil, err
 	}
-	warmMCPCatalogs(config, mcpToolsets)
+	mcppkg.WarmCatalogs(mcpClientConfig, mcpToolsets)
 	toolAuditor := newToolExecutionAuditor(
 		config.AuditRecorder,
 		config.Metrics,
 		config.Now,
 		config.Provider,
-		config.AgentDeployment,
+		aggregate,
 		callAuditor.auditScope,
 	)
 	delegationAuditor := newDelegationAuditor(
 		config.AuditRecorder,
 		config.Metrics,
 		config.Now,
-		config.AgentDeployment,
+		aggregate,
 		entrypoint.Name,
 		callAuditor.auditScope,
 	)
-	graph := newAgentGraphBuilder(config.AgentDeployment, entrypoint.Name, agentGraphDeps{
+	graph := newAgentGraphBuilder(aggregate, entrypoint.Name, agentGraphDeps{
 		mcpToolsets:       mcpToolsets,
 		modelName:         config.Model,
 		resolveModel:      models.resolve,
@@ -250,7 +262,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create ADK agent", err)
 	}
-	projectorIndex := execution.NewEventProjectorIndex(config.AgentDeployment)
+	projectorIndex := NewEventProjectorIndex(aggregate)
 	retryPlugin, err := retryandreflect.New(
 		retryandreflect.WithMaxRetries(2),
 		retryandreflect.WithErrorIfRetryExceeded(true),
@@ -308,76 +320,22 @@ func NewRuntime(config Config) (*Runtime, error) {
 		toolAuditor:       toolAuditor,
 		tracer:            tracer,
 		projectorIndex:    projectorIndex,
-		definition:        config.AgentDeployment,
+		definition:        aggregate,
 		entrypoint:        entrypoint,
-		runs:              newRunLifecycle(),
+		runs:              newRunExecutionManager(),
 		runSlots:          make(chan struct{}, config.MaxConcurrentRuns),
 	}, nil
 }
 
-func newMCPToolsets(config Config) ([]tool.Toolset, error) {
-	toolsets := make([]tool.Toolset, 0, len(config.AgentDeployment.Spec.MCPServers))
-	for _, definition := range config.AgentDeployment.Spec.MCPServers {
-		resolved, err := resolveMCPServer(definition)
-		if err != nil {
-			return nil, err
-		}
-		if _, overridden := config.mcpTransportOverrides[definition.Name]; !overridden {
-			if err := validateMCPEndpoint(resolved); err != nil {
-				return nil, err
-			}
-		}
-		var transport mcp.Transport = newMCPTransport(config, resolved)
-		if override, ok := config.mcpTransportOverrides[definition.Name]; ok {
-			transport = override
-		}
-		toolset, err := mcptoolset.New(mcptoolset.Config{
-			Transport: transport,
-		})
-		if err != nil {
-			return nil, domain.NewError(domain.CodeMCPToolsUnavailable, fmt.Sprintf("create MCP toolset %q", definition.Name), err)
-		}
-		// Memoize standard discovery per logical server; per-Agent allowlist
-		// filtering still runs downstream inside tool.FilterToolset.
-		toolsets = append(toolsets, newCachedToolset(definition.Name, toolset, mcpCatalogTTL, config.Now, config.Metrics))
+func newMCPClientConfig(config Config) mcppkg.ClientConfig {
+	return mcppkg.ClientConfig{
+		Timeout:            config.MCPTimeout,
+		HealthTimeout:      config.MCPHealthTimeout,
+		Now:                config.Now,
+		Metrics:            config.Metrics,
+		OutboundTransport:  config.outboundTransport,
+		TransportOverrides: config.mcpTransportOverrides,
 	}
-	return toolsets, nil
-}
-
-type resolvedMCPServer struct {
-	definition agentdeployment.MCPServerDefinition
-	Endpoint   string
-}
-
-func resolveMCPServer(definition agentdeployment.MCPServerDefinition) (resolvedMCPServer, error) {
-	endpoint, ok := os.LookupEnv(definition.EndpointEnv)
-	if !ok || strings.TrimSpace(endpoint) == "" {
-		return resolvedMCPServer{}, domain.NewError(
-			domain.CodeMCPEndpointEnvMissing,
-			fmt.Sprintf("MCP endpoint environment %q is required for server %q", definition.EndpointEnv, definition.Name),
-			nil,
-		)
-	}
-	resolved := resolvedMCPServer{definition: definition, Endpoint: strings.TrimSpace(endpoint)}
-	return resolved, nil
-}
-
-func validateMCPEndpoint(server resolvedMCPServer) error {
-	endpointURL, err := url.Parse(server.Endpoint)
-	if err != nil ||
-		endpointURL.Scheme != "http" && endpointURL.Scheme != "https" ||
-		endpointURL.Host == "" ||
-		endpointURL.User != nil {
-		return domain.NewError(
-			domain.CodeMCPEndpointInvalid,
-			fmt.Sprintf(
-				"MCP endpoint environment %q must be an absolute HTTP(S) URL without credentials",
-				server.definition.EndpointEnv,
-			),
-			nil,
-		)
-	}
-	return nil
 }
 
 // RootAgent exposes the single ADK graph to standard protocol adapters. ADK

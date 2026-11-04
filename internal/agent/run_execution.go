@@ -35,6 +35,37 @@ type runExecution struct {
 	thoughtTokens    int
 }
 
+// runExecutionParams is the immutable construction contract shared by the
+// native Run path and externally driven protocol audit paths.
+type runExecutionParams struct {
+	identity          execution.RunIdentity
+	provenance        execution.RunProvenance
+	taskID            string
+	model             string
+	instructionDigest string
+	definitionName    string
+	definitionVersion string
+	definitionDigest  string
+	startedAt         time.Time
+	releaseRun        func()
+}
+
+func newRunExecution(params runExecutionParams) *runExecution {
+	return &runExecution{
+		identity:          params.identity,
+		provenance:        params.provenance,
+		taskID:            params.taskID,
+		model:             params.model,
+		instructionDigest: params.instructionDigest,
+		releaseRun:        params.releaseRun,
+		definitionName:    params.definitionName,
+		definitionVersion: params.definitionVersion,
+		definitionDigest:  params.definitionDigest,
+		startedAt:         params.startedAt,
+		activeCalls:       make(map[string]llmCallRuntime),
+	}
+}
+
 // usage returns the aggregated model usage recorded for this run so far.
 func (s *runExecution) usage() execution.RunUsage {
 	s.mu.Lock()

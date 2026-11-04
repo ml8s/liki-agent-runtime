@@ -51,10 +51,10 @@ type Event struct {
 	OccurredAt            time.Time
 	RootRunID             domain.ID
 	RunID                 domain.ID
-	ParentRunID           domain.ID
+	TaskID                domain.ID
 	ThreadID              domain.ID
 	UserID                string
-	Protocol              string
+	Protocol              domain.Protocol
 	TraceID               string
 	SpanID                string
 	AgentName             string
@@ -94,9 +94,10 @@ func normalizeEvent(event Event) Event {
 	event.ID = strings.TrimSpace(event.ID)
 	event.Type = EventType(strings.TrimSpace(string(event.Type)))
 	event.UserID = strings.TrimSpace(event.UserID)
-	event.Protocol = strings.TrimSpace(event.Protocol)
+	event.Protocol = domain.Protocol(strings.TrimSpace(string(event.Protocol)))
 	event.TraceID = strings.ToLower(strings.TrimSpace(event.TraceID))
 	event.SpanID = strings.ToLower(strings.TrimSpace(event.SpanID))
+	event.TaskID = domain.ID(strings.TrimSpace(string(event.TaskID)))
 	event.AgentName = strings.TrimSpace(event.AgentName)
 	event.AgentVersion = strings.TrimSpace(event.AgentVersion)
 	event.CallerAgent = strings.TrimSpace(event.CallerAgent)
@@ -124,6 +125,8 @@ func (e Event) validate() error {
 		return NewError(CodeRunIDRequired, "audit event run id is required", domain.ErrInvalidInput)
 	case e.RootRunID == "":
 		return NewError(CodeRootRunIDRequired, "audit event root run id is required", domain.ErrInvalidInput)
+	case e.TaskID != "" && !domain.ValidIdentifier(string(e.TaskID)):
+		return NewError(CodeTaskIDInvalid, "audit event task id must contain at most 128 printable bytes", domain.ErrInvalidInput)
 	}
 
 	if e.DelegationDepth < 0 {
@@ -249,6 +252,7 @@ const (
 	CodeOccurredAtRequired           = "audit_event_occurred_at_required"
 	CodeRunIDRequired                = "audit_event_run_id_required"
 	CodeRootRunIDRequired            = "audit_event_root_run_id_required"
+	CodeTaskIDInvalid                = "audit_event_task_id_invalid"
 	CodeInvalidDelegationDepth       = "audit_event_delegation_depth_invalid"
 	CodeStatusInvalid                = "audit_event_status_invalid"
 	CodeInvalidDuration              = "audit_event_duration_invalid"

@@ -1,4 +1,4 @@
-package agent
+package mcp
 
 import (
 	"context"
@@ -8,23 +8,23 @@ import (
 	"testing"
 	"time"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
-
+	"github.com/ml8s/agent-runtime/internal/deployment"
 	"github.com/ml8s/agent-runtime/internal/execution"
+	testagentpkg "github.com/ml8s/agent-runtime/internal/testagent"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 )
 
 // testDeploymentForMCP builds a minimal deployment for MCP toolset tests.
-func testDeploymentForMCP() *deploymentpkg.AgentDeployment {
-	return &deploymentpkg.AgentDeployment{Spec: deploymentpkg.DeploymentSpec{
-		MCPServers: []deploymentpkg.MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
-		Agents: deploymentpkg.ResolvedAgentDefinitions([]deploymentpkg.AgentDefinition{{
+func testDeploymentForMCP() *deployment.AgentDeployment {
+	return &deployment.AgentDeployment{Spec: deployment.DeploymentSpec{
+		MCPServers: []deployment.MCPServerDefinition{{Name: "test", EndpointEnv: "TEST_MCP_ENDPOINT"}},
+		Agents: testagentpkg.ResolvedAgents([]deployment.AgentDefinition{{
 			Name:  "test-agent",
-			Tools: deploymentpkg.ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
+			Tools: deployment.ToolAllowlist{Allow: map[string][]string{"test": {"test_tool"}}},
 		}}),
 	}}
 }
@@ -70,6 +70,26 @@ func (s *catalogStub) callCount() int {
 	defer s.mu.Unlock()
 	return s.calls
 }
+
+type stubMetrics struct {
+	mu      sync.Mutex
+	catalog []string
+}
+
+func (m *stubMetrics) ObserveMCPCatalog(server, outcome string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.catalog = append(m.catalog, server+"/"+outcome)
+}
+
+func (m *stubMetrics) ObserveLLMCall(string, string, execution.LLMTokenUsage)       {}
+func (m *stubMetrics) ObserveLLMCallLatency(string, string, time.Duration)          {}
+func (m *stubMetrics) ObserveToolCall(string, string, string, time.Duration)        {}
+func (m *stubMetrics) ObserveAgentDelegation(string, string, string, time.Duration) {}
+func (m *stubMetrics) ObserveRunRejection(string)                                   {}
+func (m *stubMetrics) ObserveRunTerminalReconciliation(string, time.Duration)       {}
+func (m *stubMetrics) ObservePendingTerminalRuns(int)                               {}
+func (m *stubMetrics) ObserveRunReservation(string)                                 {}
 
 func newCatalogCache(stub *catalogStub, now func() time.Time, metrics execution.Metrics) *cachedToolset {
 	return newCachedToolset("mcp-a", stub, time.Minute, now, metrics)
@@ -276,28 +296,28 @@ func TestCachedToolsetNilMetricsSafe(t *testing.T) {
 func TestNewMCPToolsetsMemoizeDiscovery(t *testing.T) {
 	t.Setenv("TEST_MCP_ENDPOINT", "http://test.invalid/mcp")
 
-	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	server := mcp.NewServer(
-		&mcp.Implementation{Name: "test-mcp", Version: "test"},
-		&mcp.ServerOptions{Capabilities: &mcp.ServerCapabilities{
-			Tools: &mcp.ToolCapabilities{},
+	clientTransport, serverTransport := mcpsdk.NewInMemoryTransports()
+	server := mcpsdk.NewServer(
+		&mcpsdk.Implementation{Name: "test-mcp", Version: "test"},
+		&mcpsdk.ServerOptions{Capabilities: &mcpsdk.ServerCapabilities{
+			Tools: &mcpsdk.ToolCapabilities{},
 		}},
 	)
 	var listCalls atomic.Int32
-	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
-		return func(ctx context.Context, method string, request mcp.Request) (mcp.Result, error) {
+	server.AddReceivingMiddleware(func(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
+		return func(ctx context.Context, method string, request mcpsdk.Request) (mcpsdk.Result, error) {
 			if method == "tools/list" {
 				listCalls.Add(1)
 			}
 			return next(ctx, method, request)
 		}
 	})
-	server.AddTool(&mcp.Tool{
+	server.AddTool(&mcpsdk.Tool{
 		Name:        "test_tool",
 		Description: "test deterministic tool",
 		InputSchema: &jsonschema.Schema{Type: "object"},
-	}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return &mcp.CallToolResult{}, nil
+	}, func(context.Context, *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		return &mcpsdk.CallToolResult{}, nil
 	})
 	serverSession, err := server.Connect(context.Background(), serverTransport, nil)
 	if err != nil {
@@ -306,15 +326,14 @@ func TestNewMCPToolsetsMemoizeDiscovery(t *testing.T) {
 	t.Cleanup(func() { _ = serverSession.Close() })
 
 	deployment := testDeploymentForMCP()
-	config := Config{
-		MCPTimeout: 5 * time.Second,
-		mcpTransportOverrides: map[string]mcp.Transport{
+	config := ClientConfig{
+		Timeout: 5 * time.Second,
+		TransportOverrides: map[string]mcpsdk.Transport{
 			"test": clientTransport,
 		},
-		AgentDeployment: deployment,
-		Now:             catalogClock(),
+		Now: catalogClock(),
 	}
-	toolsets, err := newMCPToolsets(config)
+	toolsets, err := NewToolsets(config, deployment.Spec.MCPServers)
 	if err != nil {
 		t.Fatalf("newMCPToolsets() error = %v", err)
 	}

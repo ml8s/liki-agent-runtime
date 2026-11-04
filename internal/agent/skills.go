@@ -6,6 +6,7 @@ import (
 	"os"
 
 	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
+	"github.com/ml8s/agent-runtime/internal/domain"
 
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/skilltoolset"
@@ -29,7 +30,7 @@ func skillBinding(definition *agentdeployment.AgentDefinition) *agentdeployment.
 // (including name/directory mismatch) fails at build time, not per request.
 func newSkillToolset(binding *agentdeployment.SkillsBinding) (tool.Toolset, error) {
 	if binding == nil {
-		return nil, fmt.Errorf("skills binding is required")
+		return nil, domain.NewError(domain.CodeSkillToolsetUnavailable, "skills binding is required", nil)
 	}
 	ctx := context.Background()
 	base := skill.NewFileSystemSource(os.DirFS(binding.Root))
@@ -38,19 +39,19 @@ func newSkillToolset(binding *agentdeployment.SkillsBinding) (tool.Toolset, erro
 	case "complete":
 		preload, _, err := skill.WithCompletePreloadSource(ctx, base)
 		if err != nil {
-			return nil, fmt.Errorf("preload skills from %q: %w", binding.Root, err)
+			return nil, domain.NewError(domain.CodeSkillToolsetUnavailable, fmt.Sprintf("preload skills from %q", binding.Root), err)
 		}
 		source = preload
 	default:
 		preload, _, err := skill.WithFrontmatterPreloadSource(ctx, base)
 		if err != nil {
-			return nil, fmt.Errorf("preload skills from %q: %w", binding.Root, err)
+			return nil, domain.NewError(domain.CodeSkillToolsetUnavailable, fmt.Sprintf("preload skills from %q", binding.Root), err)
 		}
 		source = preload
 	}
 	ts, err := skilltoolset.New(ctx, skilltoolset.Config{Source: source})
 	if err != nil {
-		return nil, fmt.Errorf("create skill toolset for %q: %w", binding.Root, err)
+		return nil, domain.NewError(domain.CodeSkillToolsetUnavailable, fmt.Sprintf("create skill toolset for %q", binding.Root), err)
 	}
 	return ts, nil
 }

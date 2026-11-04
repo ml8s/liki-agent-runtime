@@ -38,6 +38,10 @@ func (m *stubMetrics) ObserveRunRejection(reason string) {
 	m.calls = append(m.calls, "run_rejection/"+reason)
 }
 
+func (m *stubMetrics) ObserveRunTerminalReconciliation(string, time.Duration) {}
+func (m *stubMetrics) ObservePendingTerminalRuns(int)                         {}
+func (m *stubMetrics) ObserveRunReservation(string)                           {}
+
 type fakeTool string
 
 func (t fakeTool) Name() string        { return string(t) }

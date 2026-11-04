@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {".git", "node_modules", "data", "bin"}
 SKIP_FILES = {".env"}
-SKIP_PATHS = {Path("scripts/check_generic_boundary.py"), Path("docs/A2A_STANDARD_PLAN.md")}
+SKIP_PATHS = {Path("scripts/check_generic_boundary.py")}
 PATTERNS = {
     "product name": re.compile(r"\b(?:liki|Liki)\b"),
     "legacy env prefix": re.compile(r"\bLIKI_[A-Z0-9_]+"),

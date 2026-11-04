@@ -17,12 +17,6 @@ type AuditEventRepository struct {
 	db *gorm.DB
 }
 
-// recoveryWindow bounds the startup orphan scan. Every successful startup
-// closes all orphans, so at the next startup an unclosed lifecycle can only
-// have been created since the previous recovery; the week of margin absorbs
-// clock skew and restored databases while keeping the scan index-bounded.
-const recoveryWindow = 7 * 24 * time.Hour
-
 // NewAuditEventRepository builds an audit repository over a database handle.
 func NewAuditEventRepository(db *gorm.DB) *AuditEventRepository {
 	return &AuditEventRepository{db: db}
@@ -123,7 +117,6 @@ func (r *AuditEventRepository) recoverInterrupted(ctx context.Context, db *gorm.
 	// primary-key index and return only true orphans instead of loading history.
 	orphanFilter := `
 event_type IN ?
-AND agent_audit_events.occurred_at >= ?
 AND NOT EXISTS (
 	SELECT 1
 	FROM agent_audit_events AS completed
@@ -140,7 +133,7 @@ AND NOT EXISTS (
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var interrupted []auditEventModel
 		if err := tx.WithContext(ctx).
-			Where(orphanFilter, startedNames, now.Add(-recoveryWindow)).
+			Where(orphanFilter, startedNames).
 			Order("occurred_at ASC, id ASC").
 			Find(&interrupted).Error; err != nil {
 			return audit.NewError(audit.CodeAuditAppendFailed, "find interrupted audit events", err)
@@ -195,10 +188,10 @@ func recoveryEvent(original auditEventModel, terminalType, id string, now time.T
 		OccurredAt:            now,
 		RootRunID:             domain.ID(original.RootRunID),
 		RunID:                 domain.ID(original.RunID),
-		ParentRunID:           domain.ID(original.ParentRunID),
+		TaskID:                domain.ID(original.TaskID),
 		ThreadID:              domain.ID(original.ThreadID),
 		UserID:                original.UserID,
-		Protocol:              original.Protocol,
+		Protocol:              domain.Protocol(original.Protocol),
 		TraceID:               original.TraceID,
 		SpanID:                original.SpanID,
 		AgentName:             original.AgentName,
@@ -238,4 +231,37 @@ func (r *AuditEventRepository) RunExists(ctx context.Context, runID domain.ID) (
 		return false, audit.NewError(audit.CodeAuditAppendFailed, "check run existence", err)
 	}
 	return exists == 1, nil
+}
+
+// ReserveRun durably claims a run identity. The primary key is the single
+// concurrency implementation; a second caller cannot reserve or reuse the ID.
+func (r *AuditEventRepository) ReserveRun(ctx context.Context, runID domain.ID) error {
+	return r.reserveRun(ctx, r.db, runID)
+}
+
+func (r *AuditEventRepository) reserveRun(ctx context.Context, db *gorm.DB, runID domain.ID) error {
+	if !domain.ValidIdentifier(string(runID)) {
+		return domain.NewError(domain.CodeRunIDInvalid, "run id reservation contains an invalid identifier", domain.ErrInvalidInput)
+	}
+	if err := db.WithContext(ctx).Exec(
+		"INSERT INTO agent_audit_run_reservations (run_id, reserved_at) VALUES (?, ?)",
+		string(runID), time.Now().UTC(),
+	).Error; err != nil {
+		if isUniqueRunReservationError(err) {
+			return domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
+		}
+		if isBusyAppendError(err) {
+			return audit.NewError(audit.CodeAuditAppendFailed, "reserve run id", err)
+		}
+		return audit.NewError(audit.CodeAuditAppendFailed, "reserve run id", err)
+	}
+	return nil
+}
+
+func isUniqueRunReservationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "UNIQUE constraint failed: agent_audit_run_reservations.run_id")
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/ml8s/agent-runtime/internal/execution"
 
 	"github.com/ml8s/agent-runtime/internal/audit"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcppkg "github.com/ml8s/agent-runtime/internal/mcp"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
@@ -31,7 +31,7 @@ type Config struct {
 	// MaxOutputTokens bounds every model response; 0 leaves the provider
 	// default unbounded.
 	MaxOutputTokens int
-	AgentDeployment *agentdeployment.AgentDeployment
+	AgentDeployment agentdeployment.DeploymentSource
 
 	MCPTimeout time.Duration
 
@@ -39,9 +39,13 @@ type Config struct {
 	// follows the tool-call budget (MCPTimeout) at runtime construction.
 	MCPHealthTimeout  time.Duration
 	MaxConcurrentRuns int
-	Now               func() time.Time
-	Logger            *slog.Logger
-	TracerProvider    trace.TracerProvider
+	// RequireDurableRunIDs makes cross-restart RunID exclusivity a mandatory
+	// runtime dependency instead of an optional adapter capability. Production
+	// composition must set this true with an audit store that supports it.
+	RequireDurableRunIDs bool
+	Now                  func() time.Time
+	Logger               *slog.Logger
+	TracerProvider       trace.TracerProvider
 
 	// SessionService is an official ADK session.Service injection point. A
 	// database implementation can be supplied without changing protocol or
@@ -54,7 +58,7 @@ type Config struct {
 
 	// mcpTransportOverrides is an internal test seam for protocol health
 	// tests. Production always uses the official Streamable HTTP transport.
-	mcpTransportOverrides map[string]mcp.Transport
+	mcpTransportOverrides mcppkg.TransportOverrides
 
 	// ephemeralSessionServiceOverride is an internal test seam for observing
 	// the run-scoped ephemeral session store. Production always uses ADK's

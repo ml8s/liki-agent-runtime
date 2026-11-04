@@ -188,7 +188,7 @@ func TestAuditEventRepositoryPreservesProvenance(t *testing.T) {
 		Scan(&stored).Error; err != nil {
 		t.Fatalf("read audit event: %v", err)
 	}
-	if stored.Protocol != event.Protocol ||
+	if stored.Protocol != string(event.Protocol) ||
 		stored.TraceID != event.TraceID ||
 		stored.SpanID != event.SpanID ||
 		stored.AgentDefinitionDigest != event.AgentDefinitionDigest {
@@ -438,7 +438,7 @@ func TestAuditEventRepositoryRecoveryFailsClosed(t *testing.T) {
 	}
 }
 
-func TestAuditEventRepositoryRecoverySkipsEventsOutsideWindow(t *testing.T) {
+func TestAuditEventRepositoryRecoveryClosesAncientOrphans(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "agent-audit.db"))
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -473,8 +473,8 @@ func TestAuditEventRepositoryRecoverySkipsEventsOutsideWindow(t *testing.T) {
 		Count(&recovered).Error; err != nil {
 		t.Fatalf("count recovered: %v", err)
 	}
-	if recovered != 0 {
-		t.Fatal("recovery closed an orphan far outside the recovery window")
+	if recovered != 1 {
+		t.Fatal("recovery did not close an ancient orphan")
 	}
 }
 
@@ -495,11 +495,12 @@ func TestAuditEventIndexSetMatchesWritePathContract(t *testing.T) {
 		t.Fatalf("read audit indexes: %v", err)
 	}
 	// run_id serves idempotency probes, type+occurred serves the recovery
-	// scan, trace_id serves incident correlation. Everything else was dropped
-	// to keep the insert path at three secondary B-trees; aggregate questions
-	// are answered by Prometheus metrics instead.
+	// scan, trace_id serves incident correlation, and task_id serves A2A
+	// task-correlation queries. Other aggregate dimensions stay off the write
+	// path and are answered by Prometheus metrics instead.
 	want := []string{
 		"idx_agent_audit_events_run_id",
+		"idx_agent_audit_events_task_id",
 		"idx_agent_audit_events_trace_id",
 		"idx_agent_audit_events_type_occurred",
 	}

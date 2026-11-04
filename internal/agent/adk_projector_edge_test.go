@@ -1,7 +1,9 @@
-package execution
+package agent
 
 import (
 	"testing"
+
+	"github.com/ml8s/agent-runtime/internal/execution"
 
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
@@ -114,7 +116,7 @@ func TestEventProjectorFinalStructuredKeepsStateDelta(t *testing.T) {
 	event := &session.Event{
 		Author: "main",
 		Actions: session.EventActions{
-			StateDelta: map[string]any{StructuredOutputStateKey("main"): "value"},
+			StateDelta: map[string]any{execution.StructuredOutputStateKey("main"): "value"},
 		},
 	}
 	projected, _, visible := projector.Project(projection, event)

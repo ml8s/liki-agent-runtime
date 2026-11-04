@@ -30,9 +30,11 @@ func (r *Runtime) Run(
 		return execution.RunResult{}, err
 	}
 	if err := r.ensureDurableRunID(ctx, request.RunID); err != nil {
+		r.observeRunIDRejection(err)
 		return execution.RunResult{}, err
 	}
 	if !r.runs.begin(request.RunID) {
+		r.observeRunRejection("run_id_conflict")
 		return execution.RunResult{}, domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
 	}
 	sessionID := runSessionID(request.RunID)
@@ -43,13 +45,14 @@ func (r *Runtime) Run(
 	ctx = WithAuditAttempt(ctx, string(handle.AttemptID))
 	releaseRun, err := r.acquireRun(ctx)
 	if err != nil {
-		r.runs.finish(request.RunID)
+		r.runs.abort(request.RunID)
 		return execution.RunResult{}, err
 	}
-	defer func() {
-		releaseRun()
-		r.runs.finish(request.RunID)
-	}()
+	// The concurrency slot is always released when this request exits. The
+	// lifecycle registry is released only after terminal evidence succeeds; a
+	// failed terminal append remains reconcilable and its RunID stays invalid
+	// for reuse rather than silently becoming executable again.
+	defer releaseRun()
 
 	ctx, runSpan := r.tracer.Start(
 		ctx,
@@ -68,43 +71,32 @@ func (r *Runtime) Run(
 	)
 	defer runSpan.End()
 	startedAt := r.config.Now()
-	scope := &runExecution{
-		identity: execution.RunIdentity{
+	scope := r.newRunExecution(
+		execution.RunIdentity{
 			RunID:    domain.ID(request.RunID),
 			ThreadID: domain.ID(request.ThreadID),
 			UserID:   request.UserID,
 		},
-		provenance: execution.RunProvenance{
+		execution.RunProvenance{
 			Protocol: request.Protocol,
 			TraceID:  traceIDFromContext(ctx),
 			SpanID:   spanIDFromContext(ctx),
 		},
-		model:             r.entrypoint.EffectiveModel(r.config.Model),
-		instructionDigest: r.entrypoint.InstructionDigest,
-		definitionName:    r.definition.Metadata.Name,
-		definitionVersion: r.definition.Metadata.Version,
-		definitionDigest:  r.definition.Digest,
-		startedAt:         startedAt,
-		activeCalls:       make(map[string]llmCallRuntime),
-	}
+		"",
+		startedAt,
+		nil,
+	)
 	// Aggregate usage is filled in on every exit path (including failure
 	// and cancellation).
 	defer func() { result.Usage = scope.usage() }()
-	if !r.callAuditor.begin(handle, scope) {
-		runErr = domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
-		return execution.RunResult{}, runErr
-	}
-	if auditErr := r.recordRunAudit(ctx, scope, audit.EventRunStarted, audit.StatusRunning, nil); auditErr != nil {
-		runErr = auditErr
-		auditScope, _ := r.callAuditor.scope(string(handle.AttemptID))
-		r.callAuditor.end(handle, runErr)
-		_ = r.delegationAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
-		_ = r.toolAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
+	if startErr := r.startRunExecution(ctx, handle, scope); startErr != nil {
 		_ = r.ephemeralSessions.Delete(context.WithoutCancel(ctx), &session.DeleteRequest{
 			AppName:   r.config.AppName,
 			UserID:    request.UserID,
 			SessionID: sessionID,
 		})
+		r.runs.abort(request.RunID)
+		runErr = startErr
 		return execution.RunResult{}, runErr
 	}
 	defer func() {
@@ -116,12 +108,32 @@ func (r *Runtime) Run(
 		if runErr != nil {
 			outcome = auditOutcomeFailed
 		}
-		if err := r.closeRunEvidence(auditCtx, scope, runErr, outcome); err != nil && runErr == nil {
-			runErr = err
+		claimed, wasPending := r.runs.claimClose(request.RunID)
+		if !claimed {
+			runErr = domain.NewError(domain.CodeRuntimeBusy, "run terminal closure is already in progress", nil)
+			return
 		}
-		// Terminal evidence has been attempted; process state is released
-		// after this point. Cleanup failures are operational noise and do not
-		// change the durably recorded execution outcome.
+		terminalErr := r.closeRunEvidence(auditCtx, scope, runErr, outcome)
+		if terminalErr != nil {
+			if runErr == nil {
+				runErr = terminalErr
+			}
+			if !wasPending && r.runs.failClose(request.RunID) {
+				r.observePendingTerminalRuns(1)
+			}
+			// The request may end, but evidence and lifecycle identity stay
+			// active. A bounded reconciler owns terminal retries; startup
+			// recovery is the last resort if the process exits first.
+			go r.reconcileRunTerminalEvidence(handle, scope, runErr, outcome)
+			runtimeErr := runtimeError(runErr)
+			runSpan.RecordError(runtimeErr)
+			runSpan.SetStatus(codes.Error, runtimeErr.Error())
+			return
+		}
+
+		// Terminal evidence is durable. Process state can now be released.
+		// Cleanup failures are operational noise and do not change the durably
+		// recorded execution outcome.
 		r.callAuditor.forget(handle)
 		if deleteErr := r.ephemeralSessions.Delete(auditCtx, &session.DeleteRequest{
 			AppName:   r.config.AppName,
@@ -133,6 +145,7 @@ func (r *Runtime) Run(
 				"error", runtimeError(deleteErr).Error(),
 			)
 		}
+		r.runs.finish(request.RunID)
 		if runErr != nil {
 			runtimeErr := runtimeError(runErr)
 			runSpan.RecordError(runtimeErr)
@@ -170,26 +183,24 @@ func (r *Runtime) seedAndStreamEvents(
 	scope *runExecution,
 	observe func(*session.Event) error,
 	span trace.Span,
-) (execution.RunState, error) {
+) (RunState, error) {
 	if err := r.seedConversationHistory(ctx, r.ephemeralSessions, request, sessionID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, runtimeError(err).Error())
-		return execution.RunState{}, err
+		return RunState{}, err
 	}
 
 	events := r.ephemeralRunner.Run(
 		ctx,
 		request.UserID,
 		sessionID,
-		execution.BuildUserContent(request),
+		BuildUserContent(request),
 		agent.RunConfig{StreamingMode: agent.StreamingModeSSE},
 	)
 
-	state := execution.RunState{
-		CapturePlain: !r.entrypoint.Output.Structured(),
-	}
-	projector := execution.NewEventProjector(r.projectorIndex)
-	projection := execution.NewEventProjectionState()
+	state := NewRunState(deploymentTextPolicy{definition: r.definition})
+	projector := NewEventProjector(r.projectorIndex)
+	projection := NewEventProjectionState()
 
 	for event, err := range events {
 		if err != nil {
@@ -240,7 +251,7 @@ func (r *Runtime) finalizeRunResult(
 	ctx context.Context,
 	request execution.RunRequest,
 	sessionID string,
-	state execution.RunState,
+	state RunState,
 	span trace.Span,
 ) (execution.RunResult, error) {
 	if r.entrypoint.Output.Structured() && state.Output.JSON == nil {
@@ -268,7 +279,7 @@ func (r *Runtime) finalizeRunResult(
 		)...)
 
 	return execution.RunResult{
-		Definition: r.definition.DefinitionRef(),
+		Definition: r.definition.DeploymentRef(),
 		Output:     state.Output.JSON,
 		Text:       state.Output.Text,
 	}, nil
@@ -281,9 +292,9 @@ func (r *Runtime) finalizeRunResult(
 // that yielded no state delta. Repeated final events follow the session's
 // last-write-wins semantics because each delta overwrites the prior result.
 func (r *Runtime) consumeStructuredEvent(
-	state execution.RunState,
+	state RunState,
 	event *session.Event,
-) (execution.RunState, error) {
+) (RunState, error) {
 	if !r.entrypoint.Output.Structured() ||
 		event == nil ||
 		!event.IsFinalResponse() ||
@@ -298,6 +309,37 @@ func (r *Runtime) consumeStructuredEvent(
 }
 
 func (r *Runtime) ensureDurableRunID(ctx context.Context, runID string) error {
+	if r.config.RequireDurableRunIDs {
+		checker, ok := r.config.AuditRecorder.(audit.RunExistenceChecker)
+		if !ok {
+			return domain.NewError(domain.CodeRuntimeInitFailed, "durable run-id existence checking is unavailable", nil)
+		}
+		exists, err := checker.RunExists(ctx, domain.ID(runID))
+		if err != nil {
+			return err
+		}
+		if exists {
+			r.observeRunReservation("conflict")
+			return domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
+		}
+		reservation, ok := r.config.AuditRecorder.(audit.RunReservationStore)
+		if !ok {
+			return domain.NewError(domain.CodeRuntimeInitFailed, "durable run-id reservation is unavailable", nil)
+		}
+		reservationErr := reservation.ReserveRun(ctx, domain.ID(runID))
+		switch reservationErr {
+		case nil:
+			r.observeRunReservation("reserved")
+		default:
+			var domainErr *domain.Error
+			if errors.As(reservationErr, &domainErr) && domainErr.Code == domain.CodeRunIDConflict {
+				r.observeRunReservation("conflict")
+			} else {
+				r.observeRunReservation("failed")
+			}
+		}
+		return reservationErr
+	}
 	checker, ok := r.config.AuditRecorder.(audit.RunExistenceChecker)
 	if !ok {
 		return nil
@@ -307,9 +349,16 @@ func (r *Runtime) ensureDurableRunID(ctx context.Context, runID string) error {
 		return err
 	}
 	if exists {
+		r.observeRunReservation("conflict")
 		return domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
 	}
 	return nil
+}
+
+func (r *Runtime) observeRunReservation(result string) {
+	if r.config.Metrics != nil {
+		r.config.Metrics.ObserveRunReservation(result)
+	}
 }
 
 func (r *Runtime) recordRunAudit(
@@ -360,8 +409,8 @@ func (r *Runtime) loadStructuredAnalysis(
 	ctx context.Context,
 	request execution.RunRequest,
 	sessionID string,
-	state execution.RunState,
-) (execution.RunState, error) {
+	state RunState,
+) (RunState, error) {
 	response, err := r.ephemeralSessions.Get(ctx, &session.GetRequest{
 		AppName:   r.config.AppName,
 		UserID:    request.UserID,
@@ -391,26 +440,21 @@ func (r *Runtime) Entrypoint() *agentdeployment.AgentDefinition {
 // ResolvedEntrypoint exposes the loaded runtime-neutral state required by
 // structured-output protocol mappings. Instructions remain internal to callers
 // that only render discovery metadata.
-func (r *Runtime) ResolvedEntrypoint() *agentdeployment.ResolvedAgentDefinition {
-	return r.entrypoint
+func (r *Runtime) ResolvedEntrypoint() ResolvedEntrypointView {
+	return newResolvedEntrypointView(r.entrypoint)
 }
 
-// AgentDeployment exposes non-secret deployment metadata for standard protocol
+// AgentDeployment exposes a read-only view of non-secret deployment metadata for standard protocol
 // discovery. Instructions and schemas remain internal to the runtime.
-func (r *Runtime) AgentDeployment() *agentdeployment.AgentDeployment {
-	deployment := *r.definition
-	deployment.Spec.MCPServers = append([]agentdeployment.MCPServerDefinition(nil), r.definition.Spec.MCPServers...)
-	deployment.Spec.Agents = make([]agentdeployment.ResolvedAgentDefinition, len(r.definition.Spec.Agents))
-	for index := range r.definition.Spec.Agents {
-		deployment.Spec.Agents[index] = cloneResolvedAgentDefinition(&r.definition.Spec.Agents[index])
-	}
-	return &deployment
+func (r *Runtime) AgentDeployment() agentdeployment.DeploymentView {
+	return r.definition.View()
 }
 
-func cloneResolvedAgentDefinition(definition *agentdeployment.ResolvedAgentDefinition) agentdeployment.ResolvedAgentDefinition {
-	clone := *definition
-	clone.AgentDefinition = cloneAgentDefinition(&definition.AgentDefinition)
-	return clone
+func (r *Runtime) observeRunIDRejection(err error) {
+	var domainErr *domain.Error
+	if errors.As(err, &domainErr) && domainErr.Code == domain.CodeRunIDConflict {
+		r.observeRunRejection("run_id_conflict")
+	}
 }
 
 func cloneAgentDefinition(definition *agentdeployment.AgentDefinition) agentdeployment.AgentDefinition {

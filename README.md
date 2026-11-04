@@ -53,8 +53,8 @@ denied unless the tool is listed in the Agent's server-scoped `tools.allow`.
 
 The artifact is validated by this runtime's strict JSON decoder and deployment
 invariants; external boundaries follow [`docs/STANDARDS.md`](docs/STANDARDS.md).
-Its digest covers the manifest, referenced instruction and schema files, and the
-ADK graph semantics.
+Its provenance carries a canonical semantic digest over behavior-bearing
+declarations and resolved artifacts, plus a separate exact-byte manifest digest.
 Audit provenance uses the immutable deployment version and digest already
 carried by the artifact. Deployment integrity is owned by deployment system, which
 assembles and deploys the images by commit sha; no duplicate artifact pin is

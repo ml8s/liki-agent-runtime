@@ -1,60 +1,13 @@
-package execution
+package agent
 
 import (
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
-
-	deployment "github.com/ml8s/agent-runtime/internal/deployment"
 )
-
-func loadedTestDeployment(t testing.TB) *deployment.AgentDeployment {
-	t.Helper()
-	root := t.TempDir()
-	files := map[string]string{
-		"agent-deployment.json": `{
-			"schema_version": "agent.deployment.v1",
-			"metadata": {"name": "test-agent", "version": "1.0.0"},
-			"spec": {
-				"mcpServers": [],
-				"agents": [{
-					"name": "main",
-					"version": "1.0.0",
-					"description": "structured test agent",
-					"mode": "chat",
-					"instruction": {"path": "instruction.md"},
-					"output": {
-						"schema": {"path": "output.schema.json"},
-						"textPointer": "/answer"
-					},
-					"tools": {"allow": {}}
-				}]
-			}
-		}`,
-		"instruction.md": "You are a generic test agent.",
-		"output.schema.json": `{
-			"type": "object",
-			"additionalProperties": false,
-			"required": ["answer"],
-			"properties": {"answer": {"type": "string"}, "confidence": {"type": "number", "minimum": 0, "maximum": 1}}
-		}`,
-	}
-	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	loaded, err := deployment.LoadAgentDeployment(filepath.Join(root, "agent-deployment.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return loaded
-}
 
 func textEvent(author, text string, partial, final bool) *session.Event {
 	event := &session.Event{
@@ -69,6 +22,19 @@ func textEvent(author, text string, partial, final bool) *session.Event {
 	}
 	return event
 }
+
+type textPolicy map[string]bool
+
+func (p textPolicy) ExposesModelText(author string) bool {
+	return p[author]
+}
+
+var (
+	allowAllText  = textPolicy{"main": true, "worker": true, "bazi": true}
+	denyAllText   = textPolicy{}
+	plainAuthors  = textPolicy{"main": true, "bazi": true, "worker": false}
+	structuredAll = textPolicy{}
+)
 
 func responsePart(name, callID string) *genai.Part {
 	return &genai.Part{
@@ -89,7 +55,7 @@ func functionResponseEvent(author, name, callID string) *session.Event {
 }
 
 func TestRunStateConsumeCapturesPlainFinalText(t *testing.T) {
-	state := RunState{CapturePlain: true}
+	state := NewRunState(allowAllText)
 
 	if next := state.Consume(nil); next.Output.Text != "" {
 		t.Fatalf("nil event output = %q, want empty", next.Output.Text)
@@ -112,7 +78,7 @@ func TestRunStateConsumeCapturesPlainFinalText(t *testing.T) {
 }
 
 func TestRunStateConsumeSkipsThoughtAndEmptyParts(t *testing.T) {
-	state := RunState{CapturePlain: true}
+	state := NewRunState(allowAllText)
 	event := &session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
@@ -129,15 +95,15 @@ func TestRunStateConsumeSkipsThoughtAndEmptyParts(t *testing.T) {
 }
 
 func TestRunStateConsumeNoCapturePlain(t *testing.T) {
-	state := RunState{CapturePlain: false}
+	state := NewRunState(denyAllText)
 	next := state.Consume(textEvent("main", "answer", false, true))
 	if next.Output.Text != "" {
-		t.Fatalf("CapturePlain=false output = %q, want empty", next.Output.Text)
+		t.Fatalf("hidden author output = %q, want empty", next.Output.Text)
 	}
 }
 
 func TestRunStateConsumeNonFinalNoContent(t *testing.T) {
-	state := RunState{CapturePlain: true}
+	state := NewRunState(allowAllText)
 	next := state.Consume(&session.Event{
 		Author:      "main",
 		LLMResponse: model.LLMResponse{Partial: true},
@@ -148,30 +114,30 @@ func TestRunStateConsumeNonFinalNoContent(t *testing.T) {
 }
 
 func TestToolNameTrackerDedup(t *testing.T) {
-	var tracker ToolNameTracker
-	if names := tracker.Names(); names != nil {
+	var tracker toolNameTracker
+	if names := tracker.names(); names != nil {
 		t.Fatalf("empty Names() = %v, want nil", names)
 	}
 
-	tracker = tracker.Consume(functionResponseEvent("main", "tool_a", "1"))
-	tracker = tracker.Consume(functionResponseEvent("main", "tool_b", "2"))
-	tracker = tracker.Consume(functionResponseEvent("main", "tool_a", "3"))
+	tracker = tracker.consume(functionResponseEvent("main", "tool_a", "1"))
+	tracker = tracker.consume(functionResponseEvent("main", "tool_b", "2"))
+	tracker = tracker.consume(functionResponseEvent("main", "tool_a", "3"))
 
-	names := tracker.Names()
+	names := tracker.names()
 	if len(names) != 2 || names[0] != "tool_a" || names[1] != "tool_b" {
 		t.Fatalf("Names() = %v, want [tool_a tool_b]", names)
 	}
 
 	names[0] = "mutated"
-	if tracker.Names()[0] != "tool_a" {
+	if tracker.names()[0] != "tool_a" {
 		t.Fatal("Names() returned a non-defensive copy")
 	}
 }
 
 func TestToolNameTrackerSkipsNonResponseParts(t *testing.T) {
-	var tracker ToolNameTracker
-	tracker = tracker.Consume(nil)
-	tracker = tracker.Consume(&session.Event{
+	var tracker toolNameTracker
+	tracker = tracker.consume(nil)
+	tracker = tracker.consume(&session.Event{
 		Author: "main",
 		LLMResponse: model.LLMResponse{
 			Content: &genai.Content{Parts: []*genai.Part{
@@ -180,13 +146,13 @@ func TestToolNameTrackerSkipsNonResponseParts(t *testing.T) {
 			}},
 		},
 	})
-	if names := tracker.Names(); names != nil {
+	if names := tracker.names(); names != nil {
 		t.Fatalf("Names() = %v, want nil", names)
 	}
 }
 
 func TestRunStateTools(t *testing.T) {
-	state := RunState{CapturePlain: true}
+	state := NewRunState(allowAllText)
 	if tools := state.Tools(); tools != nil {
 		t.Fatalf("initial Tools() = %v, want nil", tools)
 	}
@@ -203,7 +169,7 @@ func TestRunStateTools(t *testing.T) {
 // TestRunStateConsumeIsImmutableForToolNames verifies the value semantics of
 // RunState across tool-tracking transitions.
 func TestRunStateConsumeIsImmutableForToolNames(t *testing.T) {
-	state := RunState{}
+	state := NewRunState(structuredAll)
 	response := func(name string) *session.Event {
 		return functionResponseEvent("worker", name, "1")
 	}
@@ -225,7 +191,7 @@ func TestRunStateConsumeIsImmutableForToolNames(t *testing.T) {
 // TestRunStateConsumeTracksMultipleToolsInOneEvent covers a single event
 // carrying several FunctionResponse parts (parallel tool calls).
 func TestRunStateConsumeTracksMultipleToolsInOneEvent(t *testing.T) {
-	state := RunState{}
+	state := NewRunState(structuredAll)
 	event := &session.Event{LLMResponse: model.LLMResponse{
 		Content: &genai.Content{Parts: []*genai.Part{
 			responsePart("tool_a", "1"),
@@ -248,7 +214,7 @@ func TestRunStateConsumeTracksMultipleToolsInOneEvent(t *testing.T) {
 // capture does not require the entrypoint author; any agent's terminal final
 // response is user-facing.
 func TestRunStateConsumeCapturesDelegatedAuthorText(t *testing.T) {
-	state := RunState{CapturePlain: true}
+	state := NewRunState(plainAuthors)
 	event := textEvent("bazi", "delegated answer", false, true)
 	next := state.Consume(event)
 	if next.Output.Text != "delegated answer" {
@@ -256,5 +222,19 @@ func TestRunStateConsumeCapturesDelegatedAuthorText(t *testing.T) {
 	}
 	if state.Output.Text != "" {
 		t.Fatalf("input state text = %q, want unchanged", state.Output.Text)
+	}
+}
+
+// TestRunStateUsesAuthorVisibilityPolicy pins that a structured worker cannot
+// leak raw model text simply because the entrypoint is plain-text.
+func TestRunStateUsesAuthorVisibilityPolicy(t *testing.T) {
+	state := NewRunState(plainAuthors)
+	next := state.Consume(textEvent("worker", `{"answer":"raw"}`, false, true))
+	if next.Output.Text != "" {
+		t.Fatalf("hidden structured worker output = %q, want empty", next.Output.Text)
+	}
+	next = next.Consume(textEvent("main", "coordinator answer", false, true))
+	if next.Output.Text != "coordinator answer" {
+		t.Fatalf("visible coordinator output = %q", next.Output.Text)
 	}
 }

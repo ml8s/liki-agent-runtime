@@ -196,17 +196,7 @@ func connectStubMCPServer(t testing.TB) mcp.Transport {
 
 func plainTestDeployment(t testing.TB) *deploymentpkg.AgentDeployment {
 	t.Helper()
-	agentDeployment := NewTestDeployment(t)
-	for index := range agentDeployment.Spec.Agents {
-		agentDeployment.Spec.Agents[index].Output = deploymentpkg.OutputDefinition{}
-		agentDeployment.Spec.Agents[index].OutputSchema = nil
-		agentDeployment.Spec.Agents[index].ResolvedOutput = nil
-		agentDeployment.Spec.Agents[index].SchemaDigest = ""
-	}
-	if err := agentDeployment.Validate(); err != nil {
-		t.Fatalf("validate plain agentDeployment: %v", err)
-	}
-	return agentDeployment
+	return testagent.PlainAgentDeployment(t)
 }
 
 // NewTestDeployment exposes the generic test agentDeployment to external adapter

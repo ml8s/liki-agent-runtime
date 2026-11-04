@@ -15,20 +15,20 @@ type definitionLoader struct {
 // external artifacts, and computes its content digest.
 func LoadAgentDeployment(path string) (*AgentDeployment, error) {
 	if strings.TrimSpace(path) == "" {
-		return nil, fmt.Errorf("agent deployment file is required")
+		return nil, artifactError(CodeDeploymentPathRequired, "agent deployment file is required")
 	}
 	root, err := filepath.Abs(filepath.Dir(path))
 	if err != nil {
-		return nil, fmt.Errorf("resolve agent deployment directory: %w", err)
+		return nil, artifactErrorWrap(CodeDeploymentUnreadable, "resolve agent deployment directory", err)
 	}
 	loader := &definitionLoader{root: root}
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read agent deployment: %w", err)
+		return nil, artifactErrorWrap(CodeDeploymentUnreadable, "read agent deployment", err)
 	}
 	if len(raw) > maxManifestBytes {
-		return nil, fmt.Errorf("agent deployment manifest exceeds %d bytes", maxManifestBytes)
+		return nil, artifactError(CodeDeploymentManifestTooLarge, "agent deployment manifest exceeds %d bytes", maxManifestBytes)
 	}
 	deployment, err := decodeAgentDeployment(raw)
 	if err != nil {
@@ -40,27 +40,36 @@ func LoadAgentDeployment(path string) (*AgentDeployment, error) {
 	if err := loader.loadAgents(deployment); err != nil {
 		return nil, err
 	}
-	if deployment.Digest, err = deploymentDigest(raw, deployment); err != nil {
-		return nil, fmt.Errorf("deployment digest: %w", err)
+	deployment.manifest = append([]byte(nil), raw...)
+	deployment.ManifestDigest = sha256Hex(raw)
+	if deployment.Digest, err = deploymentDigest(deployment); err != nil {
+		return nil, artifactErrorWrap(CodeDeploymentIdentityInvalid, "deployment digest", err)
 	}
-	return deployment, nil
+	snapshot, err := deployment.Clone()
+	if err != nil {
+		return nil, artifactErrorWrap(CodeDeploymentIdentityInvalid, "snapshot agent deployment", err)
+	}
+	if err := snapshot.ValidateIntegrity(); err != nil {
+		return nil, artifactErrorWrap(CodeDeploymentIntegrityInvalid, "validate deployment integrity", err)
+	}
+	return snapshot, nil
 }
 
 func (l *definitionLoader) readFile(path string) ([]byte, error) {
 	root, err := os.OpenRoot(l.root)
 	if err != nil {
-		return nil, fmt.Errorf("open agent deployment directory: %w", err)
+		return nil, artifactErrorWrap(CodeDeploymentArtifactReadFailed, "open agent deployment directory", err)
 	}
 	data, err := root.ReadFile(path)
 	if err != nil {
 		closeErr := root.Close()
 		if closeErr != nil {
-			return nil, fmt.Errorf("read %q (close failed: %w): %w", path, closeErr, err)
+			return nil, artifactErrorWrap(CodeDeploymentArtifactReadFailed, fmt.Sprintf("read %q (close failed: %v)", path, closeErr), err)
 		}
 		return nil, err
 	}
 	if err := root.Close(); err != nil {
-		return nil, fmt.Errorf("close agent deployment directory: %w", err)
+		return nil, artifactErrorWrap(CodeDeploymentArtifactReadFailed, "close agent deployment directory", err)
 	}
 	return data, nil
 }

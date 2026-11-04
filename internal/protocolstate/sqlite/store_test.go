@@ -119,6 +119,18 @@ func TestTaskStoreOptimisticConcurrencyAndOwnership(t *testing.T) {
 	if _, err := tasks.Create(ctx, task); !errors.Is(err, taskstore.ErrTaskAlreadyExists) {
 		t.Fatalf("duplicate Create() error = %v, want already exists", err)
 	}
+	if _, err := tasks.Create(otherCtx, task); !errors.Is(err, a2a.ErrTaskNotFound) {
+		t.Fatalf("cross-owner duplicate Create() error = %v, want not found", err)
+	}
+
+	contextChanged := *task
+	contextChanged.ContextID = "context-occ-changed"
+	if _, err := tasks.Update(ctx, &taskstore.UpdateRequest{
+		Task:        &contextChanged,
+		PrevVersion: version,
+	}); err == nil || !errors.Is(err, a2a.ErrInvalidParams) {
+		t.Fatalf("context-changing Update() error = %v, want invalid params", err)
+	}
 
 	task.Status.State = a2a.TaskStateCompleted
 	now := time.Date(2026, 10, 27, 11, 0, 0, 0, time.UTC)
@@ -218,10 +230,13 @@ func TestTaskStoreListFiltersProjectionsAndPagination(t *testing.T) {
 }
 
 func TestPushConfigStoreCRUDAndOwnership(t *testing.T) {
-	_, tasks, callbacks := openStore(t)
+	db, tasks, callbacks := openStore(t)
 	ctx := callerContext(context.Background(), "alice")
 	otherCtx := callerContext(context.Background(), "bob")
 	task := testTask("task-push", "context-push", a2a.TaskStateWorking)
+	if _, err := callbacks.Save(ctx, task.ID, &a2a.PushConfig{URL: "https://receiver.example/orphan"}); !errors.Is(err, push.ErrPushConfigNotFound) {
+		t.Fatalf("Save(orphan task) error = %v, want not found", err)
+	}
 	if _, err := tasks.Create(ctx, task); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -232,6 +247,13 @@ func TestPushConfigStoreCRUDAndOwnership(t *testing.T) {
 	}
 	if inline.ID == "" || inline.TaskID != task.ID {
 		t.Fatalf("Save(inline) = %#v, want generated ID and forced task", inline)
+	}
+	if _, err := db.sql.ExecContext(
+		ctx,
+		"DELETE FROM a2a_tasks WHERE task_id = ?",
+		string(task.ID),
+	); err == nil {
+		t.Fatal("deleting task with push configs succeeded, want foreign-key rejection")
 	}
 	created, err := callbacks.Save(ctx, task.ID, &a2a.PushConfig{ID: "config-2", URL: "https://receiver.example/created"})
 	if err != nil {

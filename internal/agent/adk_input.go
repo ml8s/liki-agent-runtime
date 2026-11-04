@@ -1,14 +1,15 @@
-package execution
+package agent
 
 import (
 	"encoding/json"
 	"strings"
 
+	"github.com/ml8s/agent-runtime/internal/execution"
 	"google.golang.org/genai"
 )
 
 // BuildUserContent frames context and untrusted user text for the model request.
-func BuildUserContent(request RunRequest) *genai.Content {
+func BuildUserContent(request execution.RunRequest) *genai.Content {
 	var prompt strings.Builder
 	prompt.WriteString("<request_context>")
 	if len(request.Context) != 0 && json.Valid(request.Context) {

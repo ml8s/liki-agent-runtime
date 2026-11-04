@@ -71,10 +71,30 @@ func (s *PushConfigStore) Save(ctx context.Context, taskID a2a.TaskID, config *a
 		return nil, fmt.Errorf("encode push config: %w", err)
 	}
 	now := s.now()
-	existingOwner, err := s.findOwner(ctx, taskID, config.ID)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin push config save: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var taskOwner string
+	err = tx.QueryRowContext(ctx, `
+		SELECT owner_key FROM a2a_tasks WHERE task_id = ?`,
+		string(taskID),
+	).Scan(&taskOwner)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, push.ErrPushConfigNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find parent task for push config: %w", err)
+	}
+	if taskOwner != owner.ownerKey {
+		return nil, push.ErrPushConfigNotFound
+	}
+	existingOwner, err := s.findOwnerTx(ctx, tx, taskID, config.ID)
 	switch {
 	case errors.Is(err, push.ErrPushConfigNotFound):
-		_, err = s.db.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 			INSERT INTO a2a_push_configs
 				(task_id, config_id, tenant, principal, owner_key, url, updated_at_unix, config_json)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -88,7 +108,7 @@ func (s *PushConfigStore) Save(ctx context.Context, taskID a2a.TaskID, config *a
 	case existingOwner.ownerKey != owner.ownerKey:
 		return nil, push.ErrPushConfigNotFound
 	default:
-		_, err = s.db.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 			UPDATE a2a_push_configs
 			SET tenant = ?, principal = ?, owner_key = ?, url = ?, updated_at_unix = ?, config_json = ?
 			WHERE task_id = ? AND config_id = ?`,
@@ -98,6 +118,9 @@ func (s *PushConfigStore) Save(ctx context.Context, taskID a2a.TaskID, config *a
 		if err != nil {
 			return nil, fmt.Errorf("update push config: %w", err)
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit push config save: %w", err)
 	}
 	return copyPushConfig(config)
 }
@@ -230,9 +253,12 @@ func (s *PushConfigStore) DeleteAll(ctx context.Context, taskID a2a.TaskID) erro
 	return nil
 }
 
-func (s *PushConfigStore) findOwner(ctx context.Context, taskID a2a.TaskID, configID string) (principal, error) {
+func (s *PushConfigStore) findOwnerTx(ctx context.Context, db interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, taskID a2a.TaskID, configID string,
+) (principal, error) {
 	var stored principal
-	err := s.db.QueryRowContext(ctx, `
+	err := db.QueryRowContext(ctx, `
 		SELECT tenant, principal, owner_key
 		FROM a2a_push_configs
 		WHERE task_id = ? AND config_id = ?`,

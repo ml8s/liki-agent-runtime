@@ -72,6 +72,45 @@ func TestRuntimeRunRejectsDuplicateRunID(t *testing.T) {
 	}
 }
 
+type durableRunAudit struct {
+	*recordingAudit
+	exists   bool
+	reserved []domain.ID
+}
+
+func (a *durableRunAudit) RunExists(_ context.Context, _ domain.ID) (bool, error) {
+	return a.exists, nil
+}
+
+func (a *durableRunAudit) ReserveRun(_ context.Context, runID domain.ID) error {
+	a.reserved = append(a.reserved, runID)
+	return nil
+}
+
+func TestDurableRunIDChecksLegacyEvidenceBeforeReservation(t *testing.T) {
+	runtime := newTestRuntime(t, plainTestDeployment(t), &recordingAudit{}, &fakeLLM{})
+	auditStore := &durableRunAudit{recordingAudit: &recordingAudit{}, exists: true}
+	runtime.config.RequireDurableRunIDs = true
+	runtime.config.AuditRecorder = auditStore
+
+	err := runtime.ensureDurableRunID(context.Background(), "run_legacy")
+	var domainErr *domain.Error
+	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRunIDConflict {
+		t.Fatalf("ensureDurableRunID(existing evidence) error = %v, want %s", err, domain.CodeRunIDConflict)
+	}
+	if len(auditStore.reserved) != 0 {
+		t.Fatalf("reservations = %v, want none", auditStore.reserved)
+	}
+
+	auditStore.exists = false
+	if err := runtime.ensureDurableRunID(context.Background(), "run_new"); err != nil {
+		t.Fatalf("ensureDurableRunID(new) error = %v", err)
+	}
+	if len(auditStore.reserved) != 1 || auditStore.reserved[0] != "run_new" {
+		t.Fatalf("reservations = %v, want [run_new]", auditStore.reserved)
+	}
+}
+
 func TestRuntimeRunRejectsWorkBeyondConcurrentRunLimit(t *testing.T) {
 	events := &recordingAudit{}
 	llm := &blockingLLM{started: make(chan struct{}), unblocked: make(chan struct{})}

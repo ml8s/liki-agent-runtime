@@ -15,7 +15,7 @@ type auditEventModel struct {
 	OccurredAt            time.Time `gorm:"column:occurred_at"`
 	RootRunID             string    `gorm:"column:root_run_id"`
 	RunID                 string    `gorm:"column:run_id"`
-	ParentRunID           string    `gorm:"column:parent_run_id"`
+	TaskID                string    `gorm:"column:task_id"`
 	ThreadID              string    `gorm:"column:thread_id"`
 	UserID                string    `gorm:"column:user_id"`
 	Protocol              string    `gorm:"column:protocol"`
@@ -58,10 +58,10 @@ func newAuditEventModel(event *audit.Event) (auditEventModel, error) {
 		OccurredAt:            event.OccurredAt,
 		RootRunID:             string(event.RootRunID),
 		RunID:                 string(event.RunID),
-		ParentRunID:           string(event.ParentRunID),
+		TaskID:                string(event.TaskID),
 		ThreadID:              string(event.ThreadID),
 		UserID:                event.UserID,
-		Protocol:              event.Protocol,
+		Protocol:              string(event.Protocol),
 		TraceID:               event.TraceID,
 		SpanID:                event.SpanID,
 		AgentName:             event.AgentName,

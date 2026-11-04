@@ -2,8 +2,9 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"time"
+
+	"github.com/ml8s/agent-runtime/internal/domain"
 
 	"google.golang.org/adk/v2/session"
 )
@@ -27,17 +28,17 @@ func (r *Runtime) RetainIdleSessions(
 	protectedSessionIDs map[string]struct{},
 ) (SessionRetentionResult, error) {
 	if r == nil || r.sessions == nil {
-		return SessionRetentionResult{}, fmt.Errorf("session service is unavailable")
+		return SessionRetentionResult{}, domain.NewError(domain.CodeRuntimeSessionUnavailable, "session service is unavailable", nil)
 	}
 	if retention <= 0 {
-		return SessionRetentionResult{}, fmt.Errorf("retention must be greater than zero")
+		return SessionRetentionResult{}, domain.NewError(domain.CodeSessionRetentionInvalid, "retention must be greater than zero", domain.ErrInvalidInput)
 	}
 	if now.IsZero() {
-		return SessionRetentionResult{}, fmt.Errorf("retention now is required")
+		return SessionRetentionResult{}, domain.NewError(domain.CodeSessionRetentionInvalid, "retention now is required", domain.ErrInvalidInput)
 	}
 	response, err := r.sessions.List(ctx, &session.ListRequest{AppName: r.config.AppName})
 	if err != nil {
-		return SessionRetentionResult{}, fmt.Errorf("list sessions for retention: %w", err)
+		return SessionRetentionResult{}, domain.NewError(domain.CodeRuntimeSessionUnavailable, "list sessions for retention", err)
 	}
 
 	result := SessionRetentionResult{}

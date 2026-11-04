@@ -35,12 +35,23 @@ type Message struct {
 	Content string
 }
 
+// OutputResult is the validated final outcome of a run: the generic structured
+// JSON when declared, plus the user-facing text.
+type OutputResult struct {
+	JSON json.RawMessage
+	Text string
+	// Document is the decoded, number-preserving form that JSON was
+	// canonicalized from. It is derived data for adapters that need the parsed
+	// value: JSON stays the canonical product and the wire contract.
+	Document any
+}
+
 // RunRequest is the runtime-neutral input of one execution.
 type RunRequest struct {
 	RunID       string
 	ThreadID    string
 	UserID      string
-	Protocol    string
+	Protocol    domain.Protocol
 	UserMessage string
 	History     []Message
 	Context     json.RawMessage
@@ -57,7 +68,7 @@ func (r RunRequest) Identity() RunIdentity {
 
 // RunResult is the validated outcome of one execution.
 type RunResult struct {
-	Definition deployment.DefinitionRef
+	Definition deployment.DeploymentRef
 	Output     json.RawMessage
 	Text       string
 	Usage      RunUsage
@@ -87,4 +98,7 @@ type Metrics interface {
 	ObserveAgentDelegation(caller, target, status string, duration time.Duration)
 	ObserveMCPCatalog(server, outcome string)
 	ObserveRunRejection(reason string)
+	ObserveRunTerminalReconciliation(status string, duration time.Duration)
+	ObservePendingTerminalRuns(delta int)
+	ObserveRunReservation(result string)
 }

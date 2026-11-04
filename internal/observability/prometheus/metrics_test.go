@@ -25,6 +25,9 @@ func TestMetricsExposeStandardRuntimeDimensions(t *testing.T) {
 	metrics.ObserveAuditAppendBatch(18)
 	metrics.ObserveAuditQueueDepth(0)
 	metrics.ObserveRunRejection("busy")
+	metrics.ObserveRunTerminalReconciliation("succeeded", 25*time.Millisecond)
+	metrics.ObservePendingTerminalRuns(1)
+	metrics.ObserveRunReservation("reserved")
 	metrics.SetDependencyReady("mcp_a", true)
 
 	response := httptest.NewRecorder()
@@ -47,6 +50,10 @@ func TestMetricsExposeStandardRuntimeDimensions(t *testing.T) {
 		"agent_runtime_audit_batch_events",
 		"agent_runtime_audit_queue_depth",
 		"agent_runtime_run_rejections_total",
+		"agent_runtime_run_terminal_reconciliation_total",
+		"agent_runtime_run_terminal_reconciliation_duration_seconds",
+		"agent_runtime_pending_terminal_runs",
+		"agent_runtime_run_reservations_total",
 	} {
 		if !strings.Contains(response.Body.String(), name) {
 			t.Fatalf("metrics body missing %q", name)
@@ -60,5 +67,14 @@ func TestMetricsExposeStandardRuntimeDimensions(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), `agent_runtime_delegations_total{caller="coordinator",status="succeeded",target="worker"} 1`) {
 		t.Fatalf("delegation was not observed: %s", response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `agent_runtime_run_terminal_reconciliation_total{status="succeeded"} 1`) {
+		t.Fatalf("terminal reconciliation was not observed: %s", response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `agent_runtime_pending_terminal_runs 1`) {
+		t.Fatalf("pending terminal gauge was not observed: %s", response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `agent_runtime_run_reservations_total{result="reserved"} 1`) {
+		t.Fatalf("run reservation was not observed: %s", response.Body.String())
 	}
 }

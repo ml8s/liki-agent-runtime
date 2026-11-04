@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/ml8s/agent-runtime/internal/execution"
 
@@ -13,14 +13,6 @@ import (
 	"github.com/ml8s/agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/session"
 )
-
-type runLifecycle struct {
-	mu         sync.Mutex
-	active     map[string]struct{}
-	completed  map[string]struct{}
-	order      []string
-	orderStart int
-}
 
 func (r *Runtime) acquireRun(ctx context.Context) (func(), error) {
 	if err := ctx.Err(); err != nil {
@@ -42,43 +34,44 @@ func (r *Runtime) observeRunRejection(reason string) {
 	}
 }
 
-func newRunLifecycle() *runLifecycle {
-	return &runLifecycle{
-		active:    make(map[string]struct{}),
-		completed: make(map[string]struct{}),
-	}
+// newRunExecution is the single scope constructor for both runtime-owned and
+// protocol-owned lifecycle entry paths.
+func (r *Runtime) newRunExecution(
+	identity execution.RunIdentity,
+	provenance execution.RunProvenance,
+	taskID string,
+	startedAt time.Time,
+	releaseRun func(),
+) *runExecution {
+	return newRunExecution(runExecutionParams{
+		identity:          identity,
+		provenance:        provenance,
+		taskID:            taskID,
+		model:             r.entrypoint.EffectiveModel(r.config.Model),
+		instructionDigest: r.entrypoint.InstructionDigest,
+		definitionName:    r.definition.Metadata.Name,
+		definitionVersion: r.definition.Metadata.Version,
+		definitionDigest:  r.definition.Digest,
+		startedAt:         startedAt,
+		releaseRun:        releaseRun,
+	})
 }
 
-func (l *runLifecycle) begin(runID string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if _, exists := l.active[runID]; exists {
-		return false
+// startRunExecution registers the audit attempt and appends started evidence.
+// On failure it compensates child lifecycles; process-specific cleanup remains
+// with the caller.
+func (r *Runtime) startRunExecution(ctx context.Context, handle AuditAttemptHandle, scope *runExecution) error {
+	if !r.callAuditor.begin(handle, scope) {
+		return domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
 	}
-	if _, exists := l.completed[runID]; exists {
-		return false
+	if err := r.recordRunAudit(ctx, scope, audit.EventRunStarted, audit.StatusRunning, nil); err != nil {
+		auditScope, _ := r.callAuditor.scope(string(handle.AttemptID))
+		r.callAuditor.end(handle, err)
+		_ = r.delegationAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
+		_ = r.toolAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
+		return err
 	}
-	l.active[runID] = struct{}{}
-	return true
-}
-
-func (l *runLifecycle) finish(runID string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	delete(l.active, runID)
-	l.completed[runID] = struct{}{}
-	l.order = append(l.order, runID)
-	// Ring eviction keeps duplicate-run detection bounded without repeatedly
-	// reslicing the backing array, which would grow forever.
-	for len(l.order)-l.orderStart > maxCompletedRunIDs {
-		delete(l.completed, l.order[l.orderStart])
-		l.order[l.orderStart] = ""
-		l.orderStart++
-	}
-	if l.orderStart == len(l.order) {
-		l.order = l.order[:0]
-		l.orderStart = 0
-	}
+	return nil
 }
 
 // BeginAuditRun attaches protocol identity to model callbacks when an official
@@ -91,50 +84,37 @@ func (r *Runtime) BeginAuditRun(ctx context.Context, handle AuditAttemptHandle, 
 		return err
 	}
 	if err := r.ensureDurableRunID(ctx, string(scope.AttemptID)); err != nil {
+		r.observeRunIDRejection(err)
 		return err
 	}
 	if err := handle.validate(); err != nil {
 		return err
 	}
 	if !r.runs.begin(string(scope.AttemptID)) {
+		r.observeRunRejection("run_id_conflict")
 		return domain.NewError(domain.CodeRunIDConflict, "run id is already active or completed", domain.ErrInvalidInput)
 	}
 	releaseRun, err := r.acquireRun(ctx)
 	if err != nil {
-		r.runs.finish(string(scope.AttemptID))
+		r.runs.abort(string(scope.AttemptID))
 		return err
 	}
-	ledgerScope := &runExecution{
-		identity: identity,
-		provenance: execution.RunProvenance{
+	ledgerScope := r.newRunExecution(
+		identity,
+		execution.RunProvenance{
 			Protocol:  scope.Protocol,
 			TraceID:   traceIDFromContext(ctx),
 			SpanID:    spanIDFromContext(ctx),
 			TaskID:    scope.TaskID,
 			MessageID: scope.MessageID,
 		},
-		taskID:            scope.TaskID,
-		model:             r.entrypoint.EffectiveModel(r.config.Model),
-		instructionDigest: r.entrypoint.InstructionDigest,
-		definitionName:    r.definition.Metadata.Name,
-		definitionVersion: r.definition.Metadata.Version,
-		definitionDigest:  r.definition.Digest,
-		startedAt:         r.config.Now(),
-		releaseRun:        releaseRun,
-		activeCalls:       make(map[string]llmCallRuntime),
-	}
-	if !r.callAuditor.begin(handle, ledgerScope) {
+		scope.TaskID,
+		r.config.Now(),
+		releaseRun,
+	)
+	if err := r.startRunExecution(ctx, handle, ledgerScope); err != nil {
 		releaseRun()
-		r.runs.finish(string(scope.AttemptID))
-		return domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
-	}
-	event := r.runEvent(ctx, ledgerScope, audit.EventRunStarted, audit.StatusRunning, nil)
-	if err := r.recordAuditWithRetry(ctx, &event); err != nil {
-		r.runs.finish(string(scope.AttemptID))
-		r.callAuditor.end(handle, err)
-		_ = r.delegationAuditor.FailPending(ctx, ledgerScope)
-		_ = r.toolAuditor.FailPending(ctx, ledgerScope)
-		releaseRun()
+		r.runs.abort(string(scope.AttemptID))
 		return err
 	}
 	return nil
@@ -204,8 +184,19 @@ func (r *Runtime) EndAuditRun(ctx context.Context, handle AuditAttemptHandle, ru
 	case runErr != nil:
 		outcome = auditOutcomeFailed
 	}
+	claimed, wasPending := r.runs.claimClose(string(scope.identity.RunID))
+	if !claimed {
+		return domain.NewError(domain.CodeRuntimeBusy, "run terminal closure is already in progress", nil)
+	}
 	if err := r.closeRunEvidence(ctx, scope, runErr, outcome); err != nil {
+		if !wasPending && r.runs.failClose(string(scope.identity.RunID)) {
+			r.observePendingTerminalRuns(1)
+		}
+		go r.reconcileRunTerminalEvidence(handle, scope, runErr, outcome)
 		return err
+	}
+	if wasPending {
+		r.observePendingTerminalRuns(-1)
 	}
 
 	// Protocol sessions can outlive an attempt. Only a runtime that owns a
@@ -283,7 +274,7 @@ func normalizeRunRequest(request execution.RunRequest) execution.RunRequest {
 	request.RunID = strings.TrimSpace(request.RunID)
 	request.ThreadID = strings.TrimSpace(request.ThreadID)
 	request.UserID = strings.TrimSpace(request.UserID)
-	request.Protocol = strings.TrimSpace(request.Protocol)
+	request.Protocol = domain.Protocol(strings.TrimSpace(string(request.Protocol)))
 	request.UserMessage = strings.TrimSpace(request.UserMessage)
 	return request
 }

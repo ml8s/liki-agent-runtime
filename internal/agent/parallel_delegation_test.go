@@ -76,6 +76,9 @@ func TestRuntimeRunsParallelSingleTurnDelegation(t *testing.T) {
 	}
 	ids := make(map[string]struct{}, 4)
 	for _, event := range append(append([]audit.Event{}, started...), completed...) {
+		if got := event.Payload["delegation_id"]; got == "" {
+			t.Fatalf("delegation event %q has no stable delegation_id", event.ID)
+		}
 		if _, dup := ids[event.ID]; dup {
 			t.Fatalf("delegation event id %q repeated; parallel invocations are not distinct", event.ID)
 		}

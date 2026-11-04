@@ -1,4 +1,4 @@
-package execution
+package agent
 
 import (
 	deployment "github.com/ml8s/agent-runtime/internal/deployment"

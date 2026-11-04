@@ -11,31 +11,12 @@ import (
 
 	"github.com/ml8s/agent-runtime/internal/audit"
 	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/evidence"
 	"github.com/ml8s/agent-runtime/internal/execution"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
-
-// DelegationExecutionRecord is runtime evidence for one standard ADK
-// sub-agent invocation. It does not encode domain workflow semantics.
-type DelegationExecutionRecord struct {
-	CallerAgent           string
-	TargetAgent           string
-	AgentDefinitionDigest string
-	RootRunID             domain.ID
-	RunID                 domain.ID
-	ThreadID              domain.ID
-	UserID                string
-	AgentPath             string
-	Depth                 int
-	Status                audit.Status
-	StartedAt             time.Time
-	FinishedAt            time.Time
-	DurationMS            int64
-	ErrorCode             string
-	ErrorMessage          string
-}
 
 // DelegationAuditor instruments ADK's standard BeforeAgent and
 // AfterAgent callbacks. The entrypoint is excluded because Runtime.Run already
@@ -49,7 +30,7 @@ type DelegationAuditor struct {
 	scope      func(ctx adkagent.Context) (*runExecution, bool)
 
 	mu      sync.Mutex
-	pending map[string]DelegationExecutionRecord
+	pending map[string]evidence.DelegationExecutionRecord
 }
 
 func newDelegationAuditor(
@@ -71,7 +52,7 @@ func newDelegationAuditor(
 		entrypoint: entrypoint,
 		agents:     agents,
 		scope:      scope,
-		pending:    make(map[string]DelegationExecutionRecord),
+		pending:    make(map[string]evidence.DelegationExecutionRecord),
 	}
 }
 
@@ -163,13 +144,13 @@ func (a *DelegationAuditor) CompleteByToolResponse(
 // pendingForTarget returns the oldest pending delegation record for a target
 // Agent. Task delegations are sequential (ADK forbids parallel task calls), so
 // at most one record per target is in flight.
-func (a *DelegationAuditor) pendingForTarget(target string) (string, DelegationExecutionRecord, bool) {
+func (a *DelegationAuditor) pendingForTarget(target string) (string, evidence.DelegationExecutionRecord, bool) {
 	for key, record := range a.pending {
 		if record.TargetAgent == target {
 			return key, record, true
 		}
 	}
-	return "", DelegationExecutionRecord{}, false
+	return "", evidence.DelegationExecutionRecord{}, false
 }
 
 // complete appends the succeeded terminal evidence for one delegation and
@@ -178,10 +159,10 @@ func (a *DelegationAuditor) complete(
 	ctx context.Context,
 	scope *runExecution,
 	key string,
-	record DelegationExecutionRecord,
+	record evidence.DelegationExecutionRecord,
 ) error {
 	finishedAt := a.now()
-	record, err := completeDelegation(record, finishedAt)
+	record, err := evidence.CompleteDelegation(record, finishedAt)
 	if err != nil {
 		return err
 	}
@@ -203,7 +184,7 @@ func (a *DelegationAuditor) complete(
 // retryable by the run's cleanup callback.
 func (a *DelegationAuditor) FailPending(ctx context.Context, scope *runExecution) error {
 	a.mu.Lock()
-	pending := make(map[string]DelegationExecutionRecord)
+	pending := make(map[string]evidence.DelegationExecutionRecord)
 	for key, record := range a.pending {
 		if scope == nil || string(record.RunID) == string(scope.identity.RunID) {
 			pending[key] = record
@@ -213,7 +194,7 @@ func (a *DelegationAuditor) FailPending(ctx context.Context, scope *runExecution
 
 	var firstErr error
 	for key, record := range pending {
-		record, lifecycleErr := failDelegation(
+		record, lifecycleErr := evidence.FailDelegation(
 			record,
 			a.now(),
 			domain.CodeDelegationFailed,
@@ -244,11 +225,11 @@ func (a *DelegationAuditor) FailPending(ctx context.Context, scope *runExecution
 func (a *DelegationAuditor) startedRecord(
 	ctx adkagent.Context,
 	scope *runExecution,
-) (DelegationExecutionRecord, error) {
+) (evidence.DelegationExecutionRecord, error) {
 	target := ctx.AgentName()
 	definition, ok := a.agents[target]
 	if !ok {
-		return DelegationExecutionRecord{}, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("delegated agent %q is not deployed", target), nil)
+		return evidence.DelegationExecutionRecord{}, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("delegated agent %q is not deployed", target), nil)
 	}
 	definitionDigest := definition.Digest
 	path := strings.TrimSpace(ctx.Branch())
@@ -256,7 +237,14 @@ func (a *DelegationAuditor) startedRecord(
 		path = target
 	}
 	caller, depth := callerFromAgentPath(path, a.entrypoint)
-	return DelegationExecutionRecord{
+	invocationID := strings.TrimSpace(ctx.InvocationID())
+	if invocationID == "" {
+		return evidence.DelegationExecutionRecord{}, domain.NewError(domain.CodeRuntimeFailed, "ADK invocation id is required for delegation audit correlation", nil)
+	}
+	delegationID := delegationID(scope.identity.RunID, invocationID, path)
+	return evidence.DelegationExecutionRecord{
+		DelegationID:          delegationID,
+		InvocationID:          invocationID,
 		RootRunID:             scope.identity.RunID,
 		RunID:                 scope.identity.RunID,
 		ThreadID:              scope.identity.ThreadID,
@@ -271,25 +259,26 @@ func (a *DelegationAuditor) startedRecord(
 	}, nil
 }
 
-func (a *DelegationAuditor) record(ctx context.Context, scope *runExecution, record DelegationExecutionRecord, eventType audit.EventType) error {
+func (a *DelegationAuditor) record(ctx context.Context, scope *runExecution, record evidence.DelegationExecutionRecord, eventType audit.EventType) error {
 	target, ok := a.agents[record.TargetAgent]
 	if !ok {
 		return domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("delegated agent %q is not deployed", record.TargetAgent), nil)
 	}
 	event := scopedTerminalEvent(ctx, scope, eventType)
-	event.ID = fmt.Sprintf("%s/%s:%s", scope.identity.RunID, record.AgentPath, eventType)
+	event.ID = record.DelegationID + ":" + string(eventType)
 	event.AgentName = record.TargetAgent
 	event.AgentVersion = target.Version
 	event.AgentDefinitionDigest = target.Digest
 	event.CallerAgent = record.CallerAgent
 	event.TargetAgent = record.TargetAgent
 	event.DelegationDepth = record.Depth
-	event.ParentRunID = scope.identity.RunID
 	event.DurationMS = record.DurationMS
 	event.ErrorCode = record.ErrorCode
 	event.ErrorMessage = record.ErrorMessage
 	event.Payload = map[string]any{
-		"agent_path": record.AgentPath,
+		"delegation_id": record.DelegationID,
+		"agent_path":    record.AgentPath,
+		"invocation_id": record.InvocationID,
 	}
 	if eventType != audit.EventDelegationStarted {
 		event.OccurredAt = record.FinishedAt
@@ -301,6 +290,13 @@ func (a *DelegationAuditor) record(ctx context.Context, scope *runExecution, rec
 		return err
 	}
 	return a.recorder.Record(context.WithoutCancel(ctx), &event)
+}
+
+// delegationID is the stable invocation-scoped identity of one delegation
+// lifecycle. AgentPath preserves tree attribution and InvocationID permits
+// repeated invocations of the same target within one run.
+func delegationID(runID domain.ID, invocationID, agentPath string) string {
+	return fmt.Sprintf("%s/%s/%s", runID, invocationID, agentPath)
 }
 
 func (a *DelegationAuditor) pendingKey(ctx adkagent.Context) string {

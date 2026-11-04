@@ -1,11 +1,14 @@
 package deployment
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ml8s/agent-runtime/internal/domain"
 )
 
 const (
@@ -210,6 +213,29 @@ func TestLoadAgentDeploymentRejectsAmbiguousOutputSchema(t *testing.T) {
 	_, err := LoadAgentDeployment(path)
 	if err == nil || !strings.Contains(err.Error(), `duplicate key "answer"`) {
 		t.Fatalf("LoadAgentDeployment() error = %v, want duplicate output schema key rejection", err)
+	}
+}
+
+func TestLoadAgentDeploymentReturnsStableContractCodes(t *testing.T) {
+	root := t.TempDir()
+	path := writeDeploymentFixture(
+		t,
+		root,
+		genericInstruction,
+		requiredAnswerSchema,
+		strings.Replace(validManifest(), `"agent.deployment.v1"`, `"agent.deployment.v0"`, 1),
+	)
+	_, err := LoadAgentDeployment(path)
+
+	var domainErr *domain.Error
+	if !errors.As(err, &domainErr) || domainErr.Code != CodeDeploymentSchemaVersionInvalid {
+		t.Fatalf("LoadAgentDeployment() error = %v, want code %s", err, CodeDeploymentSchemaVersionInvalid)
+	}
+	if !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("LoadAgentDeployment() error = %v, want invalid-input cause", err)
+	}
+	if !strings.Contains(err.Error(), "agent.deployment.v0") {
+		t.Fatalf("LoadAgentDeployment() error = %v, want schema version detail", err)
 	}
 }
 

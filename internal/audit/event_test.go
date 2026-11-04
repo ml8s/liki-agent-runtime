@@ -30,6 +30,7 @@ func TestEventValidate(t *testing.T) {
 		{name: "missing occurred at", mutate: func(e *Event) { e.OccurredAt = time.Time{} }, wantCode: CodeOccurredAtRequired},
 		{name: "missing run id", mutate: func(e *Event) { e.RunID = "" }, wantCode: CodeRunIDRequired},
 		{name: "missing root run id", mutate: func(e *Event) { e.RootRunID = "" }, wantCode: CodeRootRunIDRequired},
+		{name: "invalid task id", mutate: func(e *Event) { e.TaskID = "task\nid" }, wantCode: CodeTaskIDInvalid},
 		{name: "negative delegation depth", mutate: func(e *Event) { e.DelegationDepth = -1 }, wantCode: CodeInvalidDelegationDepth},
 		{name: "invalid status", mutate: func(e *Event) { e.Status = Status("unknown") }, wantCode: CodeStatusInvalid},
 		{name: "negative duration", mutate: func(e *Event) { e.DurationMS = -1 }, wantCode: CodeInvalidDuration},

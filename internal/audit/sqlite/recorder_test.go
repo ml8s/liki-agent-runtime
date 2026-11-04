@@ -16,6 +16,7 @@ import (
 var (
 	_ audit.Recorder              = (*AuditRecorder)(nil)
 	_ audit.RunExistenceChecker   = (*AuditRecorder)(nil)
+	_ audit.RunReservationStore   = (*AuditRecorder)(nil)
 	_ audit.InterruptionRecoverer = (*AuditRecorder)(nil)
 )
 
@@ -60,6 +61,28 @@ func recorderEvent(runID string, terminal bool) audit.Event {
 		Model:      "test-model",
 		Provider:   "test",
 		Status:     status,
+	}
+}
+
+func TestAuditRecorderReservesRunIDsImmutably(t *testing.T) {
+	store, recorder := newRecorderStore(t)
+	ctx := context.Background()
+	runID := domain.ID("run_reserved")
+	if err := recorder.ReserveRun(ctx, runID); err != nil {
+		t.Fatalf("ReserveRun(new) error = %v", err)
+	}
+	err := recorder.ReserveRun(ctx, runID)
+	var domainErr *domain.Error
+	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRunIDConflict {
+		t.Fatalf("ReserveRun(existing) error = %v, want %s", err, domain.CodeRunIDConflict)
+	}
+	var count int64
+	if err := store.GORM().Table("agent_audit_run_reservations").
+		Where("run_id = ?", string(runID)).Count(&count).Error; err != nil {
+		t.Fatalf("count reservations: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("reservation count = %d, want 1", count)
 	}
 }
 
@@ -324,7 +347,6 @@ func TestAuditRecorderBatchInsertMatchesDirectPath(t *testing.T) {
 	// The same fully-populated event shape is written once through the direct
 	// repository Create and once through the grouped multi-row statement.
 	directEvent := recorderEvent("run_roundtrip_direct", true)
-	directEvent.ParentRunID = "run_parent"
 	directEvent.Protocol = "ag_ui"
 	directEvent.TraceID = "0123456789abcdef0123456789abcdef"
 	directEvent.SpanID = "0123456789abcdef"

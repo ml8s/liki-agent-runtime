@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 	"github.com/ml8s/agent-runtime/internal/execution"
 	"google.golang.org/adk/v2/server/adka2a/v2"
 	"google.golang.org/adk/v2/session"
@@ -24,7 +23,7 @@ func agentPart(
 	event *session.Event,
 	part *genai.Part,
 	exposesText func(author string) bool,
-	entrypoint *deploymentpkg.ResolvedAgentDefinition,
+	entrypoint structuredEntrypoint,
 	structured *execution.OutputResult,
 ) (*a2a.Part, error) {
 	if part == nil {
@@ -47,15 +46,15 @@ func agentPart(
 		}
 		return adka2a.ToA2APart(part, longRunningToolIDs)
 	}
-	if event != nil && entrypoint != nil && event.Author == entrypoint.Name && event.IsFinalResponse() {
-		value, ok := event.Actions.StateDelta[execution.StructuredOutputStateKey(entrypoint.Name)]
+	if event != nil && entrypoint != nil && event.Author == entrypoint.Name() && event.IsFinalResponse() {
+		value, ok := event.Actions.StateDelta[execution.StructuredOutputStateKey(entrypoint.Name())]
 		if ok {
 			var output execution.OutputResult
 			if structured != nil {
 				// The server already parsed this event once for a prior part.
 				output = *structured
 			} else {
-				parsed, err := execution.ParseStructuredOutput(value, entrypoint)
+				parsed, err := entrypoint.ParseStructuredOutput(value)
 				if err != nil {
 					return nil, err
 				}

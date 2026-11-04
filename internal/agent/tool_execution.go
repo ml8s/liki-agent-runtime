@@ -10,35 +10,11 @@ import (
 
 	"github.com/ml8s/agent-runtime/internal/audit"
 	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agent-runtime/internal/evidence"
 	"github.com/ml8s/agent-runtime/internal/execution"
 	adkagent "google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 )
-
-// ToolCallRecord is the runtime evidence for one standard ADK tool call.
-// Raw arguments and results never enter audit; only canonical digests and size
-// are retained.
-type ToolCallRecord struct {
-	CallID       string
-	Tool         string
-	RootRunID    domain.ID
-	RunID        domain.ID
-	ThreadID     domain.ID
-	UserID       string
-	AgentName    string
-	AgentVersion string
-	MCPServer    string
-	Status       audit.Status
-	StartedAt    time.Time
-	FinishedAt   time.Time
-	DurationMS   int64
-	InputDigest  string
-	InputBytes   int64
-	OutputDigest string
-	OutputBytes  int64
-	ErrorCode    string
-	ErrorMessage string
-}
 
 // ToolExecutionAuditor instruments ADK's standard tool callbacks. It records
 // evidence for every LLM Agent in the deployment, including delegated agents.
@@ -52,7 +28,7 @@ type ToolExecutionAuditor struct {
 	scope  func(ctx adkagent.Context) (*runExecution, bool)
 
 	mu      sync.Mutex
-	pending map[string]ToolCallRecord
+	pending map[string]evidence.ToolCallRecord
 }
 
 func newToolExecutionAuditor(
@@ -74,7 +50,7 @@ func newToolExecutionAuditor(
 		provider: provider,
 		agents:   agents,
 		scope:    scope,
-		pending:  make(map[string]ToolCallRecord),
+		pending:  make(map[string]evidence.ToolCallRecord),
 	}
 }
 
@@ -174,14 +150,14 @@ func (a *ToolExecutionAuditor) AfterTool(
 	finishedAt := a.now()
 	var lifecycleErr error
 	if err != nil {
-		record, lifecycleErr = failToolCall(
+		record, lifecycleErr = evidence.FailToolCall(
 			record,
 			finishedAt,
 			domain.CodeToolExecutionFailed,
 			"MCP tool execution failed",
 		)
 	} else {
-		record, lifecycleErr = succeedToolCall(record, result, finishedAt)
+		record, lifecycleErr = evidence.CompleteToolCall(record, result, finishedAt)
 	}
 	if lifecycleErr != nil {
 		return result, lifecycleErr
@@ -215,7 +191,7 @@ func (a *ToolExecutionAuditor) FailPending(
 	scope *runExecution,
 ) error {
 	a.mu.Lock()
-	pending := make(map[string]ToolCallRecord)
+	pending := make(map[string]evidence.ToolCallRecord)
 	for key, record := range a.pending {
 		if scope == nil || string(record.RunID) == string(scope.identity.RunID) {
 			pending[key] = record
@@ -225,7 +201,7 @@ func (a *ToolExecutionAuditor) FailPending(
 
 	var firstErr error
 	for key, record := range pending {
-		record, lifecycleErr := failToolCall(
+		record, lifecycleErr := evidence.FailToolCall(
 			record,
 			a.now(),
 			domain.CodeToolExecutionInterrupted,
@@ -258,8 +234,8 @@ func (a *ToolExecutionAuditor) startedRecord(
 	tool tool.Tool,
 	args map[string]any,
 	scope *runExecution,
-) (ToolCallRecord, error) {
-	record := ToolCallRecord{
+) (evidence.ToolCallRecord, error) {
+	record := evidence.ToolCallRecord{
 		RootRunID: scope.identity.RunID,
 		RunID:     scope.identity.RunID,
 		ThreadID:  scope.identity.ThreadID,
@@ -267,19 +243,19 @@ func (a *ToolExecutionAuditor) startedRecord(
 	}
 	definition, ok := a.agents[ctx.AgentName()]
 	if !ok {
-		return ToolCallRecord{}, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("tool execution agent %q is not deployed", ctx.AgentName()), nil)
+		return evidence.ToolCallRecord{}, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("tool execution agent %q is not deployed", ctx.AgentName()), nil)
 	}
 	reference, allowed := definition.ToolReferenceFor(tool.Name())
 	if !allowed {
-		return ToolCallRecord{}, domain.NewError(domain.CodeToolCallInvalid, fmt.Sprintf("tool %q is not allowlisted for agent %q", tool.Name(), ctx.AgentName()), nil)
+		return evidence.ToolCallRecord{}, domain.NewError(domain.CodeToolCallInvalid, fmt.Sprintf("tool %q is not allowlisted for agent %q", tool.Name(), ctx.AgentName()), nil)
 	}
 	inputDigest, inputBytes, err := audit.CanonicalDigest(args)
 	if err != nil {
-		return ToolCallRecord{}, domain.NewError(domain.CodeToolProvenanceInvalid, "digest tool input", err)
+		return evidence.ToolCallRecord{}, domain.NewError(domain.CodeToolProvenanceInvalid, "digest tool input", err)
 	}
 	callID := ctx.FunctionCallID()
 	if callID == "" {
-		return ToolCallRecord{}, domain.NewError(domain.CodeToolCallIDRequired, "tool function call id is required", nil)
+		return evidence.ToolCallRecord{}, domain.NewError(domain.CodeToolCallIDRequired, "tool function call id is required", nil)
 	}
 	record.CallID = callID
 	record.Tool = tool.Name()
@@ -299,7 +275,7 @@ func (a *ToolExecutionAuditor) startedRecord(
 func (a *ToolExecutionAuditor) record(
 	ctx context.Context,
 	scope *runExecution,
-	record ToolCallRecord,
+	record evidence.ToolCallRecord,
 	eventType audit.EventType,
 ) error {
 	if scope == nil {

@@ -10,9 +10,9 @@ tool semantics. External MCP servers expose deterministic and judgment tools.
 ```text
 Server / machine client
   ↓ A2A JSON-RPC
-┌────────────┐   MCP Streamable HTTP
-│ agent-runtime │──────────────────────→ MCP tools (MCP tools, MCP tools, ...)
-└────────────┘
+┌──────────────┐   MCP Streamable HTTP
+│ agent-runtime │──────────────────→ external MCP tools
+└──────────────┘
   ↑ AG-UI SSE
 caller gateway
 ```
@@ -47,9 +47,11 @@ JSON/code braces. ADK must not interpret those braces as session-state
 placeholders.
 The manifest is decoded strictly by the runtime, then graph, file, MCP, and
 model-setting invariants are evaluated before startup.
-The deployment digest covers the manifest plus resolved instruction and output
-schema artifacts and the ADK graph semantics; it is an audit provenance label,
-not a startup gate. Deployment integrity is owned by deployment system: the content build
+The runtime carries two complementary identities. `Digest` is canonical
+semantic identity over behavior-bearing declarations and resolved artifacts;
+`ManifestDigest` identifies exact source bytes. Semantic digest is the audit
+provenance label, not a startup gate. Deployment integrity is owned by
+deployment system: the content build
 the assembly image from the sha-tagged local runtime base, and deployment system
 assembles and deploys the images by commit sha, so runtime binary, manifest,
 instructions, schemas, and skills roll out and roll back as one unit.
@@ -104,13 +106,15 @@ Protocol adapters never import each other. Database technology is confined to
 | `internal/protocol/a2a` | Agent Card and official A2A JSON-RPC binding |
 | `internal/protocol/agui` | Official AG-UI request decoding and SSE binding |
 | `internal/deployment` | AgentDeployment aggregate, strict loading, validation, and content identity |
-| `internal/agent` | ADK graph, model adapter, MCP tools, audit hooks |
+| `internal/agent` | ADK graph, model adapter, run lifecycle, and audit hooks |
+| `internal/mcp` | MCP client transport, discovery cache, warmup, and readiness |
 | `internal/adksession/sqlite` | Official ADK relational session service with safe SQLite configuration |
 | `internal/domain` | Runtime audit and validation invariants |
 | `internal/audit` | Immutable audit event format and recorder port |
+| `internal/evidence` | Pure lifecycle records and terminal transitions for tool/delegation evidence |
 | `internal/audit/sqlite` | Append-only audit persistence |
 | `internal/protocolstate/sqlite` | A2A task aggregates and push notification configs |
-| `internal/execution` | Runtime-neutral run identity, event projection, output rules, and metrics port |
+| `internal/execution` | Runtime-neutral run request/result, structured-output rules, identity, and metrics port |
 | `internal/observability` | Metric interfaces |
 | `internal/observability/prometheus` | Prometheus implementation |
 | `internal/platform` | Configuration, identity, health interfaces, build metadata |
@@ -138,8 +142,8 @@ session-ID prefixes — removes any heuristic a client-controlled ContextID
 could abuse. The idle-session retention sweep covers only the durable store.
 
 A2A follows the official ADK mapping instead: ContextID owns the ADK session,
-TaskID owns the protocol aggregate, and a deterministic attempt ID owns runtime
-concurrency and audit scope. Attempt audit ends when the execution attempt ends;
+TaskID owns the protocol aggregate, and an attempt ID owns runtime
+concurrency and audit scope. A client MessageID makes that identity deterministic for retries; a missing MessageID gets a server-generated attempt ID. Attempt audit ends when the execution attempt ends;
 the ContextID session can survive an attempt.
 
 Run, thread, and user identifiers are required. A RunID/attempt ID cannot start
@@ -180,7 +184,7 @@ instead.
 
 Raw structured model output is not emitted to protocol observers. Partial
 events are suppressed. Model-text visibility is defined once
-(`agent.ExposesModelText`) and shared by both protocol adapters. A structured
+(`deployment.ExposesModelText`) and shared by both protocol adapters. A structured
 Agent returns validated generic JSON plus
 the user-facing text selected by its configured JSON Pointer; a plain-text
 Agent returns final model text directly. In a delegated plain-text tree, the
@@ -210,7 +214,7 @@ separate SQLite databases from append-only audit evidence; push is enabled only 
 the standard A2A `StreamResponse` payload. No private A2A extension, RPC
 method, or state machine is advertised. Model-text visibility is resolved per
 event author against the deployment by both adapters (via
-`agent.ExposesModelText`), so a structured expert delegated under a plain
+`deployment.ExposesModelText`), so a structured expert delegated under a plain
 entrypoint never leaks raw model JSON on either protocol.
 
 MCP endpoint bindings are deployment-owned complete URLs. A gateway may expose
@@ -255,6 +259,10 @@ for the domain content product profile. A run never emits `RUN_ERROR` after
 The A2A Agent Card uses curated `AgentDefinition` descriptions, mode, tool
 allowlist tags, and deployment provenance. It never includes instructions,
 prompts, raw model output, or tool payloads.
+Protocol adapters consume a `deployment.DeploymentView`; the view returns copies
+of discovery-safe declarations and never exposes loaded instruction text,
+compiled schema state, raw schemas, source bytes, or aggregate-internal
+pointers.
 
 Structured output is decoded once per run. The runtime consumes the final
 event's state delta directly, and both protocol adapters reuse the decoded
@@ -265,15 +273,15 @@ canonical JSON on the wire is unchanged.
 
 The runtime separates pure decision code from stateful execution. The
 functional core is `internal/domain` (stable error codes, identifier rules,
-opaque IDs) and `internal/execution` (run requests/results, pure event state
-transitions, structured-output parsing, and the `LLMCall` lifecycle value):
+opaque IDs) and `internal/execution` (run requests/results, structured-output
+parsing, and the `LLMCall` lifecycle value):
 these packages have no pointer receivers that mutate shared state, and their
 transition functions return new values instead of editing inputs. The
 imperative shell is `internal/agent` plus the protocol/transport adapters: it
-owns bounded process state (attempt registry, lifecycle maps, pending audit
-records, caches) and releases it only after terminal audit evidence is
-durable. New capabilities join the core as pure functions and the shell as
-explicit, lock-annotated state — do not move mutation into `domain` or
+owns ADK event projection/result transitions plus bounded process state
+(run lifecycle state machine, attempt registry, pending audit records, caches)
+and releases it only after terminal audit evidence is durable. New capabilities
+join the core as pure functions and the shell as explicit, lock-annotated state — do not move mutation into `domain` or
 `execution`.
 
 ## Operations
@@ -321,10 +329,11 @@ tool payloads.
 Audit events are append-only SQLite records. They contain execution metadata,
 protocol, trace correlation, agent and deployment digests, versions, status,
 duration, and error codes—not conversation or domain payloads. Both execution
-paths append the terminal run event before releasing process state (session,
-concurrency slot); the A2A path additionally remains retryable by the executor's
-cleanup callback when the terminal append fails, while the AG-UI (Run) path
-relies on startup recovery for that residual failure. Reconciled terminal facts
+paths append the terminal run event before releasing lifecycle state. A failed
+terminal append leaves the RunID/attempt non-reusable and enters pending-close
+reconciliation: AG-UI retries in-process; A2A uses the executor cleanup callback
+and then the shared reconciliation loop. Process-owned sessions and concurrency
+slots are released only after durable terminal evidence. Reconciled terminal facts
 (interrupted runs, model calls, tools, delegations) carry the same trace and
 definition provenance as their started facts.
 

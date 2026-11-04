@@ -85,7 +85,7 @@ func (m *jsonObjectModel) adaptRequest(req *model.LLMRequest) (*model.LLMRequest
 	adaptedConfig.ResponseMIMEType = "application/json"
 	raw, err := json.Marshal(schema)
 	if err != nil {
-		return nil, false, fmt.Errorf("marshal structured output schema: %w", err)
+		return nil, false, domain.NewError(domain.CodeStructuredSchemaInvalid, "marshal structured output schema", err)
 	}
 	instruction := structuredOutputInstructionPrefix + string(raw)
 	if req.Config.SystemInstruction == nil {

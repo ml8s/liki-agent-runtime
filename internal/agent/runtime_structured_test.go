@@ -150,12 +150,6 @@ func TestRuntimeBuildsStandardADKAgentGraph(t *testing.T) {
 	if err := agentDeployment.Validate(); err != nil {
 		t.Fatalf("validate multi-agent agentDeployment: %v", err)
 	}
-	for index := range agentDeployment.Spec.Agents {
-		agent := &agentDeployment.Spec.Agents[index]
-		if err := agent.ValidateAgent(map[string]struct{}{"test": {}}); err != nil {
-			t.Fatalf("validate agent %q: %v", agent.Name, err)
-		}
-	}
 
 	events := &recordingAudit{}
 	runtime := newTestRuntime(t, agentDeployment, events, &fakeLLM{responses: []*model.LLMResponse{{

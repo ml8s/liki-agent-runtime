@@ -38,6 +38,9 @@ const (
 	CodeInvalidAGUIRequest     = "invalid_agui_request"
 	CodeInvalidAGUIMessage     = "invalid_agui_message"
 	CodeUnsupportedAGUIFeature = "unsupported_agui_feature"
+
+	// CodeAGUIConfigInvalid is a stable startup diagnostic code.
+	CodeAGUIConfigInvalid = "agui_config_invalid"
 )
 
 // Handler is the AG-UI protocol adapter.
@@ -58,14 +61,14 @@ type runtime interface {
 // New creates the standard AG-UI HTTP handler.
 func New(runtime runtime, config Config) (*Handler, error) {
 	if runtime == nil {
-		return nil, fmt.Errorf("adk runtime is required")
+		return nil, domain.NewError(CodeAGUIConfigInvalid, "adk runtime is required", domain.ErrInvalidInput)
 	}
 	if config.RunTimeout <= 0 {
 		config.RunTimeout = platformconfig.DefaultRunTimeout
 	}
 	entrypoint := runtime.Entrypoint()
 	if entrypoint == nil || entrypoint.Name == "" {
-		return nil, fmt.Errorf("runtime entrypoint is required")
+		return nil, domain.NewError(CodeAGUIConfigInvalid, "runtime entrypoint is required", domain.ErrInvalidInput)
 	}
 	return &Handler{
 		runtime:    runtime,
@@ -153,7 +156,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		RunID:       runID,
 		ThreadID:    threadID,
 		UserID:      caller,
-		Protocol:    "ag_ui",
+		Protocol:    domain.ProtocolAGUI,
 		UserMessage: content,
 		History:     history,
 		Context:     opaqueJSON(input.ForwardedProps),

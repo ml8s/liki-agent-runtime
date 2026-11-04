@@ -282,8 +282,8 @@ func TestA2AJSONRPCExecutesRuntimeAndClosesAudit(t *testing.T) {
 	if completed[0].ID == started[0].ID {
 		t.Fatal("A2A terminal audit ID collided with started ID")
 	}
-	if completed[0].RunID == completed[0].ParentRunID || completed[0].ParentRunID == "" {
-		t.Fatalf("A2A attempt/task IDs = %q/%q, want distinct attempt and task", completed[0].RunID, completed[0].ParentRunID)
+	if completed[0].RunID == completed[0].TaskID || completed[0].TaskID == "" {
+		t.Fatalf("A2A attempt/task IDs = %q/%q", completed[0].RunID, completed[0].TaskID)
 	}
 
 	// A standard ContextID can carry multiple sequential execution attempts.

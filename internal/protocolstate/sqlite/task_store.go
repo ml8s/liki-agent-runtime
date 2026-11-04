@@ -59,6 +59,14 @@ func (s *TaskStore) Create(ctx context.Context, task *a2a.Task) (taskstore.TaskV
 		string(task.Status.State), statusAt, now.UnixNano(), int64(taskstore.TaskVersion(1)), string(raw),
 	)
 	if isUniqueTaskError(err) {
+		var storedOwner string
+		findErr := s.db.QueryRowContext(ctx, `
+			SELECT owner_key FROM a2a_tasks WHERE task_id = ?`,
+			string(task.ID),
+		).Scan(&storedOwner)
+		if findErr == nil && storedOwner != owner.ownerKey {
+			return taskstore.TaskVersionMissing, a2a.ErrTaskNotFound
+		}
 		return taskstore.TaskVersionMissing, taskstore.ErrTaskAlreadyExists
 	}
 	if err != nil {
@@ -88,12 +96,13 @@ func (s *TaskStore) Update(ctx context.Context, request *taskstore.UpdateRequest
 
 	var current taskstore.TaskVersion
 	var storedOwner string
+	var storedContextID string
 	err = tx.QueryRowContext(ctx, `
-		SELECT version, owner_key
+		SELECT version, owner_key, context_id
 		FROM a2a_tasks
 		WHERE task_id = ?`,
 		string(request.Task.ID),
-	).Scan(&current, &storedOwner)
+	).Scan(&current, &storedOwner, &storedContextID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return taskstore.TaskVersionMissing, a2a.ErrTaskNotFound
 	}
@@ -103,6 +112,9 @@ func (s *TaskStore) Update(ctx context.Context, request *taskstore.UpdateRequest
 	if storedOwner != owner.ownerKey {
 		return taskstore.TaskVersionMissing, a2a.ErrTaskNotFound
 	}
+	if request.Task.ContextID != storedContextID {
+		return taskstore.TaskVersionMissing, fmt.Errorf("%w: task context id is immutable", a2a.ErrInvalidParams)
+	}
 	if request.PrevVersion != taskstore.TaskVersionMissing && request.PrevVersion != current {
 		return taskstore.TaskVersionMissing, taskstore.ErrConcurrentModification
 	}
@@ -110,10 +122,8 @@ func (s *TaskStore) Update(ctx context.Context, request *taskstore.UpdateRequest
 	now := s.now()
 	_, err = tx.ExecContext(ctx, `
 		UPDATE a2a_tasks
-		SET tenant = ?, principal = ?, owner_key = ?, context_id = ?, state = ?,
-		    status_at_unix = ?, updated_at_unix = ?, version = ?, task_json = ?
+		SET state = ?, status_at_unix = ?, updated_at_unix = ?, version = ?, task_json = ?
 		WHERE task_id = ? AND version = ?`,
-		owner.Tenant, owner.User, owner.ownerKey, request.Task.ContextID,
 		string(request.Task.Status.State), statusAt, now.UnixNano(), int64(next), string(raw),
 		string(request.Task.ID), int64(current),
 	)

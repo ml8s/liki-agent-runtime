@@ -3,7 +3,6 @@ package a2a
 import (
 	"sync"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
 	"github.com/ml8s/agent-runtime/internal/execution"
 	"google.golang.org/adk/v2/session"
 )
@@ -26,7 +25,7 @@ type structuredMemo struct {
 	attempts map[string]*structuredEvent
 
 	// parse is a test seam; production always uses execution.ParseStructuredOutput.
-	parse func(value any, definition *deploymentpkg.ResolvedAgentDefinition) (execution.OutputResult, error)
+	parse func(value any, entrypoint structuredEntrypoint) (execution.OutputResult, error)
 }
 
 // structuredOutput returns the memoized parse when the event's state delta
@@ -34,13 +33,13 @@ type structuredMemo struct {
 func (s *Server) structuredOutput(
 	attemptID string,
 	event *session.Event,
-	entrypoint *deploymentpkg.ResolvedAgentDefinition,
+	entrypoint structuredEntrypoint,
 ) (output execution.OutputResult, applies bool, err error) {
 	if event == nil || entrypoint == nil ||
-		event.Author != entrypoint.Name || !event.IsFinalResponse() {
+		event.Author != entrypoint.Name() || !event.IsFinalResponse() {
 		return execution.OutputResult{}, false, nil
 	}
-	value, ok := event.Actions.StateDelta[execution.StructuredOutputStateKey(entrypoint.Name)]
+	value, ok := event.Actions.StateDelta[execution.StructuredOutputStateKey(entrypoint.Name())]
 	if !ok {
 		return execution.OutputResult{}, false, nil
 	}

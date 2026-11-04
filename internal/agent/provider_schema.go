@@ -2,10 +2,10 @@ package agent
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/ml8s/agent-runtime/internal/domain"
 	"google.golang.org/genai"
 )
 
@@ -13,13 +13,13 @@ import (
 // representation used by ADK.
 func ConvertJSONSchemaToGenai(schema *jsonschema.Schema) (*genai.Schema, error) {
 	if schema == nil {
-		return nil, errors.New("schema is required")
+		return nil, domain.NewError(domain.CodeStructuredSchemaInvalid, "schema is required", nil)
 	}
 	if schema.Ref != "" || len(schema.AllOf) != 0 || len(schema.OneOf) != 0 || len(schema.AnyOf) != 0 || schema.Not != nil {
-		return nil, errors.New("unsupported schema composition")
+		return nil, domain.NewError(domain.CodeStructuredSchemaInvalid, "unsupported schema composition", nil)
 	}
 	if len(schema.Types) != 0 {
-		return nil, errors.New("schema type arrays are unsupported")
+		return nil, domain.NewError(domain.CodeStructuredSchemaInvalid, "schema type arrays are unsupported", nil)
 	}
 	result := &genai.Schema{
 		Description: schema.Description,
@@ -30,11 +30,11 @@ func ConvertJSONSchemaToGenai(schema *jsonschema.Schema) (*genai.Schema, error) 
 	for _, value := range schema.Enum {
 		encoded, err := json.Marshal(value)
 		if err != nil {
-			return nil, fmt.Errorf("encode enum value: %w", err)
+			return nil, domain.NewError(domain.CodeStructuredSchemaInvalid, "encode enum value", err)
 		}
 		var text string
 		if err := json.Unmarshal(encoded, &text); err != nil {
-			return nil, errors.New("only string enums are supported")
+			return nil, domain.NewError(domain.CodeStructuredSchemaInvalid, "only string enums are supported", nil)
 		}
 		result.Enum = append(result.Enum, text)
 	}
@@ -77,7 +77,7 @@ func ConvertJSONSchemaToGenai(schema *jsonschema.Schema) (*genai.Schema, error) 
 		for name, property := range schema.Properties {
 			converted, err := ConvertJSONSchemaToGenai(property)
 			if err != nil {
-				return nil, fmt.Errorf("property %q: %w", name, err)
+				return nil, domain.NewError(domain.CodeStructuredSchemaInvalid, fmt.Sprintf("property %q", name), err)
 			}
 			result.Properties[name] = converted
 		}
@@ -101,6 +101,6 @@ func genaiType(value string) (genai.Type, error) {
 	case "object":
 		return genai.TypeObject, nil
 	default:
-		return "", fmt.Errorf("unsupported schema type %q", value)
+		return "", domain.NewError(domain.CodeStructuredSchemaInvalid, fmt.Sprintf("unsupported schema type %q", value), nil)
 	}
 }

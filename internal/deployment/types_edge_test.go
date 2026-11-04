@@ -7,6 +7,15 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
+func resolvedAgents(definitions []AgentDefinition) []ResolvedAgentDefinition {
+	resolved := make([]ResolvedAgentDefinition, 0, len(definitions))
+	for index := range definitions {
+		definition := &definitions[index]
+		resolved = append(resolved, ResolvedAgentDefinition{AgentDefinition: *definition})
+	}
+	return resolved
+}
+
 func testDeploymentForEdge() *AgentDeployment {
 	return &AgentDeployment{
 		SchemaVersion: ContractVersion,
@@ -15,7 +24,7 @@ func testDeploymentForEdge() *AgentDeployment {
 			MCPServers: []MCPServerDefinition{
 				{Name: "mcp-a", EndpointEnv: "MCP_A_URL"},
 			},
-			Agents: ResolvedAgentDefinitions([]AgentDefinition{
+			Agents: resolvedAgents([]AgentDefinition{
 				{
 					Name:    "root",
 					Version: "1.0.0",
@@ -51,12 +60,12 @@ func TestAgentLookupByName(t *testing.T) {
 	}
 }
 
-func TestDefinitionRef(t *testing.T) {
+func TestDeploymentRef(t *testing.T) {
 	deployment := testDeploymentForEdge()
 	deployment.Digest = "sha256:abc"
-	ref := deployment.DefinitionRef()
+	ref := deployment.DeploymentRef()
 	if ref.Name != "test" || ref.Version != "1.0.0" || ref.Digest != "sha256:abc" {
-		t.Fatalf("DefinitionRef() = %#v", ref)
+		t.Fatalf("DeploymentRef() = %#v", ref)
 	}
 }
 
@@ -98,34 +107,6 @@ func TestToolReferenceFor(t *testing.T) {
 	}
 	if _, found := definition.ToolReferenceFor("missing"); found {
 		t.Fatal("ToolReferenceFor(missing) found, want false")
-	}
-}
-
-func TestValidateAgentRechecksInvariants(t *testing.T) {
-	valid := &AgentDefinition{
-		Name:        "main",
-		Description: "test agent",
-		Version:     "1.0.0",
-		Mode:        AgentModeChat,
-		Instruction: FileReference{Path: "instruction.md"},
-		Tools:       ToolAllowlist{Allow: map[string][]string{}},
-	}
-	if err := valid.ValidateAgent(map[string]struct{}{}); err != nil {
-		t.Fatalf("ValidateAgent() error = %v", err)
-	}
-
-	invalid := &AgentDefinition{
-		Name:        "main",
-		Description: "test agent",
-		Version:     "1.0.0",
-		Mode:        AgentModeChat,
-		Instruction: FileReference{Path: "instruction.md"},
-		Tools: ToolAllowlist{Allow: map[string][]string{
-			"unknown": {"tool"},
-		}},
-	}
-	if err := invalid.ValidateAgent(map[string]struct{}{}); err == nil {
-		t.Fatal("ValidateAgent() accepted an unknown MCP server")
 	}
 }
 
@@ -250,15 +231,6 @@ func TestEntrypointDefinitionError(t *testing.T) {
 	deployment := testDeploymentForEdge()
 	if _, err := deployment.EntrypointDefinition(); err != nil {
 		t.Fatalf("EntrypointDefinition() error = %v", err)
-	}
-
-	// A deployment with zero agents cannot have a root.
-	empty := &AgentDeployment{
-		SchemaVersion: ContractVersion,
-		Metadata:      DeploymentMetadata{Name: "empty", Version: "1.0.0"},
-	}
-	if _, err := empty.RootName(); err == nil {
-		t.Fatal("RootName() on empty deployment accepted zero roots")
 	}
 }
 

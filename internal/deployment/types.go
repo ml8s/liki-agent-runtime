@@ -24,7 +24,19 @@ type AgentDeployment struct {
 	Metadata      DeploymentMetadata `json:"metadata"`
 	Spec          DeploymentSpec     `json:"spec"`
 
+	// Digest is the canonical semantic identity of all behavior-bearing
+	// deployment state. It intentionally excludes artifact formatting.
 	Digest string `json:"-"`
+	// ManifestDigest identifies the exact source manifest bytes and is kept
+	// separate from behavior identity so provenance and semantics do not share
+	// one overloaded concept.
+	ManifestDigest string `json:"-"`
+
+	// manifest retains the exact source bytes solely for integrity checks.
+	manifest []byte `json:"-"`
+
+	// agents is an immutable lookup built after aggregate validation/loading.
+	agents map[string]*ResolvedAgentDefinition `json:"-"`
 }
 
 // DeploymentMetadata identifies the deployment artifact.
@@ -78,6 +90,9 @@ type AgentDefinition struct {
 	Model           string   `json:"model,omitempty"`
 	Temperature     *float64 `json:"temperature,omitempty"`
 	MaxOutputTokens int      `json:"maxOutputTokens,omitempty"`
+
+	// toolRefs is an immutable lookup built from a validated allowlist.
+	toolRefs map[string]ToolReference `json:"-"`
 }
 
 // FileReference points at an external artifact relative to the deployment
@@ -156,27 +171,44 @@ type ToolReference struct {
 	Name   string `json:"name"`
 }
 
-// DefinitionRef is the deployment-level identity used by audit and protocols.
-type DefinitionRef struct {
+// DeploymentRef is the deployment-level identity used by audit and protocols.
+// AgentDefinition identity is carried separately by each agent's
+// Name/Version/Digest fields.
+type DeploymentRef struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	Digest  string `json:"digest"`
 }
 
+// DeploymentSource is the runtime's aggregate boundary. Implementations return
+// an aggregate-owned clone so caller-owned declarations cannot change after
+// runtime construction.
+type DeploymentSource interface {
+	View() DeploymentView
+	Clone() (*AgentDeployment, error)
+	AgentDeclarations() []AgentDefinition
+}
+
+var _ DeploymentSource = (*AgentDeployment)(nil)
+
 // ToolReferenceFor returns the unique server-scoped reference for an
-// allowlisted tool, using deterministic server order for audit provenance.
+// allowlisted tool.
 func (a *AgentDefinition) ToolReferenceFor(toolName string) (ToolReference, bool) {
-	servers := make([]string, 0, len(a.Tools.Allow))
-	for server := range a.Tools.Allow {
-		servers = append(servers, server)
+	a.buildToolIndex()
+	reference, ok := a.toolRefs[toolName]
+	return reference, ok
+}
+
+func (a *AgentDefinition) buildToolIndex() {
+	if a.toolRefs == nil {
+		a.toolRefs = make(map[string]ToolReference, len(a.Tools.Allow))
 	}
-	slices.Sort(servers)
-	for _, server := range servers {
-		if slices.Contains(a.Tools.Allow[server], toolName) {
-			return ToolReference{Server: server, Name: toolName}, true
+	clear(a.toolRefs)
+	for server, tools := range a.Tools.Allow {
+		for _, name := range tools {
+			a.toolRefs[name] = ToolReference{Server: server, Name: name}
 		}
 	}
-	return ToolReference{}, false
 }
 
 // References returns the allowlist as a stable, server-scoped list.
@@ -212,15 +244,4 @@ type ResolvedAgentDefinition struct {
 	// RawOutputSchema is the loaded external schema in its neutral resolved
 	// representation. Provider mappings are derived by the execution runtime.
 	RawOutputSchema map[string]any `json:"-"`
-}
-
-// ResolvedAgentDefinitions converts declarations to the resolved aggregate
-// shape used by tests and deployment builders.
-func ResolvedAgentDefinitions(definitions []AgentDefinition) []ResolvedAgentDefinition {
-	resolved := make([]ResolvedAgentDefinition, 0, len(definitions))
-	for index := range definitions {
-		definition := &definitions[index]
-		resolved = append(resolved, ResolvedAgentDefinition{AgentDefinition: *definition})
-	}
-	return resolved
 }

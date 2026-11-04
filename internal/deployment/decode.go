@@ -11,10 +11,14 @@ import (
 func decodeAgentDeployment(raw []byte) (*AgentDeployment, error) {
 	var deployment AgentDeployment
 	if err := decodeStrictJSON(raw, &deployment); err != nil {
-		return nil, fmt.Errorf("decode agent deployment: %w", err)
+		return nil, artifactErrorWrap(CodeDeploymentArtifactInvalid, "decode agent deployment", err)
 	}
 	if deployment.SchemaVersion != ContractVersion {
-		return nil, fmt.Errorf("unsupported schema_version %q; want %q", deployment.SchemaVersion, ContractVersion)
+		return nil, validationError(
+			CodeDeploymentSchemaVersionInvalid,
+			"unsupported schema_version %q; want %q",
+			deployment.SchemaVersion, ContractVersion,
+		)
 	}
 	if err := deployment.validate(); err != nil {
 		return nil, err
@@ -31,14 +35,14 @@ func decodeStrictJSON(raw []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		return fmt.Errorf("decode JSON document: %w", err)
+		return artifactErrorWrap(CodeDeploymentArtifactInvalid, "decode JSON document", err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		if err == nil {
-			return errors.New("JSON document contains trailing values")
+			return artifactError(CodeDeploymentArtifactInvalid, "JSON document contains trailing values")
 		}
-		return fmt.Errorf("decode JSON trailing input: %w", err)
+		return artifactErrorWrap(CodeDeploymentArtifactInvalid, "decode JSON trailing input", err)
 	}
 	return nil
 }
@@ -47,14 +51,14 @@ func rejectDuplicateJSONKeys(raw []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	if err := rejectDuplicateKeysInValue(decoder, "$"); err != nil {
-		return fmt.Errorf("JSON object key conflict: %w", err)
+		return artifactErrorWrap(CodeDeploymentArtifactInvalid, "JSON object key conflict", err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		if err == nil {
-			return errors.New("trailing JSON value")
+			return artifactError(CodeDeploymentArtifactInvalid, "trailing JSON value")
 		}
-		return fmt.Errorf("trailing JSON input: %w", err)
+		return artifactErrorWrap(CodeDeploymentArtifactInvalid, "trailing JSON input", err)
 	}
 	return nil
 }
@@ -62,7 +66,7 @@ func rejectDuplicateJSONKeys(raw []byte) error {
 func rejectDuplicateKeysInValue(decoder *json.Decoder, path string) error {
 	token, err := decoder.Token()
 	if err != nil {
-		return fmt.Errorf("read JSON token: %w", err)
+		return artifactErrorWrap(CodeDeploymentArtifactInvalid, "read JSON token", err)
 	}
 	delim, ok := token.(json.Delim)
 	if !ok {
@@ -74,14 +78,14 @@ func rejectDuplicateKeysInValue(decoder *json.Decoder, path string) error {
 		for decoder.More() {
 			keyToken, err := decoder.Token()
 			if err != nil {
-				return fmt.Errorf("read object key: %w", err)
+				return artifactErrorWrap(CodeDeploymentArtifactInvalid, "read object key", err)
 			}
 			key, ok := keyToken.(string)
 			if !ok {
-				return fmt.Errorf("expected object key at %s", path)
+				return artifactError(CodeDeploymentArtifactInvalid, "expected object key at %s", path)
 			}
 			if _, exists := seen[key]; exists {
-				return fmt.Errorf("duplicate key %q at %s", key, path)
+				return artifactError(CodeDeploymentArtifactInvalid, "duplicate key %q at %s", key, path)
 			}
 			seen[key] = struct{}{}
 			if err := rejectDuplicateKeysInValue(decoder, path+"."+key); err != nil {
@@ -101,6 +105,6 @@ func rejectDuplicateKeysInValue(decoder *json.Decoder, path string) error {
 		_, err = decoder.Token()
 		return err
 	default:
-		return fmt.Errorf("unexpected delimiter %q", delim)
+		return artifactError(CodeDeploymentArtifactInvalid, "unexpected delimiter %q", delim)
 	}
 }

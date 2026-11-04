@@ -61,7 +61,7 @@ type RunAuditIdentity struct {
 	AttemptID domain.AttemptID
 	ThreadID  string
 	UserID    string
-	Protocol  string
+	Protocol  domain.Protocol
 	TaskID    string
 	MessageID string
 }

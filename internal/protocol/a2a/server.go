@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/gob"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -34,6 +33,10 @@ import (
 const (
 	// Path is the canonical JSON-RPC binding declared by the Agent Card.
 	Path = "/a2a"
+
+	// CodeA2AConfigInvalid is a stable startup diagnostic code for adapter
+	// configuration contract violations.
+	CodeA2AConfigInvalid = "a2a_config_invalid"
 )
 
 func init() {
@@ -101,10 +104,10 @@ type Server struct {
 // New wires the ADK runtime directly into the official A2A server stack.
 func New(runtime *agent.Runtime, config Config) (*Server, error) {
 	if runtime == nil {
-		return nil, fmt.Errorf("adk runtime is required")
+		return nil, domain.NewError(CodeA2AConfigInvalid, "adk runtime is required", domain.ErrInvalidInput)
 	}
 	if config.PublicURL == nil {
-		return nil, fmt.Errorf("public url is required")
+		return nil, domain.NewError(CodeA2AConfigInvalid, "public url is required", domain.ErrInvalidInput)
 	}
 	if config.RunTimeout <= 0 {
 		config.RunTimeout = platformconfig.DefaultRunTimeout
@@ -116,9 +119,13 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 		config.ServicePrincipal = "agent-runtime-a2a"
 	}
 	if config.Push.partial() && !config.Push.enabled() {
-		return nil, fmt.Errorf("a2a push notifications require both config store and sender")
+		return nil, domain.NewError(CodeA2AConfigInvalid, "a2a push notifications require both config store and sender", domain.ErrInvalidInput)
 	}
-	server := &Server{structured: structuredMemo{parse: execution.ParseStructuredOutput}}
+	server := &Server{structured: structuredMemo{
+		parse: func(value any, entrypoint structuredEntrypoint) (execution.OutputResult, error) {
+			return entrypoint.ParseStructuredOutput(value)
+		},
+	}}
 	root := runtime.RootAgent()
 	deployment := runtime.AgentDeployment()
 	entrypoint := runtime.Entrypoint()
@@ -155,8 +162,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			// deployment, mirroring the AG-UI projector. A structured expert
 			// delegated under a plain entrypoint must not leak raw JSON.
 			exposesText := func(author string) bool {
-				definition, ok := deployment.Agent(author)
-				return ok && deploymentpkg.ExposesModelText(&definition.AgentDefinition)
+				return deployment.ExposesModelText(author)
 			}
 			attemptID, _ := ctx.Value(executionAttemptKey{}).(string)
 			structured, applies, err := server.structuredOutput(attemptID, event, resolvedEntrypoint)
@@ -191,7 +197,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 				AttemptID: domain.AttemptID(attempt.ID),
 				ThreadID:  request.ContextID,
 				UserID:    caller,
-				Protocol:  "a2a",
+				Protocol:  domain.ProtocolA2A,
 				TaskID:    attempt.TaskID,
 				MessageID: attempt.MessageID,
 			}
@@ -237,7 +243,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 				}
 			}
 			options = append(options, agent.WithPreservedSession())
-			attempt := executionAttemptFromRequest(request).withID()
+			attempt := executionAttemptFromContext(ctx, request)
 			server.structured.release(attempt.ID)
 			if auditErr := runtime.EndAuditRun(ctx, agent.AuditAttemptHandle{
 				ContextID: attempt.ContextID,
@@ -323,8 +329,8 @@ func (authenticatedPrincipalInterceptor) After(context.Context, *a2asrv.CallCont
 // safeAgentSkills builds standard A2A skills from curated deployment metadata.
 // ADK's default skill builder derives descriptions from instructions, which
 // would turn prompt material into public discovery data.
-func safeAgentSkills(deployment *deploymentpkg.AgentDeployment) []a2a.AgentSkill {
-	entrypoint, err := deployment.EntrypointDefinition()
+func safeAgentSkills(deployment deploymentpkg.DeploymentView) []a2a.AgentSkill {
+	entrypoint, err := deployment.Entrypoint()
 	if err != nil {
 		return nil
 	}

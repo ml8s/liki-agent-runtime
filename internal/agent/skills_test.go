@@ -22,6 +22,21 @@ func minimalSkillAgent() *deploymentpkg.AgentDefinition {
 	}
 }
 
+func validateAgentDefinition(def *deploymentpkg.AgentDefinition, servers map[string]struct{}) error {
+	mcpServers := make([]deploymentpkg.MCPServerDefinition, 0, len(servers))
+	for name := range servers {
+		mcpServers = append(mcpServers, deploymentpkg.MCPServerDefinition{Name: name})
+	}
+	return (&deploymentpkg.AgentDeployment{
+		SchemaVersion: deploymentpkg.ContractVersion,
+		Metadata:      deploymentpkg.DeploymentMetadata{Name: "skills-test", Version: "1.0.0"},
+		Spec: deploymentpkg.DeploymentSpec{
+			MCPServers: mcpServers,
+			Agents:     testagent.ResolvedAgents([]deploymentpkg.AgentDefinition{*def}),
+		},
+	}).Validate()
+}
+
 func TestAgentSkillsBindingValidation(t *testing.T) {
 	fullAllow := map[string][]string{
 		"skilltoolset": {"list_skills", "load_skill", "load_skill_resource"},
@@ -99,7 +114,7 @@ func TestAgentSkillsBindingValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			def := minimalSkillAgent()
 			tc.mutate(def)
-			err := def.ValidateAgent(map[string]struct{}{})
+			err := validateAgentDefinition(def, map[string]struct{}{})
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("error = %v, want nil", err)

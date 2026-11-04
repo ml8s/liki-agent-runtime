@@ -1,4 +1,4 @@
-package agent
+package mcp
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"google.golang.org/adk/v2/tool"
 )
 
-// warmMCPCatalogs pre-discovers each server's tool catalog once at startup so
+// WarmCatalogs pre-discovers each server's tool catalog once at startup so
 // the first run after a restart does not pay the lazy cold start (session
 // initialize plus tools/list per server). Best effort: failures are ignored
 // here because Tools() failure handling already serves the stale catalog or
@@ -17,10 +17,10 @@ import (
 // catalog metrics. The whole warmup is bounded by one budget so a hung server
 // cannot delay startup accounting forever (the goroutine, not startup —
 // NewRuntime never blocks on it).
-func warmMCPCatalogs(config Config, toolsets []tool.Toolset) {
-	budget := config.MCPHealthTimeout
+func WarmCatalogs(config ClientConfig, toolsets []tool.Toolset) {
+	budget := config.HealthTimeout
 	if budget <= 0 {
-		budget = config.MCPTimeout
+		budget = config.Timeout
 	}
 	if budget <= 0 {
 		budget = platformconfig.DefaultMCPTimeout

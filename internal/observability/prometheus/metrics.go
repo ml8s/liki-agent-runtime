@@ -14,28 +14,32 @@ import (
 // Metrics is the Prometheus implementation of the protocol and runtime
 // observation interfaces.
 type Metrics struct {
-	registry           *prometheus.Registry
-	protocolRequests   *prometheus.CounterVec
-	protocolLatency    *prometheus.HistogramVec
-	activeStreams      *prometheus.GaugeVec
-	llmTokens          *prometheus.CounterVec
-	llmCalls           *prometheus.CounterVec
-	llmCallLatency     *prometheus.HistogramVec
-	toolCalls          *prometheus.CounterVec
-	toolLatency        *prometheus.HistogramVec
-	delegations        *prometheus.CounterVec
-	delegationLatency  *prometheus.HistogramVec
-	dependencyUp       *prometheus.GaugeVec
-	auditAppends       *prometheus.CounterVec
-	auditAppendLatency *prometheus.HistogramVec
-	mcpCatalogRequests *prometheus.CounterVec
-	auditBatchEvents   *prometheus.HistogramVec
-	auditQueueDepth    *prometheus.GaugeVec
-	runRejections      *prometheus.CounterVec
-	pushConfigs        *prometheus.CounterVec
-	pushDeliveries     *prometheus.CounterVec
-	pushDelivery       *prometheus.HistogramVec
-	storageRecords     *prometheus.GaugeVec
+	registry                          *prometheus.Registry
+	protocolRequests                  *prometheus.CounterVec
+	protocolLatency                   *prometheus.HistogramVec
+	activeStreams                     *prometheus.GaugeVec
+	llmTokens                         *prometheus.CounterVec
+	llmCalls                          *prometheus.CounterVec
+	llmCallLatency                    *prometheus.HistogramVec
+	toolCalls                         *prometheus.CounterVec
+	toolLatency                       *prometheus.HistogramVec
+	delegations                       *prometheus.CounterVec
+	delegationLatency                 *prometheus.HistogramVec
+	dependencyUp                      *prometheus.GaugeVec
+	auditAppends                      *prometheus.CounterVec
+	auditAppendLatency                *prometheus.HistogramVec
+	mcpCatalogRequests                *prometheus.CounterVec
+	auditBatchEvents                  *prometheus.HistogramVec
+	auditQueueDepth                   *prometheus.GaugeVec
+	runRejections                     *prometheus.CounterVec
+	runTerminalReconciliation         *prometheus.CounterVec
+	runTerminalReconciliationDuration *prometheus.HistogramVec
+	pendingTerminalRuns               *prometheus.GaugeVec
+	runReservations                   *prometheus.CounterVec
+	pushConfigs                       *prometheus.CounterVec
+	pushDeliveries                    *prometheus.CounterVec
+	pushDelivery                      *prometheus.HistogramVec
+	storageRecords                    *prometheus.GaugeVec
 }
 
 // New builds a metrics registry with runtime and protocol collectors.
@@ -117,6 +121,23 @@ func New() *Metrics {
 			Name: "agent_runtime_run_rejections_total",
 			Help: "Runs rejected before execution by reason.",
 		}, []string{"reason"}),
+		runTerminalReconciliation: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "agent_runtime_run_terminal_reconciliation_total",
+			Help: "Attempts to append terminal evidence after a run request returned.",
+		}, []string{"status"}),
+		runTerminalReconciliationDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "agent_runtime_run_terminal_reconciliation_duration_seconds",
+			Help:    "Duration spent appending deferred terminal run evidence.",
+			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30},
+		}, []string{"status"}),
+		pendingTerminalRuns: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "agent_runtime_pending_terminal_runs",
+			Help: "Run executions awaiting durable terminal evidence retry.",
+		}, nil),
+		runReservations: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "agent_runtime_run_reservations_total",
+			Help: "Durable RunID reservation outcomes.",
+		}, []string{"result"}),
 		pushConfigs: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "agent_runtime_a2a_push_config_operations_total",
 			Help: "Standard A2A push notification config operations.",
@@ -157,6 +178,10 @@ func New() *Metrics {
 		metrics.auditBatchEvents,
 		metrics.auditQueueDepth,
 		metrics.runRejections,
+		metrics.runTerminalReconciliation,
+		metrics.runTerminalReconciliationDuration,
+		metrics.pendingTerminalRuns,
+		metrics.runReservations,
 		metrics.pushConfigs,
 		metrics.pushDeliveries,
 		metrics.pushDelivery,
@@ -214,6 +239,23 @@ func (m *Metrics) ObserveAuditQueueDepth(depth int) {
 // ObserveRunRejection records a run rejected before execution.
 func (m *Metrics) ObserveRunRejection(reason string) {
 	m.runRejections.WithLabelValues(reason).Inc()
+}
+
+// ObserveRunTerminalReconciliation records whether deferred terminal evidence
+// succeeded, needs another retry, stopped early, or exhausted its budget.
+func (m *Metrics) ObserveRunTerminalReconciliation(status string, duration time.Duration) {
+	m.runTerminalReconciliation.WithLabelValues(status).Inc()
+	m.runTerminalReconciliationDuration.WithLabelValues(status).Observe(duration.Seconds())
+}
+
+// ObservePendingTerminalRuns changes the number of runs awaiting terminal retry.
+func (m *Metrics) ObservePendingTerminalRuns(delta int) {
+	m.pendingTerminalRuns.WithLabelValues().Add(float64(delta))
+}
+
+// ObserveRunReservation records one durable RunID reservation outcome.
+func (m *Metrics) ObserveRunReservation(result string) {
+	m.runReservations.WithLabelValues(result).Inc()
 }
 
 // ObservePushConfig records one standard A2A push notification config operation.

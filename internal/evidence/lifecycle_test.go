@@ -1,4 +1,4 @@
-package agent
+package evidence
 
 import (
 	"testing"
@@ -18,9 +18,9 @@ func TestSucceedToolCallDoesNotMutatePreviousRecord(t *testing.T) {
 	started := startedToolCall()
 	result := map[string]any{"ok": true}
 
-	next, err := succeedToolCall(started, result, lifecycleNow)
+	next, err := CompleteToolCall(started, result, lifecycleNow)
 	if err != nil {
-		t.Fatalf("succeedToolCall() error = %v", err)
+		t.Fatalf("CompleteToolCall() error = %v", err)
 	}
 	if next.Status != audit.StatusSucceeded || next.DurationMS != 1000 || next.OutputBytes == 0 {
 		t.Fatalf("next record = %#v", next)
@@ -32,9 +32,9 @@ func TestSucceedToolCallDoesNotMutatePreviousRecord(t *testing.T) {
 
 func TestFailToolCallDoesNotMutatePreviousRecord(t *testing.T) {
 	started := startedToolCall()
-	next, err := failToolCall(started, lifecycleNow, domain.CodeToolExecutionFailed, "failed")
+	next, err := FailToolCall(started, lifecycleNow, domain.CodeToolExecutionFailed, "failed")
 	if err != nil {
-		t.Fatalf("failToolCall() error = %v", err)
+		t.Fatalf("FailToolCall() error = %v", err)
 	}
 	if next.Status != audit.StatusFailed || next.ErrorCode != domain.CodeToolExecutionFailed {
 		t.Fatalf("next record = %#v", next)
@@ -50,9 +50,9 @@ func startedDelegation() DelegationExecutionRecord {
 
 func TestCompleteDelegationDoesNotMutatePreviousRecord(t *testing.T) {
 	started := startedDelegation()
-	next, err := completeDelegation(started, lifecycleNow)
+	next, err := CompleteDelegation(started, lifecycleNow)
 	if err != nil {
-		t.Fatalf("completeDelegation() error = %v", err)
+		t.Fatalf("CompleteDelegation() error = %v", err)
 	}
 	if next.Status != audit.StatusSucceeded || next.DurationMS != 1000 {
 		t.Fatalf("next record = %#v", next)
@@ -64,11 +64,11 @@ func TestCompleteDelegationDoesNotMutatePreviousRecord(t *testing.T) {
 
 func TestFailDelegationRejectsTerminalRecord(t *testing.T) {
 	started := startedDelegation()
-	terminal, err := failDelegation(started, lifecycleNow, domain.CodeDelegationFailed, "failed")
+	terminal, err := FailDelegation(started, lifecycleNow, domain.CodeDelegationFailed, "failed")
 	if err != nil {
 		t.Fatalf("failDelegation() error = %v", err)
 	}
-	if _, err := failDelegation(terminal, lifecycleNow, domain.CodeDelegationFailed, "failed again"); err == nil {
-		t.Fatal("failDelegation() unexpectedly accepted a terminal record")
+	if _, err := FailDelegation(terminal, lifecycleNow, domain.CodeDelegationFailed, "failed again"); err == nil {
+		t.Fatal("FailDelegation() unexpectedly accepted a terminal record")
 	}
 }

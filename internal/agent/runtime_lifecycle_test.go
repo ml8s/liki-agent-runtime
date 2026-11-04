@@ -43,3 +43,10 @@ func (m *lifecycleStubMetrics) ObserveMCPCatalog(string, string)                
 func (m *lifecycleStubMetrics) ObserveRunRejection(reason string) {
 	m.calls = append(m.calls, "run_rejection/"+reason)
 }
+
+func (m *lifecycleStubMetrics) ObserveRunTerminalReconciliation(status string, _ time.Duration) {
+	m.calls = append(m.calls, "run_terminal_reconciliation/"+status)
+}
+
+func (m *lifecycleStubMetrics) ObservePendingTerminalRuns(int) {}
+func (m *lifecycleStubMetrics) ObserveRunReservation(string)   {}

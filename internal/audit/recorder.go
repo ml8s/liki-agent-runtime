@@ -19,6 +19,13 @@ type RunExistenceChecker interface {
 	RunExists(ctx context.Context, runID domain.ID) (bool, error)
 }
 
+// RunReservationStore durably claims a RunID before the in-memory lifecycle is
+// created. Reservations are identity tombstones, not audit facts: they are
+// never reused, rewritten, or deleted when a run later fails.
+type RunReservationStore interface {
+	ReserveRun(ctx context.Context, runID domain.ID) error
+}
+
 // InterruptionRecoverer is an optional recorder capability for closing audit
 // lifecycles left running by a hard process interruption. Recovery is strictly
 // append-only: existing evidence is never rewritten.

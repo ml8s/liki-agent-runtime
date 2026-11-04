@@ -66,10 +66,11 @@ func TestFourAgentArtifactIsLoadable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAgentDeployment() error = %v", err)
 	}
-	rootName, err := deployment.RootName()
+	entrypoint, err := deployment.EntrypointDefinition()
 	if err != nil {
 		t.Fatal(err)
 	}
+	rootName := entrypoint.Name
 	if rootName != "main" || len(deployment.Spec.Agents) != 4 {
 		t.Fatalf("root=%q agents=%d, want main/4", rootName, len(deployment.Spec.Agents))
 	}

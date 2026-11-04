@@ -36,6 +36,9 @@ const (
 	CodeAgentDefinitionMissing            = "agent_definition_missing"
 	CodeAgentDefinitionInvalid            = "agent_definition_invalid"
 	CodeStructuredOutputCapabilityInvalid = "structured_output_capability_invalid"
+	CodeStructuredSchemaInvalid           = "structured_schema_invalid"
+	CodeSkillToolsetUnavailable           = "skill_toolset_unavailable"
+	CodeSessionRetentionInvalid           = "session_retention_invalid"
 
 	// Runtime execution codes (internal/agent Run / audit)
 	CodeRuntimeCancelled          = "runtime_cancelled"

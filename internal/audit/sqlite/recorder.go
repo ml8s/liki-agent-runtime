@@ -173,6 +173,23 @@ func (r *AuditRecorder) RunExists(ctx context.Context, runID domain.ID) (bool, e
 	return r.repository.RunExists(ctx, runID)
 }
 
+// ReserveRun serializes the identity claim through the dedicated audit writer,
+// so a reservation cannot race the first lifecycle event in another connection.
+func (r *AuditRecorder) ReserveRun(ctx context.Context, runID domain.ID) error {
+	repository := r.repository
+	job := recorderJob{
+		run: func(db *gorm.DB) error {
+			return repository.reserveRun(ctx, db, runID)
+		},
+		result: make(chan recorderResult, 1),
+	}
+	if err := r.enqueue(job); err != nil {
+		return err
+	}
+	result := <-job.result
+	return result.err
+}
+
 // RecoverInterrupted closes interrupted lifecycles on the dedicated write
 // connection, serialized with appends, inside the recovery transaction.
 func (r *AuditRecorder) RecoverInterrupted(ctx context.Context, now time.Time) error {

@@ -101,20 +101,39 @@ func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
 	}
 }
 
+func TestNewRuntimeFailsClosedWithoutDurableRunIDSupport(t *testing.T) {
+	_, err := agent.NewRuntime(agent.Config{
+		Model:                "test-model",
+		AgentDeployment:      agent.NewTestDeployment(t),
+		AuditRecorder:        nopAuditRecorder{},
+		RequireDurableRunIDs: true,
+	})
+	var domainErr *domain.Error
+	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRuntimeInitFailed {
+		t.Fatalf("NewRuntime() error = %v, want %s", err, domain.CodeRuntimeInitFailed)
+	}
+}
+
 func TestRuntimeExposesImmutableDeploymentViews(t *testing.T) {
 	runtime, _ := newAuditRuntime(t)
 	entrypoint := runtime.Entrypoint()
 	entrypoint.Name = "mutated"
 	entrypoint.Tools.Allow["test"] = []string{"unauthorized"}
-	mutatedDeployment := runtime.AgentDeployment()
-	mutatedDeployment.Metadata.Name = "mutated-agentDeployment"
+	mutatedEntrypoint, err := runtime.AgentDeployment().Entrypoint()
+	if err != nil {
+		t.Fatalf("AgentDeployment().Entrypoint() error = %v", err)
+	}
+	mutatedEntrypoint.Name = "mutated-agentDeployment"
 
 	unchangedEntrypoint := runtime.Entrypoint()
-	unchangedDeployment := runtime.AgentDeployment()
+	unchangedEntrypointView, err := runtime.AgentDeployment().Entrypoint()
+	if err != nil {
+		t.Fatalf("AgentDeployment().Entrypoint() error = %v", err)
+	}
 	if unchangedEntrypoint.Name == "mutated" ||
 		len(unchangedEntrypoint.Tools.Allow["test"]) != 1 ||
 		unchangedEntrypoint.Tools.Allow["test"][0] != "test_tool" ||
-		unchangedDeployment.Metadata.Name == "mutated-agentDeployment" {
+		unchangedEntrypointView.Name == "mutated-agentDeployment" {
 		t.Fatalf("runtime view reflected protocol mutation: %+v", unchangedEntrypoint)
 	}
 }
