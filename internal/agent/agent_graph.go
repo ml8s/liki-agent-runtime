@@ -21,6 +21,7 @@ import (
 // (assembled by NewRuntime).
 type agentGraphDeps struct {
 	mcpToolsets       []tool.Toolset
+	clientToolset     tool.Toolset
 	modelName         string
 	resolveModel      func(string) (model.LLM, error)
 	temperature       float32
@@ -95,6 +96,12 @@ func (b *agentGraphBuilder) build(definition *agentdeployment.ResolvedAgentDefin
 		}
 		toolsets = append(toolsets, skillToolset)
 	}
+	// AG-UI client tools are run-scoped declarations from the trusted product
+	// gateway. Expose them on the entrypoint so delegated domain agents cannot
+	// turn UI notifications into an internal control channel.
+	if clientToolsAllowedFor(definition.Name, b.entrypointName) {
+		toolsets = append(toolsets, b.deps.clientToolset)
+	}
 	delete(b.building, definition.Name)
 	// Per-Agent model settings fall back to the runtime-wide defaults.
 	aiModel, err := b.deps.resolveModel(declaration.EffectiveModel(b.deps.modelName))
@@ -140,4 +147,10 @@ func (b *agentGraphBuilder) build(definition *agentdeployment.ResolvedAgentDefin
 	}
 	b.built[declaration.Name] = built
 	return built, nil
+}
+
+// clientToolsAllowedFor keeps AG-UI client tools on the public entrypoint.
+// Delegated domain agents receive server-owned tools only.
+func clientToolsAllowedFor(agentName, entrypointName string) bool {
+	return agentName == entrypointName
 }

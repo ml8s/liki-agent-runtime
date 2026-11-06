@@ -247,7 +247,11 @@ func (a *ToolExecutionAuditor) startedRecord(
 	}
 	reference, allowed := definition.ToolReferenceFor(tool.Name())
 	if !allowed {
-		return evidence.ToolCallRecord{}, domain.NewError(domain.CodeToolCallInvalid, fmt.Sprintf("tool %q is not allowlisted for agent %q", tool.Name(), ctx.AgentName()), nil)
+		declared, isClientTool := clientToolFromContext(ctx, tool.Name())
+		if !isClientTool || declared.Name != tool.Name() {
+			return evidence.ToolCallRecord{}, domain.NewError(domain.CodeToolCallInvalid, fmt.Sprintf("tool %q is not allowlisted for agent %q", tool.Name(), ctx.AgentName()), nil)
+		}
+		reference = agentdeployment.ToolReference{Server: ClientToolServer, Name: tool.Name()}
 	}
 	inputDigest, inputBytes, err := audit.CanonicalDigest(args)
 	if err != nil {

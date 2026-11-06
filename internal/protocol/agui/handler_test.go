@@ -127,10 +127,87 @@ func TestAGUIRejectsUnsupportedCapabilitiesInsteadOfDroppingThem(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 	cases := map[string]string{
-		"client tools":           `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":"hi"}],"tools":[{"name":"x","description":"x","parameters":{}}]}`,
 		"non-empty client state": `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":"hi"}],"state":{"step":1}}`,
 		"system history":         `{"threadId":"t","runId":"r","messages":[{"id":"s","role":"system","content":"rules"},{"id":"m","role":"user","content":"hi"}]}`,
 		"multimodal":             `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":[{"type":"image","url":"https://example.test/a.png"}]}]}`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, authenticatedRequest(t, body))
+			if response.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestAGUIPassesClientToolsToRuntime(t *testing.T) {
+	var captured execution.RunRequest
+	runtime := &capturingRuntime{
+		capture: &captured,
+		result:  execution.RunResult{Text: "ready"},
+	}
+	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := `{
+		"threadId":"t",
+		"runId":"r",
+		"messages":[{"id":"m","role":"user","content":"hi"}],
+		"tools":[{
+			"name":"sync_ui",
+			"description":"Send a structured UI proposal to the client.",
+			"parameters":{
+				"type":"object",
+				"properties":{"standard_time":{"type":"string"}},
+				"required":["standard_time"],
+				"additionalProperties":false
+			}
+		}]
+	}`
+	request := authenticatedRequest(t, body)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if len(captured.ClientTools) != 1 {
+		t.Fatalf("ClientTools = %#v, want 1 declaration", captured.ClientTools)
+	}
+	tool := captured.ClientTools[0]
+	if tool.Name != "sync_ui" {
+		t.Fatalf("tool name = %q, want sync_ui", tool.Name)
+	}
+	if tool.Description != "Send a structured UI proposal to the client." {
+		t.Fatalf("tool description = %q", tool.Description)
+	}
+	for _, fragment := range []string{`"type":"object"`, `"standard_time"`, `"additionalProperties":false`} {
+		if !strings.Contains(string(tool.Parameters), fragment) {
+			t.Fatalf("tool schema %s lacks %s", tool.Parameters, fragment)
+		}
+	}
+}
+
+func TestAGUIRejectsInvalidClientTools(t *testing.T) {
+	handler, err := agui.New(&scriptedRuntime{}, agui.Config{RunTimeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]string{
+		"duplicate": `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":"hi"}],"tools":[
+			{"name":"sync_ui","description":"one","parameters":{"type":"object"}},
+			{"name":"sync_ui","description":"two","parameters":{"type":"object"}}
+		]}`,
+		"invalid schema": `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":"hi"}],"tools":[
+			{"name":"sync_ui","description":"send UI proposal","parameters":{"type":"string"}}
+		]}`,
+		"invalid name": `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":"hi"}],"tools":[
+			{"name":"sync ui","description":"send UI proposal","parameters":{"type":"object"}}
+		]}`,
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {

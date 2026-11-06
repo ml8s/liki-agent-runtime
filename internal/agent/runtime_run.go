@@ -29,6 +29,7 @@ func (r *Runtime) Run(
 	if err := validateRunRequest(request); err != nil {
 		return execution.RunResult{}, err
 	}
+	ctx = WithClientTools(ctx, request.ClientTools)
 	if err := r.ensureDurableRunID(ctx, request.RunID); err != nil {
 		r.observeRunIDRejection(err)
 		return execution.RunResult{}, err

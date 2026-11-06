@@ -317,6 +317,56 @@ func TestRuntimeRunExecutesMCPToolBeforeAuditCompletion(t *testing.T) {
 	}
 }
 
+func TestRuntimeRunAcknowledgesClientTool(t *testing.T) {
+	events := &recordingAudit{}
+	runtime := newTestRuntime(t, plainTestDeployment(t), events, &turnBasedLLM{turns: []*model.LLMResponse{
+		{Content: &genai.Content{Role: "model", Parts: []*genai.Part{
+			{FunctionCall: &genai.FunctionCall{
+				ID:   "call_ui",
+				Name: "sync_ui",
+				Args: map[string]any{
+					"kind":          "profile_time_patch",
+					"standard_time": "1990-05-02T07:36:00+08:36",
+				},
+			}},
+		}}},
+		{Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "proposal sent"}}}},
+	}})
+
+	result, err := runtime.Run(context.Background(), execution.RunRequest{
+		RunID:       "run_client_tool",
+		ThreadID:    "thread_client_tool",
+		UserID:      "user_1",
+		UserMessage: "sync proposal",
+		ClientTools: []execution.ClientTool{{
+			Name:        "sync_ui",
+			Description: "Send a structured UI proposal to the client.",
+			Parameters:  []byte(`{"type":"object","properties":{"kind":{"type":"string"},"standard_time":{"type":"string"}},"required":["kind","standard_time"]}`),
+		}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Text != "proposal sent" {
+		t.Fatalf("Text = %q, want proposal sent", result.Text)
+	}
+	completed := events.eventsOfType(audit.EventToolCallCompleted)
+	if len(completed) != 1 {
+		t.Fatalf("completed client tool audit events = %d, want 1", len(completed))
+	}
+	if completed[0].ToolName != "sync_ui" {
+		t.Fatalf("client tool audit name = %q, want sync_ui", completed[0].ToolName)
+	}
+	if server, _ := completed[0].Payload["mcp_server"].(string); server != ClientToolServer {
+		t.Fatalf("client tool audit server = %q, want %q", server, ClientToolServer)
+	}
+	inputDigest, _ := completed[0].Payload["input_digest"].(string)
+	outputDigest, _ := completed[0].Payload["output_digest"].(string)
+	if inputDigest == "" || outputDigest == "" || inputDigest == outputDigest {
+		t.Fatalf("client tool audit digests = %#v", completed[0].Payload)
+	}
+}
+
 func TestRuntimeRunEmptyResponse(t *testing.T) {
 	events := &recordingAudit{}
 	runtime := newTestRuntime(t, NewTestDeployment(t), events, &fakeLLM{responses: []*model.LLMResponse{{

@@ -110,6 +110,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeProtocolError(w, http.StatusUnprocessableEntity, CodeUnsupportedAGUIFeature, err.Error())
 		return
 	}
+	clientTools, err := clientToolsFromInput(input.Tools)
+	if err != nil {
+		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIRequest, err.Error())
+		return
+	}
 	content, history, err := lastUserConversation(input.Messages)
 	if err != nil {
 		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIMessage, err.Error())
@@ -160,6 +165,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		UserMessage: content,
 		History:     history,
 		Context:     opaqueJSON(input.ForwardedProps),
+		ClientTools: clientTools,
 	}
 	runCtx, cancelRun := context.WithTimeout(r.Context(), h.runTimeout)
 	defer cancelRun()

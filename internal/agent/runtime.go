@@ -250,6 +250,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	)
 	graph := newAgentGraphBuilder(aggregate, entrypoint.Name, agentGraphDeps{
 		mcpToolsets:       mcpToolsets,
+		clientToolset:     newClientToolset(),
 		modelName:         config.Model,
 		resolveModel:      models.resolve,
 		temperature:       temperature,

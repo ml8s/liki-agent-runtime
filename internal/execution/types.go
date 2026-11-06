@@ -55,6 +55,18 @@ type RunRequest struct {
 	UserMessage string
 	History     []Message
 	Context     json.RawMessage
+	// ClientTools are fire-and-forget UI tools declared by the trusted
+	// product gateway. The runtime exposes them to the model, emits their
+	// AG-UI tool-call facts, and acknowledges execution; it never implements
+	// their product semantics.
+	ClientTools []ClientTool
+}
+
+// ClientTool is the runtime-neutral projection of an AG-UI client tool.
+type ClientTool struct {
+	Name        string
+	Description string
+	Parameters  json.RawMessage
 }
 
 // Identity projects caller-owned request identity for lifecycle validation.
