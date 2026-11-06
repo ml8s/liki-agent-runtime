@@ -3,6 +3,7 @@ package agent_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -276,9 +277,17 @@ func TestExternalAuditRunRetriesTerminalAppendAndReleasesOnce(t *testing.T) {
 	}
 	// The slot was released exactly once: a fresh single-slot run acquires it
 	// after cleanup, instead of observing CodeRuntimeBusy or blocking.
-	next := agent.RunAuditIdentity{AttemptID: domain.AttemptID("task_next"), ThreadID: "context_2", UserID: "user_1", Protocol: "a2a"}
+	// Failed busy probes reserve their attempt identity before discovering the
+	// concurrency slot is full, so each probe uses a fresh attempt ID.
+	var next agent.RunAuditIdentity
 	var beginErr error
 	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		next = agent.RunAuditIdentity{
+			AttemptID: domain.AttemptID(fmt.Sprintf("task_next_%d", time.Now().UnixNano())),
+			ThreadID:  "context_2",
+			UserID:    "user_1",
+			Protocol:  "a2a",
+		}
 		beginErr = runtime.BeginAuditRun(ctx, externalAuditHandle("context_2", string(next.AttemptID)), next)
 		if beginErr == nil {
 			break
