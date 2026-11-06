@@ -91,7 +91,8 @@ type AgentDefinition struct {
 	Temperature     *float64 `json:"temperature,omitempty"`
 	MaxOutputTokens int      `json:"maxOutputTokens,omitempty"`
 
-	// toolRefs is an immutable lookup built from a validated allowlist.
+	// toolRefs is an immutable lookup built during Validate and Clone.
+	// Runtime execution must read it without rebuilding the index.
 	toolRefs map[string]ToolReference `json:"-"`
 }
 
@@ -194,7 +195,6 @@ var _ DeploymentSource = (*AgentDeployment)(nil)
 // ToolReferenceFor returns the unique server-scoped reference for an
 // allowlisted tool.
 func (a *AgentDefinition) ToolReferenceFor(toolName string) (ToolReference, bool) {
-	a.buildToolIndex()
 	reference, ok := a.toolRefs[toolName]
 	return reference, ok
 }
