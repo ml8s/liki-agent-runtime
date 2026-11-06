@@ -9,8 +9,11 @@ export RELEASE_VERSION
 GO ?= go
 PYTHON ?= python3
 NODE_BIN := $(HOME)/.nvm/versions/node/v$(shell cat .nvmrc)/bin
-NPM ?= $(NODE_BIN)/npm
-export PATH := $(NODE_BIN):$(PATH)
+NPM_FROM_PATH := $(shell command -v npm 2>/dev/null)
+NPM_FALLBACK := $(NODE_BIN)/npm
+NPM ?= $(if $(NPM_FROM_PATH),$(NPM_FROM_PATH),$(NPM_FALLBACK))
+NPM_BIN_DIR := $(if $(NPM_FROM_PATH),$(dir $(NPM_FROM_PATH)),$(NODE_BIN))
+export PATH := $(NPM_BIN_DIR):$(PATH)
 export GOTOOLCHAIN ?= go1.26.10
 VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo local)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
