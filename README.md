@@ -194,11 +194,13 @@ failures, never editing history; records exclude conversation or domain payloads
 ## Development
 
 After installing the pinned Node/Go toolchains, run `npm ci` once; Markdown
-linting uses the locked local development dependency. Run `make check`,
-`make test`, `make gate`, and `make build`.
+linting uses the locked local development dependency. Run `make setup-hooks`
+once so every push runs the local gate. Then use `make check`, `make test`,
+`make gate`, and `make build`.
 
 `make gate` is the pre-push gate. It runs documentation linting, Go static
-checks, race tests, and the coverage floor. `make check` includes deployment
+checks, race tests, and the coverage floor. The installed pre-push hook runs the
+same gate before uploading a branch. `make check` includes deployment
 validation. Neither command calls a real model provider or external MCP. CI
 additionally runs `govulncheck` and production npm dependency auditing.
 Images are built locally (`make image`) with the tag derived from git; CI does

@@ -7,8 +7,10 @@ RELEASE_VERSION ?=
 export RELEASE_VERSION
 
 GO ?= go
-NPM ?= npm
 PYTHON ?= python3
+NODE_BIN := $(HOME)/.nvm/versions/node/v$(shell cat .nvmrc)/bin
+NPM ?= $(NODE_BIN)/npm
+export PATH := $(NODE_BIN):$(PATH)
 export GOTOOLCHAIN ?= go1.26.10
 VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo local)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -22,13 +24,14 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help check test conformance gate bench build run dev dev-down image smoke
+.PHONY: help check test conformance gate setup-hooks bench build run dev dev-down image smoke
 help:
 	@echo "make check    - static checks: docs, formatting, lint, vet, artifact, and action pinning"
 	@echo "make test     - run tests with race detection and the coverage floor"
 	@echo "make conformance - run official-client protocol conformance checks"
 	@echo "make bench    - run focused performance benchmarks"
 	@echo "make gate     - run the full pre-push source gate"
+	@echo "make setup-hooks - install the repository pre-push gate"
 	@echo "make smoke    - smoke the local agent-runtime image"
 	@echo "make build    - build ./bin/agent-runtime"
 	@echo "make image    - build a local image (tag from git)"
@@ -81,6 +84,12 @@ conformance: ## Run official-client protocol conformance checks
 	$(GO) test -race -count=1 ./internal/protocol/... ./cmd/mcp-fixture
 
 gate: check test conformance
+
+setup-hooks: ## Configure Git to run the repository gate before push
+	git config core.hooksPath .githooks
+	test -x .githooks/pre-commit
+	test -x .githooks/pre-push
+	@echo "✓ Git hooks installed; pre-push now runs make gate"
 
 dev-down:
 	docker compose --project-directory . $(COMPOSE_ENV_FILE) -f dev/docker-compose.yml down --remove-orphans
