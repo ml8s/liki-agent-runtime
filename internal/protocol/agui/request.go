@@ -53,7 +53,8 @@ func validateTextChatProfile(input aguitypes.RunAgentInput) error {
 }
 
 // clientToolsFromInput projects AG-UI client tools into the runtime-neutral
-// execution request. Tool behavior is owned by the caller (normally liki-web);
+// execution request. Tool behavior is owned by the caller (normally the
+// product gateway);
 // the runtime only exposes the declaration and acknowledges execution.
 func clientToolsFromInput(tools []aguitypes.Tool) ([]execution.ClientTool, error) {
 	if len(tools) > maxClientTools {
