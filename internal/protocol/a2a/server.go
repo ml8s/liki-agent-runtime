@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -257,9 +258,16 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			}
 		},
 	})
+	cardEnforcer, err := a2asrv.NewAgentCardEnforcer(&card)
+	if err != nil {
+		return nil, domain.NewError(
+			CodeA2AConfigInvalid,
+			fmt.Sprintf("invalid agent card contract: %v", err),
+			domain.ErrInvalidInput,
+		)
+	}
 	handlerOptions := []a2asrv.RequestHandlerOption{
-		a2asrv.WithCapabilityChecks(&capabilities),
-		a2asrv.WithCallInterceptors(authenticatedPrincipalInterceptor{principal: config.ServicePrincipal}),
+		a2asrv.WithCallInterceptors(cardEnforcer, authenticatedPrincipalInterceptor{principal: config.ServicePrincipal}),
 	}
 	if config.Push.enabled() {
 		handlerOptions = append(
