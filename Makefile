@@ -29,7 +29,7 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help check test conformance gate setup-hooks bench build run dev dev-down image smoke
+.PHONY: help check test conformance gate security-go security-node setup-hooks bench build run dev dev-down image smoke
 help:
 	@echo "make check    - static checks: docs, formatting, lint, vet, artifact, and action pinning"
 	@echo "make test     - run tests with race detection and the coverage floor"
@@ -87,6 +87,13 @@ run:
 
 conformance: ## Run official-client protocol conformance checks
 	$(GO) test -race -count=1 ./internal/protocol/... ./cmd/mcp-fixture
+
+security-go: ## Run Go vulnerability scan
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+security-node: ## Audit production Node dependencies
+	$(NPM) ci
+	$(NPM) audit --omit=dev
 
 gate: check test conformance
 

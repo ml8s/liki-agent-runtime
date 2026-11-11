@@ -29,7 +29,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - run: make security-go
 
   node-audit:
     name: Node vulnerability scan
@@ -42,6 +42,4 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
-      # markdownlint is dev-only; production Go code has no npm dependency surface.
-      - run: npm audit --omit=dev
+      - run: make security-node
