@@ -18,6 +18,6 @@ if ! command -v "$GO" >/dev/null 2>&1; then
   exit 127
 fi
 
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.10}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.11}"
 exec "$GO" run \
   github.com/golangci/golangci-lint/v2/cmd/golangci-lint@"$version" "$@"
