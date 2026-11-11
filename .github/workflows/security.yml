@@ -1,10 +1,18 @@
 name: Security scans
 
-# 依赖漏洞扫描：从 push CI 拆出为每日定时 + 手动触发（数据变化慢、不占 PR 墙钟）。
+# 依赖漏洞扫描：PR/push 做左移门禁；低频定时做漏洞库巡检。
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   schedule:
-    - cron: '41 3 * * *'
+    - cron: '41 3 * * 3'
   workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
