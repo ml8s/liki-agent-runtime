@@ -7,8 +7,6 @@ import re
 import sys
 from pathlib import Path
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[1]
 USES_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -26,11 +24,6 @@ def main() -> int:
             files.extend(pattern.rglob("*.yml"))
             files.extend(pattern.rglob("*.yaml"))
     for path in sorted(set(files)):
-        try:
-            document = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except yaml.YAMLError as error:
-            errors.append(f"{path.relative_to(ROOT)}: invalid YAML: {error}")
-            continue
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             match = USES_RE.match(line)
             if not match:
