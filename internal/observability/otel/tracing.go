@@ -84,14 +84,6 @@ func NewTracerProvider(ctx context.Context, serviceName, serviceVersion, environ
 	}, nil
 }
 
-// Tracer returns a named tracer from the active provider.
-func (p *TracerProvider) Tracer(name string, options ...trace.TracerOption) trace.Tracer {
-	if p == nil || p.provider == nil {
-		return tracenoop.NewTracerProvider().Tracer(name)
-	}
-	return p.provider.Tracer(name, options...)
-}
-
 // Shutdown flushes and closes the trace provider.
 func (p *TracerProvider) Shutdown(ctx context.Context) error {
 	if p == nil || p.shutdown == nil {

@@ -54,9 +54,6 @@ func TestTracerProviderNoEndpoint(t *testing.T) {
 	if provider.Provider() == nil {
 		t.Fatal("Provider() = nil, want noop provider")
 	}
-	if provider.Tracer("test") == nil {
-		t.Fatal("Tracer() = nil, want noop tracer")
-	}
 	if err := provider.Shutdown(t.Context()); err != nil {
 		t.Fatalf("Shutdown() error = %v", err)
 	}
@@ -78,9 +75,6 @@ func TestTracerProviderSDKDisabled(t *testing.T) {
 
 func TestTracerProviderNilSafety(t *testing.T) {
 	var provider *TracerProvider
-	if tracer := provider.Tracer("test"); tracer == nil {
-		t.Fatal("nil Tracer() = nil, want noop tracer")
-	}
 	if err := provider.Shutdown(t.Context()); err != nil {
 		t.Fatalf("nil Shutdown() error = %v", err)
 	}
