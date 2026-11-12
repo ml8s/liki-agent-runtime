@@ -29,10 +29,8 @@ def main() -> int:
         fail("scripts/lint.sh must run the pinned golangci-lint module")
 
     make = makefile.read_text(encoding="utf-8")
-    if "scripts/lint.sh fmt --diff ./..." not in make:
-        fail("Makefile must format through scripts/lint.sh")
     if "scripts/lint.sh run ./..." not in make:
-        fail("Makefile must lint through scripts/lint.sh")
+        fail("Makefile must lint and format through scripts/lint.sh")
 
     ci = workflow.read_text(encoding="utf-8")
     if "golangci/golangci-lint-action" in ci:

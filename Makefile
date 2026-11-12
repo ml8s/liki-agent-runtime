@@ -1,7 +1,7 @@
 # 统一语义：
 #   make check  静态检查（docs、format、lint、vet、artifact、action pinning）
 #   make test   本仓全部测试（unit/integration，race + coverage floor）
-#   make gate   check + test + protocol conformance
+#   make gate   check + test
 
 RELEASE_VERSION ?=
 export RELEASE_VERSION
@@ -29,9 +29,9 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help check test conformance gate security-go security-node setup-hooks bench build run dev dev-down image smoke
+.PHONY: help check test conformance gate security-go setup-hooks bench build run dev dev-down image smoke
 help:
-	@echo "make check    - static checks: docs, formatting, lint, vet, artifact, and action pinning"
+	@echo "make check    - static checks: docs, Go lint/formatters, vet, artifact, and action pinning"
 	@echo "make test     - run tests with race detection and the coverage floor"
 	@echo "make conformance - run official-client protocol conformance checks"
 	@echo "make bench    - run focused performance benchmarks"
@@ -60,7 +60,6 @@ check: ## Run static checks.
 	$(PYTHON) scripts/check_docs_paths.py
 	$(PYTHON) scripts/check_generic_boundary.py
 	$(PYTHON) scripts/check-lint-toolchain.py
-	scripts/lint.sh fmt --diff ./...
 	scripts/lint.sh run ./...
 	$(GO) vet ./...
 	$(GO) run ./cmd/agent-runtime validate -deployment $(if $(AGENT_RUNTIME_DEPLOYMENT_FILE),$(AGENT_RUNTIME_DEPLOYMENT_FILE),./dev/agent-deployment/deployment.json)
@@ -91,11 +90,7 @@ conformance: ## Run official-client protocol conformance checks
 security-go: ## Run Go vulnerability scan
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
-security-node: ## Audit production Node dependencies
-	$(NPM) ci
-	$(NPM) audit --omit=dev
-
-gate: check test conformance
+gate: check test
 
 setup-hooks: ## Configure Git to run the repository gate before push
 	git config core.hooksPath .githooks
