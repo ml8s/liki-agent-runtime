@@ -17,6 +17,9 @@ export PATH := $(NPM_BIN_DIR):$(PATH)
 export GOTOOLCHAIN := auto
 # A stale host GOROOT can force old standard-library objects onto the new toolchain.
 unexport GOROOT
+# Official user defaults are single-sourced by the Go command; stale host
+# developer overrides must not redirect the build to retired directories.
+unexport GOPATH GOBIN GOMODCACHE GOCACHE GOLANGCI_LINT_CACHE
 VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo local)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
