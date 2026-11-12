@@ -133,7 +133,7 @@ func TestAGUIRequiresVerifiedIdentity(t *testing.T) {
 func TestOperationalEndpointsAreOwnedByOpsHandler(t *testing.T) {
 	handler := newServer(t, "secret")
 	ops := handler.OpsHandler()
-	for _, path := range []string{"/readyz", "/version"} {
+	for _, path := range []string{"/readyz"} {
 		response := httptest.NewRecorder()
 		ops.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusOK {

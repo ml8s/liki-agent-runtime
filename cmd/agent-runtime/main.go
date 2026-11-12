@@ -64,7 +64,7 @@ func run() (err error) {
 	tracerProvider, err := otel.NewTracerProvider(
 		context.Background(),
 		"agent-runtime",
-		buildinfo.Version,
+		buildinfo.BuildID,
 		cfg.Env,
 	)
 	if err != nil {

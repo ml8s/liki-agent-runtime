@@ -55,7 +55,7 @@ func (c *HealthChecker) check(ctx context.Context, server ResolvedServer) (err e
 	defer cancel()
 
 	client := mcpsdk.NewClient(
-		&mcpsdk.Implementation{Name: "agent-runtime", Version: buildinfo.Version},
+		&mcpsdk.Implementation{Name: "agent-runtime", Version: buildinfo.BuildID},
 		nil,
 	)
 	var transport mcpsdk.Transport = newTransport(c.config, server)

@@ -3,9 +3,6 @@
 #   make test   本仓全部测试（unit/integration，race + coverage floor）
 #   make gate   check + test
 
-RELEASE_VERSION ?=
-export RELEASE_VERSION
-
 GO ?= go
 PYTHON ?= python3
 NODE_BIN := $(HOME)/.nvm/versions/node/v$(shell cat .nvmrc)/bin
@@ -20,11 +17,11 @@ unexport GOROOT
 # Official user defaults are single-sourced by the Go command; stale host
 # developer overrides must not redirect the build to retired directories.
 unexport GOPATH GOBIN GOMODCACHE GOCACHE GOLANGCI_LINT_CACHE
-VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo local)
+GIT_SHA ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GOPROXY ?= https://goproxy.cn,direct
-LDFLAGS ?= -s -w -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.Version=$(VERSION) -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.Commit=$(COMMIT) -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.BuildTime=$(BUILD_TIME)
+LDFLAGS ?= -s -w -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.BuildID=$(GIT_SHA) -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.Commit=$(COMMIT) -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.BuildTime=$(BUILD_TIME)
 
 TEST_PACKAGES ?= ./...
 BENCH_PACKAGES ?= ./internal/audit/sqlite/... ./internal/agent/...
@@ -77,7 +74,7 @@ IMAGE_REGISTRY ?= agent-runtime-local
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)
 
 image: ## Build a local image for development
-	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_TIME=$(BUILD_TIME) \
+	docker build --build-arg GIT_SHA=$(GIT_SHA) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_TIME=$(BUILD_TIME) \
 		--build-arg GOPROXY=$(GOPROXY) \
 		-t $(IMAGE_REGISTRY)/agent-runtime:$(IMAGE_TAG) .
 

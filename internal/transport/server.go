@@ -13,7 +13,6 @@ import (
 
 	"github.com/ml8s/agent-runtime/internal/observability"
 	"github.com/ml8s/agent-runtime/internal/platform"
-	"github.com/ml8s/agent-runtime/internal/platform/buildinfo"
 	"github.com/ml8s/agent-runtime/internal/platform/identity"
 )
 
@@ -82,7 +81,6 @@ func New(services Services) (*Server, error) {
 	// or metric scrapers.
 	ops := http.NewServeMux()
 	ops.HandleFunc("GET /readyz", server.ready)
-	ops.HandleFunc("GET /version", server.version)
 	ops.Handle("GET /metrics", server.metricsHandler())
 	// Profiling is an explicit internal debugging opt-in, never a public or
 	// token-gated production surface. pprof.Index also serves named profiles
@@ -100,7 +98,7 @@ func New(services Services) (*Server, error) {
 	return server, nil
 }
 
-// OpsHandler returns the operational surface (/readyz, /version, /metrics).
+// OpsHandler returns the operational surface (/readyz, /metrics).
 // It is served on a dedicated listener so protocol-level mutual TLS never
 // gates healthchecks or metric scrapers.
 func (s *Server) OpsHandler() http.Handler {
@@ -198,16 +196,6 @@ func protocolOperation(path, method string) (protocol, operation string, ok bool
 	default:
 		return "", "", false
 	}
-}
-
-func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"service":    "agent-runtime",
-		"version":    buildinfo.Version,
-		"commit":     buildinfo.Commit,
-		"build_time": buildinfo.BuildTime,
-		"protocols":  []string{"a2a", "ag-ui", "mcp-client"},
-	})
 }
 
 func (s *Server) metricsHandler() http.Handler {

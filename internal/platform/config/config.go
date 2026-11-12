@@ -63,7 +63,7 @@ const (
 const DefaultAddr = ":8083"
 
 // DefaultOpsAddr is the default address for the operational surface
-// (/readyz, /version, /metrics). It is separate from the protocol listener so
+// (/readyz, /metrics). It is separate from the protocol listener so
 // that mutual TLS on the protocol surface never gates healthchecks or scrapers.
 const DefaultOpsAddr = ":8085"
 
