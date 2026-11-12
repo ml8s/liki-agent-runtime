@@ -14,7 +14,7 @@ NPM_FALLBACK := $(NODE_BIN)/npm
 NPM ?= $(if $(NPM_FROM_PATH),$(NPM_FROM_PATH),$(NPM_FALLBACK))
 NPM_BIN_DIR := $(if $(NPM_FROM_PATH),$(dir $(NPM_FROM_PATH)),$(NODE_BIN))
 export PATH := $(NPM_BIN_DIR):$(PATH)
-export GOTOOLCHAIN ?= go1.26.11
+export GOTOOLCHAIN := auto
 # A stale host GOROOT can force old standard-library objects onto the new toolchain.
 unexport GOROOT
 VERSION ?= $(shell git describe --tags --always --dirty --match "v*" 2>/dev/null || echo local)
