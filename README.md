@@ -16,9 +16,9 @@ execution, protocol adaptation, security, evidence, and observability.
 
 ## Install
 
-Requires Go 1.26+, Node.js 24.14.1 (see `.nvmrc`), Docker Compose, and
-golangci-lint 2.x. Clone the repository and run `make build`; the binary is
-written to `bin/agent-runtime`.
+Requires the Go toolchain selected by `go.mod` (currently 1.26.11), Node.js
+24.14.1 (see `.nvmrc`), and Docker Compose. Clone the repository and run
+`make build`; the binary is written to `bin/agent-runtime`.
 
 ## Quick start
 
@@ -188,24 +188,24 @@ failures, never editing history; records exclude conversation or domain payloads
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | runtime architecture and protocol mapping |
 | [`docs/DOMAIN.md`](docs/DOMAIN.md) | stable runtime domain invariants |
+| [`docs/STANDARDS.md`](docs/STANDARDS.md) | protocol and infrastructure review standards |
 | [`dev/agent-deployment/deployment.json`](dev/agent-deployment/deployment.json) | runtime validation fixture |
 | [`SECURITY.md`](SECURITY.md) | security policy and required controls |
 
 ## Development
 
-After installing the pinned Node/Go toolchains, run `npm ci` once; Markdown
-linting uses the locked local development dependency. Run `make setup-hooks`
-once so every push runs the local gate. Then use `make check`, `make test`,
-`make gate`, and `make build`.
+Install Node.js from `.nvmrc`; Go resolves its toolchain from `go.mod`. Run
+`npm ci` once so Markdown linting uses the locked local development dependency.
+Run `make setup-hooks` once so every push runs the local gate. Then use `make
+check`, `make test`, `make gate`, and `make build`.
 
 `make gate` is the pre-push gate. It runs documentation linting, Go static
 checks, race tests, and the coverage floor. The installed pre-push hook runs the
 same gate before uploading a branch. `make check` includes deployment
 validation. Neither command calls a real model provider or external MCP. CI
-additionally runs `govulncheck` and production npm dependency auditing.
-Images are built locally (`make image`) with the tag derived from git; CI does
-not build or publish images. Callers consume the local image as their runtime base and assemble their own
-deployment set.
+additionally runs `govulncheck`. CI builds the tagged local image for smoke
+testing but does not publish it. Callers consume the local image as their
+runtime base and assemble their own deployment set.
 
 ### Contributing
 

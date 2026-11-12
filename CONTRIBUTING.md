@@ -8,7 +8,7 @@ Thanks for improving `agent-runtime`.
 release branches. Keep changes small and commit them to tested `main`; release
 tags are created only from those commits.
 
-1. Install Go 1.26+, Node.js 24.14.1 (see `.nvmrc`), Docker, and golangci-lint 2.x.
+1. Install Node.js 24.14.1 (see `.nvmrc`) and Docker; Go resolves its toolchain from `go.mod`.
 2. Run `npm ci`.
 3. Start from a focused, small change.
 4. Run the full gate before review:
@@ -18,9 +18,9 @@ make gate
 make build
 ```
 
-`make gate` runs documentation checks, `gofmt` verification, `golangci-lint`,
-`go vet`, artifact validation, race-enabled Go tests, and the coverage floor.
-It does not call a model provider or require MCP service.
+`make gate` runs documentation checks, Go formatter/linter checks, `go vet`,
+artifact validation, race-enabled Go tests, and the coverage floor. It does not
+call a model provider or require MCP service.
 
 ## Design rules
 

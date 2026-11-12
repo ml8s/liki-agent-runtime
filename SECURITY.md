@@ -7,9 +7,9 @@ Required controls:
 
 - Internal bearer token between the gateway and `agent-runtime` outside local
   development.
-- A dedicated ops token for `/metrics` and `/debug/pprof` when operational
-  separation is required; it must differ from the protocol token and is
-  mandatory in production with OIDC identity.
+- A dedicated internal ops listener for `/metrics`; pprof is disabled unless
+  explicitly enabled for debugging. Network isolation and optional
+  gateway-owned authentication are deployment responsibilities.
 - Verified user context supplied by the gateway for AG-UI.
 - The browser identity header is adopted on AG-UI only; A2A machine callers
   sharing the internal token cannot spoof a user identity.
