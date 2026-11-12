@@ -37,7 +37,7 @@ jobs:
           cache-dependency-path: go.sum
       - name: Install Node dependencies
         run: npm ci
-      - name: Run the local gate (check + test + conformance)
+      - name: Run the local gate
         run: make gate
       - name: Upload Go coverage profile
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -45,21 +45,6 @@ jobs:
           name: go-coverage
           path: coverage.out
           if-no-files-found: error
-
-  build:
-    name: Build binary
-    runs-on: ubuntu-latest
-    needs:
-      - check
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - run: make build
 
   image:
     name: Build and smoke image
