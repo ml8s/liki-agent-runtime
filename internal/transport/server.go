@@ -80,6 +80,7 @@ func New(services Services) (*Server, error) {
 	// Dedicated ops listener: protocol-level mTLS never gates healthchecks
 	// or metric scrapers.
 	ops := http.NewServeMux()
+	ops.HandleFunc("GET /livez", server.live)
 	ops.HandleFunc("GET /readyz", server.ready)
 	ops.Handle("GET /metrics", server.metricsHandler())
 	// Profiling is an explicit internal debugging opt-in, never a public or
@@ -98,11 +99,17 @@ func New(services Services) (*Server, error) {
 	return server, nil
 }
 
-// OpsHandler returns the operational surface (/readyz, /metrics).
+// OpsHandler returns the operational surface (/livez, /readyz, /metrics).
 // It is served on a dedicated listener so protocol-level mutual TLS never
 // gates healthchecks or metric scrapers.
 func (s *Server) OpsHandler() http.Handler {
 	return s.opsRoutes
+}
+
+// live reports process liveness without consulting dependencies. Dependency
+// failures and graceful draining are readiness concerns owned by /readyz.
+func (s *Server) live(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "live"})
 }
 
 func callerAuthenticatedSource(source identity.RequestSource) bool {

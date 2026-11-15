@@ -158,12 +158,12 @@ func TestAGUIPassesClientToolsToRuntime(t *testing.T) {
 		"runId":"r",
 		"messages":[{"id":"m","role":"user","content":"hi"}],
 		"tools":[{
-			"name":"sync_ui",
-			"description":"Send a structured UI proposal to the client.",
+			"name":"example_tool",
+			"description":"Send a structured proposal to the client.",
 			"parameters":{
 				"type":"object",
-				"properties":{"standard_time":{"type":"string"}},
-				"required":["standard_time"],
+				"properties":{"sample":{"type":"string"}},
+				"required":["sample"],
 				"additionalProperties":false
 			}
 		}]
@@ -179,13 +179,13 @@ func TestAGUIPassesClientToolsToRuntime(t *testing.T) {
 		t.Fatalf("ClientTools = %#v, want 1 declaration", captured.ClientTools)
 	}
 	tool := captured.ClientTools[0]
-	if tool.Name != "sync_ui" {
-		t.Fatalf("tool name = %q, want sync_ui", tool.Name)
+	if tool.Name != "example_tool" {
+		t.Fatalf("tool name = %q, want example_tool", tool.Name)
 	}
-	if tool.Description != "Send a structured UI proposal to the client." {
+	if tool.Description != "Send a structured proposal to the client." {
 		t.Fatalf("tool description = %q", tool.Description)
 	}
-	for _, fragment := range []string{`"type":"object"`, `"standard_time"`, `"additionalProperties":false`} {
+	for _, fragment := range []string{`"type":"object"`, `"sample"`, `"additionalProperties":false`} {
 		if !strings.Contains(string(tool.Parameters), fragment) {
 			t.Fatalf("tool schema %s lacks %s", tool.Parameters, fragment)
 		}
@@ -199,14 +199,14 @@ func TestAGUIRejectsInvalidClientTools(t *testing.T) {
 	}
 	cases := map[string]string{
 		"duplicate": `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":"hi"}],"tools":[
-			{"name":"sync_ui","description":"one","parameters":{"type":"object"}},
-			{"name":"sync_ui","description":"two","parameters":{"type":"object"}}
+			{"name":"example_tool","description":"one","parameters":{"type":"object"}},
+			{"name":"example_tool","description":"two","parameters":{"type":"object"}}
 		]}`,
 		"invalid schema": `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":"hi"}],"tools":[
-			{"name":"sync_ui","description":"send UI proposal","parameters":{"type":"string"}}
+			{"name":"example_tool","description":"send proposal","parameters":{"type":"string"}}
 		]}`,
 		"invalid name": `{"threadId":"t","runId":"r","messages":[{"id":"m","role":"user","content":"hi"}],"tools":[
-			{"name":"sync ui","description":"send UI proposal","parameters":{"type":"object"}}
+			{"name":"sync ui","description":"send proposal","parameters":{"type":"object"}}
 		]}`,
 	}
 	for name, body := range cases {
@@ -426,6 +426,117 @@ func TestAGUIEmitsFullToolCallSequenceWithStructuredAnswer(t *testing.T) {
 		if got := strings.Count(body, `"type":"`+kind+`"`); got != 2 {
 			t.Fatalf("%s appeared %d times, want 2", kind, got)
 		}
+	}
+}
+
+func TestAGUIEmitsStandardInterruptOnPendingClientTool(t *testing.T) {
+	events := []*session.Event{{
+		LongRunningToolIDs: []string{"call_birth_time"},
+		LLMResponse: model.LLMResponse{Content: &genai.Content{Parts: []*genai.Part{
+			{FunctionCall: &genai.FunctionCall{
+				ID:   "call_birth_time",
+				Name: "propose_birth_time",
+				Args: map[string]any{"instant": "1990-05-02T07:36:00+08:36"},
+			}},
+		}}},
+	}}
+	runtime := &scriptedRuntime{
+		events: events,
+		result: execution.RunResult{
+			PendingClientTools: []execution.PendingClientTool{{
+				ToolCallID: "call_birth_time",
+				ToolName:   "propose_birth_time",
+				Args:       []byte(`{"instant":"1990-05-02T07:36:00+08:36"}`),
+			}},
+		},
+	}
+	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := authenticatedRequest(t, `{
+		"threadId":"t","runId":"r",
+		"messages":[{"id":"m","role":"user","content":"校正时间"}],
+		"tools":[{"name":"propose_birth_time","description":"Propose a time.","parameters":{"type":"object","properties":{"instant":{"type":"string"}},"required":["instant"]}}]
+	}`)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	body := response.Body.String()
+
+	want := []string{
+		"RUN_STARTED",
+		"TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END",
+		"MESSAGES_SNAPSHOT", "RUN_FINISHED",
+	}
+	last := -1
+	for _, kind := range want {
+		index := strings.Index(body, kind)
+		if index < 0 {
+			t.Fatalf("missing %s in SSE body:\n%s", kind, body)
+		}
+		if index < last {
+			t.Fatalf("%s appeared out of order in SSE body:\n%s", kind, body)
+		}
+		last = index
+	}
+	if strings.Contains(body, "TOOL_CALL_RESULT") {
+		t.Fatalf("interrupt emitted a result:\n%s", body)
+	}
+	// The stateless runtime owns no product state; it must not invent a
+	// STATE_SNAPSHOT or a business responseSchema for the client.
+	if strings.Contains(body, "STATE_SNAPSHOT") || strings.Contains(body, "responseSchema") {
+		t.Fatalf("interrupt emitted product-owned payloads:\n%s", body)
+	}
+	if !strings.Contains(body, `"type":"interrupt"`) ||
+		!strings.Contains(body, `"reason":"tool_call"`) ||
+		!strings.Contains(body, `"toolCallId":"call_birth_time"`) ||
+		!strings.Contains(body, `"expiresAt":"`) {
+		t.Fatalf("body missing standard interrupt contract:\n%s", body)
+	}
+}
+
+func TestAGUIProjectsStandardResumeRun(t *testing.T) {
+	var captured execution.RunRequest
+	runtime := &capturingRuntime{
+		capture: &captured,
+		result:  execution.RunResult{Text: "档案已更新"},
+	}
+	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := authenticatedRequest(t, `{
+		"threadId":"t","runId":"r2",
+		"messages":[
+			{"id":"m1","role":"user","content":"校正时间"},
+			{"id":"m2","role":"assistant","content":"","toolCalls":[{"id":"call_birth_time","type":"function","function":{"name":"propose_birth_time","arguments":"{\"instant\":\"1990-05-02T07:36:00+08:36\"}"}}]},
+			{"id":"m3","role":"tool","toolCallId":"call_birth_time","content":"{\"status\":\"updated\"}"}
+		],
+		"resume":[{"interruptId":"int_1","status":"resolved","payload":{"instant":"1990-05-02T07:36:00+08:36"},"metadata":{"tool_call_id":"call_birth_time"}}]
+	}`)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	if !strings.Contains(body, "TOOL_CALL_RESULT") || !strings.Contains(body, `\"status\":\"updated\"`) {
+		t.Fatalf("resumed run missing authoritative result: %s", body)
+	}
+	if !strings.Contains(body, "档案已更新") || !strings.Contains(body, `"outcome":{"type":"success"}`) {
+		t.Fatalf("resumed run missing success completion: %s", body)
+	}
+	if len(captured.Resume) != 1 || !captured.Resume[0].Resolved || captured.Resume[0].ToolCallID != "call_birth_time" {
+		t.Fatalf("Resume = %#v, want resolved call_birth_time", captured.Resume)
+	}
+	var toolMessage *execution.Message
+	for index := range captured.History {
+		if captured.History[index].Role == execution.RoleTool {
+			toolMessage = &captured.History[index]
+		}
+	}
+	if toolMessage == nil || toolMessage.ToolCallID != "call_birth_time" || string(toolMessage.ToolOutput) != `{"status":"updated"}` {
+		t.Fatalf("History tool response = %#v, want authoritative update result", toolMessage)
 	}
 }
 

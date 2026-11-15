@@ -283,7 +283,7 @@ func normalizeRunRequest(request execution.RunRequest) execution.RunRequest {
 // identifiers must be present and bounded printable, the user message must
 // not be empty, and history must not exceed its limit.
 func validateRunRequest(request execution.RunRequest) error {
-	if request.UserMessage == "" {
+	if request.UserMessage == "" && len(request.Resume) == 0 {
 		return domain.NewError(domain.CodeUserMessageRequired, "user message is required", domain.ErrInvalidInput)
 	}
 	if err := request.Identity().Validate(); err != nil {
@@ -291,6 +291,11 @@ func validateRunRequest(request execution.RunRequest) error {
 	}
 	if len(request.History) > execution.MaxHistoryMessages {
 		return domain.NewError(domain.CodeHistoryInvalid, fmt.Sprintf("conversation history exceeds %d messages", execution.MaxHistoryMessages), domain.ErrInvalidInput)
+	}
+	for _, resume := range request.Resume {
+		if resume.ToolCallID == "" || resume.ToolName == "" {
+			return domain.NewError(domain.CodeToolCallInvalid, "client tool resume requires tool call identifiers", domain.ErrInvalidInput)
+		}
 	}
 	return nil
 }

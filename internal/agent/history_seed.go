@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/ml8s/agent-runtime/internal/execution"
 
@@ -44,11 +45,16 @@ func (r *Runtime) seedConversationHistory(ctx context.Context, service session.S
 		return domain.NewError(domain.CodeRuntimeSessionUnavailable, "create run session for history", nil)
 	}
 	for _, message := range request.History {
-		role := genai.Role(genai.RoleUser)
 		author := "user"
 		if message.Role == execution.RoleAssistant {
-			role = genai.Role(genai.RoleModel)
 			author = r.entrypoint.Name
+		}
+		content, err := historyContent(request.History, message)
+		if err != nil {
+			return domain.NewError(domain.CodeHistoryInvalid, "convert history message", err)
+		}
+		if content == nil {
+			return domain.NewError(domain.CodeHistoryInvalid, "history message has no convertible content", nil)
 		}
 		event := &session.Event{
 			Author: author,
@@ -58,7 +64,7 @@ func (r *Runtime) seedConversationHistory(ctx context.Context, service session.S
 			Branch:         "",
 			IsolationScope: "",
 			LLMResponse: model.LLMResponse{
-				Content: genai.NewContentFromText(message.Content, role),
+				Content: content,
 			},
 		}
 		if appendErr := service.AppendEvent(ctx, response.Session, event); appendErr != nil {
@@ -66,4 +72,65 @@ func (r *Runtime) seedConversationHistory(ctx context.Context, service session.S
 		}
 	}
 	return nil
+}
+
+// historyContent projects runtime-neutral history onto native ADK contents.
+// Text remains opaque and tool calls/responses remain structural so the model
+// receives a valid protocol continuation rather than prose about a tool call.
+func historyContent(
+	history []execution.Message,
+	message execution.Message,
+) (*genai.Content, error) {
+	role := string(genai.RoleUser)
+	if message.Role == execution.RoleAssistant {
+		role = string(genai.RoleModel)
+	}
+	parts := make([]*genai.Part, 0, 2)
+	if message.Content != "" {
+		parts = append(parts, genai.NewContentFromText(message.Content, genai.Role(role)).Parts...)
+	}
+	for _, call := range message.ToolCalls {
+		var args map[string]any
+		if len(call.Args) != 0 {
+			if err := json.Unmarshal(call.Args, &args); err != nil {
+				return nil, err
+			}
+		}
+		parts = append(parts, &genai.Part{FunctionCall: &genai.FunctionCall{
+			ID:   call.ID,
+			Name: call.Name,
+			Args: args,
+		}})
+	}
+	if message.ToolCallID != "" {
+		name := toolNameForCall(history, message.ToolCallID)
+		var response map[string]any
+		if len(message.ToolOutput) != 0 {
+			if err := json.Unmarshal(message.ToolOutput, &response); err != nil {
+				return nil, err
+			}
+		} else {
+			response = map[string]any{"error": message.ToolError}
+		}
+		parts = append(parts, &genai.Part{FunctionResponse: &genai.FunctionResponse{
+			ID:       message.ToolCallID,
+			Name:     name,
+			Response: response,
+		}})
+	}
+	if len(parts) == 0 {
+		return nil, nil
+	}
+	return &genai.Content{Role: role, Parts: parts}, nil
+}
+
+func toolNameForCall(history []execution.Message, toolCallID string) string {
+	for _, message := range history {
+		for _, call := range message.ToolCalls {
+			if call.ID == toolCallID {
+				return call.Name
+			}
+		}
+	}
+	return ""
 }

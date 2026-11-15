@@ -133,7 +133,7 @@ func TestAGUIRequiresVerifiedIdentity(t *testing.T) {
 func TestOperationalEndpointsAreOwnedByOpsHandler(t *testing.T) {
 	handler := newServer(t, "secret")
 	ops := handler.OpsHandler()
-	for _, path := range []string{"/readyz"} {
+	for _, path := range []string{"/livez", "/readyz"} {
 		response := httptest.NewRecorder()
 		ops.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusOK {
@@ -239,11 +239,12 @@ func TestTransportRequiresExplicitIdentitySource(t *testing.T) {
 }
 
 func TestDrainMakesReadinessUnavailableWithoutCancellingRequests(t *testing.T) {
+	checker := &countingChecker{}
 	server, err := transport.New(transport.Services{
 		AgentCard:      http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
 		A2A:            http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
 		AGUI:           http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
-		HealthChecks:   []platform.HealthChecker{healthy{}},
+		HealthChecks:   []platform.HealthChecker{checker},
 		IdentitySource: identity.NewHeaderSource(identity.HeaderSourceConfig{}),
 	})
 	if err != nil {
@@ -258,6 +259,18 @@ func TestDrainMakesReadinessUnavailableWithoutCancellingRequests(t *testing.T) {
 	}
 	if !strings.Contains(readiness.Body.String(), `"draining"`) {
 		t.Fatalf("drained readiness body = %s", readiness.Body.String())
+	}
+
+	live := httptest.NewRecorder()
+	server.OpsHandler().ServeHTTP(live, httptest.NewRequest(http.MethodGet, "/livez", nil))
+	if live.Code != http.StatusOK {
+		t.Fatalf("drained liveness status = %d, want %d", live.Code, http.StatusOK)
+	}
+	if !strings.Contains(live.Body.String(), `"live"`) {
+		t.Fatalf("drained liveness body = %s", live.Body.String())
+	}
+	if got := checker.count.Load(); got != 0 {
+		t.Fatalf("liveness dependency checks = %d, want 0", got)
 	}
 
 	request := httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(`{}`))

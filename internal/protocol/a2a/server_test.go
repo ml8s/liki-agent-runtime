@@ -3,13 +3,16 @@ package a2a_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"iter"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,6 +27,7 @@ import (
 	"github.com/ml8s/agent-runtime/internal/protocol/a2a"
 	protocolstate "github.com/ml8s/agent-runtime/internal/protocolstate/sqlite"
 	"github.com/ml8s/agent-runtime/internal/testagent"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type testAuditRecorder struct {
@@ -57,10 +61,42 @@ func testRuntime(t *testing.T) (*agent.Runtime, *testAuditRecorder) {
 	return testRuntimeWithDeployment(t, testagent.AgentDeployment(t))
 }
 
+type a2aTestToolInput struct {
+	Value string `jsonschema:"optional deterministic value echoed by the test tool"`
+}
+
+type a2aTestToolOutput struct {
+	Answer string `json:"answer"`
+}
+
+// startA2AMCPFixture gives streaming executor tests a real official MCP
+// streamable endpoint. Lazy skilltoolsets are not contacted by non-streaming
+// requests, so a dead endpoint can hide incomplete protocol coverage.
+func startA2AMCPFixture(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "test_tool",
+		Description: "Deterministic A2A conformance fixture",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, args a2aTestToolInput) (*mcp.CallToolResult, a2aTestToolOutput, error) {
+		value := args.Value
+		if value == "" {
+			value = "hello"
+		}
+		return nil, a2aTestToolOutput{Answer: value}, nil
+	})
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
+		return server
+	}, &mcp.StreamableHTTPOptions{Stateless: true})
+	httpServer := httptest.NewServer(handler)
+	t.Cleanup(httpServer.Close)
+	t.Setenv("TEST_MCP_ENDPOINT", httpServer.URL+"/mcp")
+	return httpServer
+}
+
 func testRuntimeWithDeployment(t *testing.T, deployment *deploymentpkg.AgentDeployment) (*agent.Runtime, *testAuditRecorder) {
 	t.Helper()
-	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
-	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return testRuntimeWithModelHandler(t, deployment, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/responses" {
 			t.Errorf("unexpected model path: %s", r.URL.Path)
 		}
@@ -72,7 +108,17 @@ func testRuntimeWithDeployment(t *testing.T, deployment *deploymentpkg.AgentDepl
 			"output":[{"type":"message","content":[{"type":"output_text","text":"{\"answer\":\"hello\"}"}]}],
 			"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}
 		}`)
-	}))
+	})
+}
+
+func testRuntimeWithModelHandler(
+	t *testing.T,
+	deployment *deploymentpkg.AgentDeployment,
+	modelHandler http.HandlerFunc,
+) (*agent.Runtime, *testAuditRecorder) {
+	t.Helper()
+	startA2AMCPFixture(t)
+	modelServer := httptest.NewServer(modelHandler)
 	t.Cleanup(modelServer.Close)
 	recorder := &testAuditRecorder{}
 	runtime, err := agent.NewRuntime(agent.Config{
@@ -221,6 +267,17 @@ func newA2AServerWithDeployment(
 	return server, recorder, err
 }
 
+func newA2AServerWithModelHandler(
+	t *testing.T,
+	publicURL *url.URL,
+	modelHandler http.HandlerFunc,
+) (*a2a.Server, *testAuditRecorder, error) {
+	t.Helper()
+	runtime, recorder := testRuntimeWithModelHandler(t, testagent.AgentDeployment(t), modelHandler)
+	server, err := a2a.New(runtime, a2a.Config{PublicURL: publicURL})
+	return server, recorder, err
+}
+
 func TestA2AJSONRPCExecutesRuntimeAndClosesAudit(t *testing.T) {
 	publicURL, err := url.Parse("https://agent.internal")
 	if err != nil {
@@ -360,6 +417,84 @@ func TestA2AUsesInjectedOfficialTaskStore(t *testing.T) {
 	}
 }
 
+func TestA2AStreamingMessageUsesOfficialClient(t *testing.T) {
+	publicURL, err := url.Parse("https://agent.internal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, recorder, err := newA2AServer(t, publicURL)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	endpoint := httptest.NewServer(server.EndpointHandler())
+	t.Cleanup(endpoint.Close)
+
+	cardResponse := httptest.NewRecorder()
+	server.AgentCardHandler().ServeHTTP(cardResponse, httptest.NewRequest(http.MethodGet, "/card", nil))
+	var card a2atypes.AgentCard
+	if err := json.Unmarshal(cardResponse.Body.Bytes(), &card); err != nil {
+		t.Fatalf("decode Agent Card: %v", err)
+	}
+	if !card.Capabilities.Streaming {
+		t.Fatal("A2A streaming capability was not declared")
+	}
+	card.SupportedInterfaces[0].URL = endpoint.URL
+
+	client, err := a2aclient.NewFromCard(context.Background(), &card, a2aclient.WithJSONRPCTransport(nil))
+	if err != nil {
+		t.Fatalf("NewFromCard() error = %v", err)
+	}
+
+	var events []a2atypes.Event
+	var streamTask *a2atypes.Task
+	var streamArtifact *a2atypes.TaskArtifactUpdateEvent
+	var finalState a2atypes.TaskState
+	var streamErr error
+	for event, err := range client.SendStreamingMessage(context.Background(), &a2atypes.SendMessageRequest{
+		Message: a2atypes.NewMessage(a2atypes.MessageRoleUser, a2atypes.NewTextPart("hello")),
+	}) {
+		if err != nil {
+			streamErr = err
+			break
+		}
+		events = append(events, event)
+		switch event := event.(type) {
+		case *a2atypes.Task:
+			streamTask = event
+		case *a2atypes.TaskArtifactUpdateEvent:
+			streamArtifact = event
+		case *a2atypes.TaskStatusUpdateEvent:
+			finalState = event.Status.State
+		}
+	}
+	if streamErr != nil {
+		t.Fatalf("SendStreamingMessage() error = %v", streamErr)
+	}
+	if len(events) == 0 {
+		t.Fatal("SendStreamingMessage() returned no events")
+	}
+
+	if streamTask == nil {
+		t.Fatalf("streaming events = %#v, want an official Task event", events)
+	}
+	if streamArtifact == nil || len(streamArtifact.Artifact.Parts) == 0 {
+		t.Fatalf("streaming artifact event = %#v, want structured output", streamArtifact)
+	}
+	if _, ok := streamArtifact.Artifact.Parts[0].Content.(a2atypes.Data); !ok {
+		t.Fatalf("streaming artifact part = %#v, want data", streamArtifact.Artifact.Parts[0])
+	}
+	if finalState != a2atypes.TaskStateCompleted {
+		t.Fatalf("final task state = %#v, want completed", finalState)
+	}
+	if len(recorder.eventsOfType(audit.EventRunStarted)) != 1 ||
+		len(recorder.eventsOfType(audit.EventRunCompleted)) != 1 {
+		t.Fatalf("streaming audit events started/completed = %d/%d, want 1/1",
+			len(recorder.eventsOfType(audit.EventRunStarted)),
+			len(recorder.eventsOfType(audit.EventRunCompleted)),
+		)
+	}
+}
+
 func TestA2ADurableTaskStoreSupportsStandardGetAndList(t *testing.T) {
 	publicURL, err := url.Parse("https://agent.internal")
 	if err != nil {
@@ -416,6 +551,388 @@ func TestA2ADurableTaskStoreSupportsStandardGetAndList(t *testing.T) {
 	if listed.TotalSize != 1 || len(listed.Tasks) != 1 || listed.Tasks[0].ID != created.ID {
 		t.Fatalf("ListTasks() = %#v, want created task", listed)
 	}
+}
+
+func TestA2ACancelTaskCancelsRuntimeAndProviderRequest(t *testing.T) {
+	publicURL, err := url.Parse("https://agent.internal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	providerStarted := make(chan struct{})
+	providerCanceled := make(chan struct{})
+	server, recorder, err := newA2AServerWithModelHandler(t, publicURL, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Errorf("unexpected model path: %s", r.URL.Path)
+		}
+		close(providerStarted)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		for {
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				close(providerCanceled)
+				return
+			}
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			select {
+			case <-r.Context().Done():
+				close(providerCanceled)
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	endpoint := httptest.NewServer(server.EndpointHandler())
+	t.Cleanup(endpoint.Close)
+
+	cardResponse := httptest.NewRecorder()
+	server.AgentCardHandler().ServeHTTP(cardResponse, httptest.NewRequest(http.MethodGet, "/card", nil))
+	var card a2atypes.AgentCard
+	if err := json.Unmarshal(cardResponse.Body.Bytes(), &card); err != nil {
+		t.Fatalf("decode Agent Card: %v", err)
+	}
+	card.SupportedInterfaces[0].URL = endpoint.URL
+	client, err := a2aclient.NewFromCard(context.Background(), &card, a2aclient.WithJSONRPCTransport(nil))
+	if err != nil {
+		t.Fatalf("NewFromCard() error = %v", err)
+	}
+
+	events := make(chan a2atypes.Event)
+	streamErr := make(chan error, 1)
+	go func() {
+		defer close(events)
+		for event, err := range client.SendStreamingMessage(context.Background(), &a2atypes.SendMessageRequest{
+			Message: a2atypes.NewMessage(a2atypes.MessageRoleUser, a2atypes.NewTextPart("cancel me")),
+		}) {
+			if err != nil {
+				streamErr <- err
+				return
+			}
+			events <- event
+		}
+	}()
+
+	var task *a2atypes.Task
+	select {
+	case event, ok := <-events:
+		if !ok {
+			t.Fatal("stream ended before creating a task")
+		}
+		if task, ok = event.(*a2atypes.Task); !ok {
+			t.Fatalf("first streaming event = %#v, want task", event)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the streaming Task event")
+	}
+	<-providerStarted
+
+	canceled, err := client.CancelTask(context.Background(), &a2atypes.CancelTaskRequest{ID: task.ID})
+	if err != nil {
+		t.Fatalf("CancelTask() error = %v", err)
+	}
+	if canceled.ID != task.ID || canceled.Status.State != a2atypes.TaskStateCanceled {
+		t.Fatalf("CancelTask() = %#v, want canceled task %s", canceled, task.ID)
+	}
+	select {
+	case <-providerCanceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("OpenAI-compatible provider request was not canceled")
+	}
+
+	finalState := a2atypes.TaskState("")
+streamLoop:
+	for {
+		select {
+		case event, ok := <-events:
+			if !ok {
+				var err error
+				select {
+				case err = <-streamErr:
+				default:
+				}
+				if err != nil && !strings.Contains(err.Error(), "context canceled") {
+					t.Fatalf("stream error after cancel = %v", err)
+				}
+				if finalState != a2atypes.TaskStateCanceled {
+					t.Fatalf("final streaming state = %#v, want canceled", finalState)
+				}
+				break streamLoop
+			}
+			if status, ok := event.(*a2atypes.TaskStatusUpdateEvent); ok {
+				finalState = status.Status.State
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for the canceled stream to close")
+		}
+	}
+
+	repeatCanceled, err := client.CancelTask(context.Background(), &a2atypes.CancelTaskRequest{ID: task.ID})
+	if err != nil {
+		t.Fatalf("duplicate CancelTask() error = %v, want idempotent canceled result", err)
+	}
+	if repeatCanceled.ID != task.ID || repeatCanceled.Status.State != a2atypes.TaskStateCanceled {
+		t.Fatalf("duplicate CancelTask() = %#v, want canceled task %s", repeatCanceled, task.ID)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(recorder.eventsOfType(audit.EventRunCanceled)) != 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(recorder.eventsOfType(audit.EventRunStarted)) != 1 ||
+		len(recorder.eventsOfType(audit.EventRunCanceled)) != 1 ||
+		len(recorder.eventsOfType(audit.EventRunFailed)) != 0 {
+		t.Fatalf("cancellation audit events started/canceled/failed = %d/%d/%d, want 1/1/0",
+			len(recorder.eventsOfType(audit.EventRunStarted)),
+			len(recorder.eventsOfType(audit.EventRunCanceled)),
+			len(recorder.eventsOfType(audit.EventRunFailed)),
+		)
+	}
+}
+
+func TestA2ACannotCancelCompletedTask(t *testing.T) {
+	publicURL, err := url.Parse("https://agent.internal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, recorder, err := newA2AServer(t, publicURL)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	endpoint := httptest.NewServer(server.EndpointHandler())
+	t.Cleanup(endpoint.Close)
+
+	cardResponse := httptest.NewRecorder()
+	server.AgentCardHandler().ServeHTTP(cardResponse, httptest.NewRequest(http.MethodGet, "/card", nil))
+	var card a2atypes.AgentCard
+	if err := json.Unmarshal(cardResponse.Body.Bytes(), &card); err != nil {
+		t.Fatalf("decode Agent Card: %v", err)
+	}
+	card.SupportedInterfaces[0].URL = endpoint.URL
+	client, err := a2aclient.NewFromCard(context.Background(), &card, a2aclient.WithJSONRPCTransport(nil))
+	if err != nil {
+		t.Fatalf("NewFromCard() error = %v", err)
+	}
+
+	result, err := client.SendMessage(context.Background(), &a2atypes.SendMessageRequest{
+		Message: a2atypes.NewMessage(a2atypes.MessageRoleUser, a2atypes.NewTextPart("complete first")),
+	})
+	if err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+	task, ok := result.(*a2atypes.Task)
+	if !ok || task.Status.State != a2atypes.TaskStateCompleted {
+		t.Fatalf("SendMessage result = %#v, want completed task", result)
+	}
+
+	if _, err := client.CancelTask(context.Background(), &a2atypes.CancelTaskRequest{ID: task.ID}); !errors.Is(err, a2atypes.ErrTaskNotCancelable) {
+		t.Fatalf("CancelTask() error = %v, want ErrTaskNotCancelable", err)
+	}
+	got, err := client.GetTask(context.Background(), &a2atypes.GetTaskRequest{ID: task.ID})
+	if err != nil {
+		t.Fatalf("GetTask() error = %v", err)
+	}
+	if got.Status.State != a2atypes.TaskStateCompleted {
+		t.Fatalf("task state after cancel = %s, want completed", got.Status.State)
+	}
+	if err := subscribeError(client.SubscribeToTask(context.Background(), &a2atypes.SubscribeToTaskRequest{ID: task.ID})); !errors.Is(err, a2atypes.ErrUnsupportedOperation) {
+		t.Fatalf("SubscribeToTask() completed error = %v, want ErrUnsupportedOperation", err)
+	}
+	if len(recorder.eventsOfType(audit.EventRunStarted)) != 1 ||
+		len(recorder.eventsOfType(audit.EventRunCompleted)) != 1 ||
+		len(recorder.eventsOfType(audit.EventRunCanceled)) != 0 {
+		t.Fatalf("completed-task audit events started/completed/canceled = %d/%d/%d, want 1/1/0",
+			len(recorder.eventsOfType(audit.EventRunStarted)),
+			len(recorder.eventsOfType(audit.EventRunCompleted)),
+			len(recorder.eventsOfType(audit.EventRunCanceled)),
+		)
+	}
+}
+
+func TestA2ASubscribeToTaskFollowsActiveExecutionWithoutDuplicateRun(t *testing.T) {
+	publicURL, err := url.Parse("https://agent.internal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	providerStarted := make(chan struct{})
+	providerCanceled := make(chan struct{})
+	var providerRequests atomic.Int32
+	server, recorder, err := newA2AServerWithModelHandler(t, publicURL, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Errorf("unexpected model path: %s", r.URL.Path)
+		}
+		if providerRequests.Add(1) != 1 {
+			t.Errorf("provider request count = %d, want 1", providerRequests.Load())
+		}
+		close(providerStarted)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		for {
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				close(providerCanceled)
+				return
+			}
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			select {
+			case <-r.Context().Done():
+				close(providerCanceled)
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	endpoint := httptest.NewServer(server.EndpointHandler())
+	t.Cleanup(endpoint.Close)
+
+	cardResponse := httptest.NewRecorder()
+	server.AgentCardHandler().ServeHTTP(cardResponse, httptest.NewRequest(http.MethodGet, "/card", nil))
+	var card a2atypes.AgentCard
+	if err := json.Unmarshal(cardResponse.Body.Bytes(), &card); err != nil {
+		t.Fatalf("decode Agent Card: %v", err)
+	}
+	card.SupportedInterfaces[0].URL = endpoint.URL
+	client, err := a2aclient.NewFromCard(context.Background(), &card, a2aclient.WithJSONRPCTransport(nil))
+	if err != nil {
+		t.Fatalf("NewFromCard() error = %v", err)
+	}
+
+	streamEvents := make(chan a2atypes.Event)
+	streamErr := make(chan error, 1)
+	go func() {
+		defer close(streamEvents)
+		for event, err := range client.SendStreamingMessage(context.Background(), &a2atypes.SendMessageRequest{
+			Message: a2atypes.NewMessage(a2atypes.MessageRoleUser, a2atypes.NewTextPart("subscribe while active")),
+		}) {
+			if err != nil {
+				streamErr <- err
+				return
+			}
+			streamEvents <- event
+		}
+	}()
+
+	var task *a2atypes.Task
+	select {
+	case event, ok := <-streamEvents:
+		if !ok {
+			t.Fatal("stream ended before creating a task")
+		}
+		if task, ok = event.(*a2atypes.Task); !ok {
+			t.Fatalf("first streaming event = %#v, want task", event)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the streaming Task event")
+	}
+	<-providerStarted
+
+	subscriptionEvents := make(chan a2atypes.Event)
+	subscriptionErr := make(chan error, 1)
+	go func() {
+		defer close(subscriptionEvents)
+		for event, err := range client.SubscribeToTask(context.Background(), &a2atypes.SubscribeToTaskRequest{ID: task.ID}) {
+			if err != nil {
+				subscriptionErr <- err
+				return
+			}
+			subscriptionEvents <- event
+		}
+	}()
+
+	canceled, err := client.CancelTask(context.Background(), &a2atypes.CancelTaskRequest{ID: task.ID})
+	if err != nil {
+		t.Fatalf("CancelTask() error = %v", err)
+	}
+	if canceled.Status.State != a2atypes.TaskStateCanceled {
+		t.Fatalf("CancelTask() state = %s, want canceled", canceled.Status.State)
+	}
+	select {
+	case <-providerCanceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("provider request was not canceled")
+	}
+
+	subscriptionState := a2atypes.TaskState("")
+subscriptionLoop:
+	for {
+		select {
+		case event, ok := <-subscriptionEvents:
+			if !ok {
+				select {
+				case err := <-subscriptionErr:
+					t.Fatalf("SubscribeToTask() error = %v", err)
+				default:
+				}
+				break subscriptionLoop
+			}
+			if status, ok := event.(*a2atypes.TaskStatusUpdateEvent); ok {
+				subscriptionState = status.Status.State
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for active subscription to close")
+		}
+	}
+	if subscriptionState != a2atypes.TaskStateCanceled {
+		t.Fatalf("active subscription final state = %s, want canceled", subscriptionState)
+	}
+
+	streamState := a2atypes.TaskState("")
+streamLoop:
+	for {
+		select {
+		case event, ok := <-streamEvents:
+			if !ok {
+				select {
+				case err := <-streamErr:
+					if err != nil && !strings.Contains(err.Error(), "context canceled") {
+						t.Fatalf("SendStreamingMessage() error = %v", err)
+					}
+				default:
+				}
+				break streamLoop
+			}
+			if status, ok := event.(*a2atypes.TaskStatusUpdateEvent); ok {
+				streamState = status.Status.State
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for original stream to close")
+		}
+	}
+	if streamState != a2atypes.TaskStateCanceled {
+		t.Fatalf("original stream final state = %s, want canceled", streamState)
+	}
+
+	if err := subscribeError(client.SubscribeToTask(context.Background(), &a2atypes.SubscribeToTaskRequest{ID: task.ID})); !errors.Is(err, a2atypes.ErrUnsupportedOperation) {
+		t.Fatalf("SubscribeToTask() after cancellation error = %v, want ErrUnsupportedOperation", err)
+	}
+	if len(recorder.eventsOfType(audit.EventRunStarted)) != 1 ||
+		len(recorder.eventsOfType(audit.EventRunCanceled)) != 1 {
+		t.Fatalf("resubscribed audit events started/canceled = %d/%d, want 1/1",
+			len(recorder.eventsOfType(audit.EventRunStarted)),
+			len(recorder.eventsOfType(audit.EventRunCanceled)),
+		)
+	}
+}
+
+func subscribeError(events iter.Seq2[a2atypes.Event, error]) error {
+	var requestErr error
+	for _, err := range events {
+		if err != nil {
+			requestErr = err
+			break
+		}
+	}
+	return requestErr
 }
 
 type recordingA2AMetrics struct {

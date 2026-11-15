@@ -69,9 +69,11 @@ configured by the environment.
 | Machine discovery | A2A Agent Card | `GET /.well-known/agent-card.json` | standard capability metadata |
 | Tool server | MCP Streamable HTTP | outbound | deterministic tools |
 
-Operational endpoints are public `/readyz` and `/version`, plus `/metrics` and
-`/debug/pprof`. Metrics are internal and credential-free; profiling is disabled
-unless `AGENT_RUNTIME_PPROF_ENABLED=1`.
+Operational endpoints are public `/livez` and `/readyz`, plus `/metrics` and
+`/debug/pprof`. Liveness proves that the process is serving without consulting
+external dependencies; readiness fails closed on dependency health or drain.
+Metrics are internal and credential-free; profiling is disabled unless
+`AGENT_RUNTIME_PPROF_ENABLED=1`.
 There is no private application API or ADK Launcher control plane.
 
 ## Security boundary
@@ -154,7 +156,7 @@ alone permits local HTTP LLMs.
 
 Use `make dev` for Compose; `make dev-down` removes the workload. `make run`
 is an advanced host-mode command and requires a host-specific deployment
-artifact. The ops surface (`/readyz`, `/version`, `/metrics`) listens on
+artifact. The ops surface (`/livez`, `/readyz`, `/metrics`) listens on
 `AGENT_RUNTIME_OPS_ADDR` (default `:8085`) so protocol mutual TLS never gates
 healthchecks; metrics are internal and credential-free, while profiling is an
 explicit opt-in. `/readyz` reuses one dependency-check round for 10 seconds

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -317,53 +318,52 @@ func TestRuntimeRunExecutesMCPToolBeforeAuditCompletion(t *testing.T) {
 	}
 }
 
-func TestRuntimeRunAcknowledgesClientTool(t *testing.T) {
+func TestRuntimeRunPausesOnAwaitedClientTool(t *testing.T) {
 	events := &recordingAudit{}
 	runtime := newTestRuntime(t, plainTestDeployment(t), events, &turnBasedLLM{turns: []*model.LLMResponse{
 		{Content: &genai.Content{Role: "model", Parts: []*genai.Part{
 			{FunctionCall: &genai.FunctionCall{
 				ID:   "call_ui",
-				Name: "sync_ui",
+				Name: "propose_birth_time",
 				Args: map[string]any{
-					"kind":          "profile_time_patch",
-					"standard_time": "1990-05-02T07:36:00+08:36",
+					"instant": "1990-05-02T07:36:00+08:36",
 				},
 			}},
 		}}},
-		{Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "proposal sent"}}}},
+		// A paused run must stop before this second model turn. turnBasedLLM
+		// would otherwise expose accidental continuation as an empty answer.
+		{Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "must not run"}}}},
 	}})
 
 	result, err := runtime.Run(context.Background(), execution.RunRequest{
-		RunID:       "run_client_tool",
-		ThreadID:    "thread_client_tool",
+		RunID:       "run_client_pause",
+		ThreadID:    "thread_client_pause",
 		UserID:      "user_1",
-		UserMessage: "sync proposal",
+		UserMessage: "propose correction",
 		ClientTools: []execution.ClientTool{{
-			Name:        "sync_ui",
-			Description: "Send a structured UI proposal to the client.",
-			Parameters:  []byte(`{"type":"object","properties":{"kind":{"type":"string"},"standard_time":{"type":"string"}},"required":["kind","standard_time"]}`),
+			Name:        "propose_birth_time",
+			Description: "Propose a corrected birth time.",
+			Parameters:  []byte(`{"type":"object","properties":{"instant":{"type":"string","format":"date-time"}},"required":["instant"]}`),
 		}},
 	}, nil)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Text != "proposal sent" {
-		t.Fatalf("Text = %q, want proposal sent", result.Text)
+	if len(result.PendingClientTools) != 1 {
+		t.Fatalf("PendingClientTools = %#v, want one paused call", result.PendingClientTools)
 	}
-	completed := events.eventsOfType(audit.EventToolCallCompleted)
-	if len(completed) != 1 {
-		t.Fatalf("completed client tool audit events = %d, want 1", len(completed))
+	pending := result.PendingClientTools[0]
+	if pending.ToolCallID != "call_ui" || pending.ToolName != "propose_birth_time" {
+		t.Fatalf("pending call = %#v, want call_ui/propose_birth_time", pending)
 	}
-	if completed[0].ToolName != "sync_ui" {
-		t.Fatalf("client tool audit name = %q, want sync_ui", completed[0].ToolName)
+	if !strings.Contains(string(pending.Args), "1990-05-02T07:36:00+08:36") {
+		t.Fatalf("pending args = %s, want proposal instant", pending.Args)
 	}
-	if server, _ := completed[0].Payload["mcp_server"].(string); server != ClientToolServer {
-		t.Fatalf("client tool audit server = %q, want %q", server, ClientToolServer)
+	if result.Text != "" || result.Output != nil {
+		t.Fatalf("paused result has final output: %#v", result)
 	}
-	inputDigest, _ := completed[0].Payload["input_digest"].(string)
-	outputDigest, _ := completed[0].Payload["output_digest"].(string)
-	if inputDigest == "" || outputDigest == "" || inputDigest == outputDigest {
-		t.Fatalf("client tool audit digests = %#v", completed[0].Payload)
+	if got := len(events.eventsOfType(audit.EventRunPaused)); got != 1 {
+		t.Fatalf("paused run audit events = %d, want 1", got)
 	}
 }
 

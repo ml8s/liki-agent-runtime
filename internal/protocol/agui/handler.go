@@ -115,7 +115,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIRequest, err.Error())
 		return
 	}
-	content, history, err := lastUserConversation(input.Messages)
+	var content string
+	var history []execution.Message
+	var resolutions []execution.ClientToolResolution
+	var toolResults []toolResult
+	if len(input.Resume) != 0 {
+		history, resolutions, toolResults, err = resumeRunProjection(input.Messages, input.Resume)
+	} else {
+		content, history, err = lastUserConversation(input.Messages)
+	}
 	if err != nil {
 		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIMessage, err.Error())
 		return
@@ -153,6 +161,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A resolved resume's authoritative tool result is a protocol fact and
+	// belongs before model continuation events. Cancelled entries intentionally
+	// receive no result: their tool call was never executed.
+	for _, result := range toolResults {
+		if err := emit(toolCallResultEvent(runID, result)); err != nil {
+			return
+		}
+	}
+
 	streamer := newStream(streamConfig{
 		runID:      runID,
 		entrypoint: h.entrypoint,
@@ -166,6 +183,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		History:     history,
 		Context:     opaqueJSON(input.ForwardedProps),
 		ClientTools: clientTools,
+		Resume:      resolutions,
 	}
 	runCtx, cancelRun := context.WithTimeout(r.Context(), h.runTimeout)
 	defer cancelRun()
@@ -178,10 +196,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		streamer = next
 		return emitAll(outgoing)
 	})
-	if runErr == nil {
+	interrupted := len(result.PendingClientTools) != 0
+	if runErr == nil && !interrupted {
 		next, outgoing := streamer.finish(result.Text)
 		streamer = next
 		runErr = emitAll(outgoing)
+	}
+	if runErr == nil && interrupted {
+		outgoing, interruptErr := interruptEvents(
+			threadID,
+			runID,
+			result.PendingClientTools,
+			input.Messages,
+		)
+		if interruptErr != nil {
+			runErr = interruptErr
+		} else {
+			runErr = emitAll(outgoing)
+		}
 	}
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		message, code := publicError(runErr)
@@ -191,7 +223,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if runErr == nil {
+	if runErr == nil && !interrupted {
 		// Protocol contract: RUN_FINISHED must carry a success outcome
 		// (matching the relay gateway); a missing outcome causes AG-UI
 		// clients to treat the result as non-successful (result undefined).

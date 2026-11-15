@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"strings"
 
 	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
@@ -12,6 +13,9 @@ import (
 // RunState is the immutable result state advanced across ADK run events.
 type RunState struct {
 	Output execution.OutputResult
+	// pendingClientTools are filled when a final ADK event names long-running
+	// tool-call IDs. They represent a protocol pause, not an execution result.
+	pendingClientTools []execution.PendingClientTool
 	// textPolicy is the aggregate-level single source of truth for which
 	// author's model text may become user-visible state.
 	textPolicy  TextVisibilityPolicy
@@ -85,6 +89,7 @@ func (t toolNameTracker) names() []string {
 func (s RunState) Consume(event *session.Event) RunState {
 	next := s
 	next.toolTracker = s.toolTracker.consume(event)
+	next.pendingClientTools = appendPendingClientTools(next.pendingClientTools, event)
 	if event == nil || event.Partial || !event.IsFinalResponse() ||
 		!s.textPolicy.ExposesModelText(event.Author) {
 		return next
@@ -108,6 +113,49 @@ func (s RunState) Consume(event *session.Event) RunState {
 // Tools returns the tool names observed so far.
 func (s RunState) Tools() []string {
 	return s.toolTracker.names()
+}
+
+// PendingClientTools returns assistant client-tool calls that paused the run.
+func (s RunState) PendingClientTools() []execution.PendingClientTool {
+	if len(s.pendingClientTools) == 0 {
+		return nil
+	}
+	return append([]execution.PendingClientTool(nil), s.pendingClientTools...)
+}
+
+func appendPendingClientTools(
+	pending []execution.PendingClientTool,
+	event *session.Event,
+) []execution.PendingClientTool {
+	if event == nil || event.Content == nil || len(event.LongRunningToolIDs) == 0 {
+		return pending
+	}
+	waiting := make(map[string]struct{}, len(event.LongRunningToolIDs))
+	for _, id := range event.LongRunningToolIDs {
+		waiting[id] = struct{}{}
+	}
+	for _, part := range event.Content.Parts {
+		if part == nil || part.FunctionCall == nil || part.FunctionCall.ID == "" {
+			continue
+		}
+		if _, ok := waiting[part.FunctionCall.ID]; !ok {
+			continue
+		}
+		args, err := json.Marshal(part.FunctionCall.Args)
+		if err != nil || bytesEqualJSON(args) {
+			args = []byte("{}")
+		}
+		pending = append(pending, execution.PendingClientTool{
+			ToolCallID: part.FunctionCall.ID,
+			ToolName:   part.FunctionCall.Name,
+			Args:       args,
+		})
+	}
+	return pending
+}
+
+func bytesEqualJSON(raw json.RawMessage) bool {
+	return len(raw) == 0 || string(raw) == "null"
 }
 
 // ConsumeStructuredOutput validates and attaches final structured output.

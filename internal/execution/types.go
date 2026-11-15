@@ -21,6 +21,7 @@ type Role string
 const (
 	RoleUser      Role = "user"
 	RoleAssistant Role = "assistant"
+	RoleTool      Role = "tool"
 )
 
 // MaxHistoryMessages prevents a protocol history from becoming an
@@ -33,6 +34,29 @@ const (
 type Message struct {
 	Role    Role
 	Content string
+	// ToolCalls are present only on assistant messages that requested
+	// client-executed tools. Args are canonical JSON.
+	ToolCalls []ToolCall
+	// ToolCallID and ToolOutput describe a tool-message response to a prior
+	// assistant tool call. They support protocol resume reconstruction.
+	ToolCallID string
+	ToolOutput json.RawMessage
+	ToolError  string
+}
+
+// ToolCall is a runtime-neutral projection of an assistant function call.
+type ToolCall struct {
+	ID   string
+	Name string
+	Args json.RawMessage
+}
+
+// PendingClientTool describes an assistant request that stopped the run and is
+// waiting for the trusted protocol client to obtain approval and execute it.
+type PendingClientTool struct {
+	ToolCallID string
+	ToolName   string
+	Args       json.RawMessage
 }
 
 // OutputResult is the validated final outcome of a run: the generic structured
@@ -55,11 +79,13 @@ type RunRequest struct {
 	UserMessage string
 	History     []Message
 	Context     json.RawMessage
-	// ClientTools are fire-and-forget UI tools declared by the trusted
-	// product gateway. The runtime exposes them to the model, emits their
-	// AG-UI tool-call facts, and acknowledges execution; it never implements
-	// their product semantics.
+	// ClientTools are UI tools declared by the trusted product gateway. The
+	// runtime exposes them to the model and pauses on their calls until the
+	// trusted client resolves them; it never implements their semantics.
 	ClientTools []ClientTool
+	// Resume carries protocol-level resolutions of pending client tools. A
+	// resumed run has no new user message.
+	Resume []ClientToolResolution
 }
 
 // ClientTool is the runtime-neutral projection of an AG-UI client tool.
@@ -67,6 +93,15 @@ type ClientTool struct {
 	Name        string
 	Description string
 	Parameters  json.RawMessage
+}
+
+// ClientToolResolution is a runtime-neutral projection of an AG-UI resume
+// entry. Business payloads and authorization remain with the protocol client.
+type ClientToolResolution struct {
+	InterruptID string
+	ToolCallID  string
+	ToolName    string
+	Resolved    bool
 }
 
 // Identity projects caller-owned request identity for lifecycle validation.
@@ -84,6 +119,9 @@ type RunResult struct {
 	Output     json.RawMessage
 	Text       string
 	Usage      RunUsage
+	// PendingClientTools is non-empty when the run paused on one or more
+	// client tools awaiting protocol-client execution.
+	PendingClientTools []PendingClientTool
 }
 
 // RunUsage aggregates model usage for one run (counters summed across every

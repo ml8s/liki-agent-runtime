@@ -15,7 +15,7 @@ import (
 
 // ClientToolServer identifies AG-UI client tools in execution evidence. They
 // are not MCP tools: the product gateway declares them and the client owns
-// their product behavior. The runtime only acknowledges the call.
+// their product behavior. The runtime only pauses on the call.
 const ClientToolServer = "client"
 
 type clientToolsKey struct{}
@@ -45,8 +45,9 @@ func clientToolFromContext(ctx context.Context, name string) (execution.ClientTo
 }
 
 // clientToolset adapts per-run AG-UI client tool declarations to the ADK's
-// standard function-tool interface. Every handler immediately acknowledges the
-// call; AG-UI protocol events remain the product-facing result.
+// standard function-tool interface. Client tools are ADK long-running tools:
+// their handler intentionally returns no result so the ADK flow pauses instead
+// of inventing a client result. The trusted protocol client owns execution.
 type clientToolset struct{}
 
 func newClientToolset() *clientToolset {
@@ -73,18 +74,12 @@ func (*clientToolset) Tools(ctx adkagent.ReadonlyContext) ([]tool.Tool, error) {
 		}
 
 		clientTool, err := functiontool.New(functiontool.Config{
-			Name:        declared.Name,
-			Description: declared.Description,
-			InputSchema: inputSchema,
-			OutputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"status": {Type: "string"},
-				},
-				Required: []string{"status"},
-			},
+			Name:          declared.Name,
+			Description:   declared.Description,
+			InputSchema:   inputSchema,
+			IsLongRunning: true,
 		}, func(_ adkagent.Context, _ map[string]any) (map[string]any, error) {
-			return map[string]any{"status": "forwarded_to_client"}, nil
+			return nil, nil
 		})
 		if err != nil {
 			return nil, fmt.Errorf("create client tool %q: %w", declared.Name, err)

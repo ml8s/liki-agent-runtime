@@ -232,18 +232,19 @@ the standard protocol surfaces above; MCP readiness is exposed through
 `/readyz`.
 
 AG-UI decodes the official `RunAgentInput` and emits official SSE events. The
-supported profile is text chat plus bounded fire-and-forget client tools
+supported profile is text chat, await-result client tools, and standard human-in-the-loop interrupts
 declared by the trusted product gateway. Other unsupported capabilities are
 rejected rather than silently ignored.
 Official clients may send an absent, null, or empty `state` value; the stateless
 runtime ignores it. Non-empty client state is rejected with a stable error code.
 
 Client tools are protocol declarations, not runtime implementations. The
-gateway owns their names, schemas, product meaning, validation, and any client
-confirmation workflow. The runtime validates declaration shape and size, exposes
-them only to the entrypoint agent, emits the official tool-call lifecycle, and
-acknowledges execution with `forwarded_to_client`. Delegated sub-agents cannot
-call them.
+gateway owns their names, schemas, product meaning, validation, authorization,
+and execution. The runtime validates declaration shape and size, exposes them
+only to the entrypoint agent, and emits the official tool-call lifecycle. An
+await-result tool is an ADK long-running tool: the run pauses with the official
+interrupt outcome and waits for the trusted gateway to resume it. Delegated
+sub-agents cannot call them.
 
 Event mapping:
 
@@ -255,9 +256,11 @@ Event mapping:
 | sub-agent failure | `SUBAGENT_ERROR` |
 | MCP tool call | `TOOL_CALL_START` / `TOOL_CALL_ARGS` with sub-agent attribution |
 | MCP tool response | `TOOL_CALL_RESULT` / `TOOL_CALL_END` with sub-agent attribution |
-| client tool call | `TOOL_CALL_START` / `TOOL_CALL_ARGS` / `TOOL_CALL_END` / `TOOL_CALL_RESULT` |
+| client tool call | `TOOL_CALL_START` / `TOOL_CALL_ARGS` / `TOOL_CALL_END` |
+| client-tool pause | `MESSAGES_SNAPSHOT`, `RUN_FINISHED {outcome:interrupt}` |
+| resumed client tool | `TOOL_CALL_RESULT` against the original `toolCallId` |
 | final answer | `TEXT_MESSAGE_START` / `TEXT_MESSAGE_CONTENT` / `TEXT_MESSAGE_END` |
-| success | `RUN_FINISHED` |
+| success | `RUN_FINISHED {outcome:success}` |
 | failure | `RUN_ERROR` |
 
 `RUN_FINISHED` contains the AgentDefinition reference, validated output when
@@ -295,7 +298,7 @@ join the core as pure functions and the shell as explicit, lock-annotated state 
 
 ## Operations
 
-The operational surface (`/readyz`, `/version`, `/metrics`) is served on a
+The operational surface (`/livez`, `/readyz`, `/metrics`) is served on a
 dedicated ops listener (`AGENT_RUNTIME_OPS_ADDR`, default `:8085`) so protocol
 mutual TLS never gates healthchecks or scrapers; `/metrics` is internal and
 credential-free. `/debug/pprof` is disabled unless explicitly enabled for

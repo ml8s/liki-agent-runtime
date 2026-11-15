@@ -106,7 +106,10 @@ func (r *Runtime) Run(
 		// run_evidence.go): the terminal event precedes any process-state
 		// release.
 		outcome := auditOutcomeCompleted
-		if runErr != nil {
+		switch {
+		case len(result.PendingClientTools) != 0:
+			outcome = auditOutcomePaused
+		case runErr != nil:
 			outcome = auditOutcomeFailed
 		}
 		claimed, wasPending := r.runs.claimClose(request.RunID)
@@ -165,6 +168,18 @@ func (r *Runtime) Run(
 	if streamErr != nil {
 		runErr = streamErr
 		return execution.RunResult{}, runErr
+	}
+	if pending := state.PendingClientTools(); len(pending) != 0 {
+		result.Definition = r.definition.DeploymentRef()
+		result.PendingClientTools = pending
+		runSpan.SetStatus(codes.Ok, "paused on client tool")
+		r.config.Logger.InfoContext(ctx, "agent_run_paused_on_client_tool",
+			append(traceLogFields(ctx),
+				"run_id", request.RunID,
+				"thread_id", request.ThreadID,
+				"pending_tools", len(pending),
+			)...)
+		return result, nil
 	}
 	result, finalizeErr := r.finalizeRunResult(ctx, request, sessionID, state, runSpan)
 	if finalizeErr != nil {

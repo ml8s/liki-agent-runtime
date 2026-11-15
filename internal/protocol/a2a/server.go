@@ -6,11 +6,14 @@ import (
 	"context"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"iter"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ml8s/agent-runtime/internal/execution"
@@ -224,6 +227,10 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 			case finalEvent != nil && !terminal:
 				options = append(options, agent.WithPausedAttempt())
 			}
+			if errors.Is(err, context.Canceled) ||
+				((finalEvent == nil || !terminal) && ctx.Err() != nil) {
+				options = append(options, agent.WithCanceledAttempt())
+			}
 			// A2A ContextID owns the ADK session; only an attempt audit ends here.
 			options = append(options, agent.WithPreservedSession())
 			attempt := executionAttemptFromContext(ctx, ctx.RequestContext())
@@ -235,13 +242,20 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 		A2AExecutionCleanupCallback: func(ctx context.Context, request *a2asrv.ExecutorContext, _ []*a2a.AgentCard, result a2a.SendMessageResult, cause error) {
 			cancelExecution(ctx)
 			var options []agent.AuditEndOption
+			canceled := false
 			if task, ok := result.(*a2a.Task); ok {
 				switch {
 				case task.Status.State == a2a.TaskStateCanceled:
-					options = append(options, agent.WithCanceledAttempt())
+					canceled = true
 				case !task.Status.State.Terminal():
 					options = append(options, agent.WithPausedAttempt())
 				}
+			}
+			if errors.Is(cause, context.Canceled) {
+				canceled = true
+			}
+			if canceled {
+				options = append(options, agent.WithCanceledAttempt())
 			}
 			options = append(options, agent.WithPreservedSession())
 			attempt := executionAttemptFromContext(ctx, request)
@@ -283,7 +297,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 	}
 	handlerOptions = append(handlerOptions, a2asrv.WithAgentInactivityTimeout(config.RunTimeout))
 	requestHandler := a2asrv.NewHandler(
-		executor,
+		newCancellationExecutor(executor),
 		handlerOptions...,
 	)
 
@@ -297,6 +311,72 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 func cancelExecution(ctx context.Context) {
 	if cancel, ok := ctx.Value(executionCancelKey{}).(context.CancelFunc); ok {
 		cancel()
+	}
+}
+
+// cancellationExecutor bridges the official A2A Cancel callback to the Go
+// context handed to ADK Runner.Run. ADK v2.7.1 publishes the canceled status
+// from Cancel but does not stop the active runner itself; this adapter owns
+// that bridge without introducing a private protocol contract.
+type cancellationExecutor struct {
+	delegate    *adka2a.Executor
+	mu          sync.Mutex
+	activeTasks map[a2a.TaskID]context.CancelCauseFunc
+}
+
+func newCancellationExecutor(delegate *adka2a.Executor) *cancellationExecutor {
+	return &cancellationExecutor{delegate: delegate, activeTasks: make(map[a2a.TaskID]context.CancelCauseFunc)}
+}
+
+func (e *cancellationExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+	runCtx, cancelRun := context.WithCancelCause(ctx)
+	if !e.register(execCtx.TaskID, cancelRun) {
+		cancelRun(context.Canceled)
+		return func(yield func(a2a.Event, error) bool) {
+			yield(nil, fmt.Errorf("a2a task %s is already executing", execCtx.TaskID))
+		}
+	}
+
+	return func(yield func(a2a.Event, error) bool) {
+		defer func() {
+			e.release(execCtx.TaskID)
+			cancelRun(context.Canceled)
+		}()
+		for event, err := range e.delegate.Execute(runCtx, execCtx) {
+			if !yield(event, err) {
+				return
+			}
+		}
+	}
+}
+
+func (e *cancellationExecutor) Cancel(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+	e.cancelTask(execCtx.TaskID)
+	return e.delegate.Cancel(ctx, execCtx)
+}
+
+func (e *cancellationExecutor) register(taskID a2a.TaskID, cancel context.CancelCauseFunc) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if _, exists := e.activeTasks[taskID]; exists {
+		return false
+	}
+	e.activeTasks[taskID] = cancel
+	return true
+}
+
+func (e *cancellationExecutor) release(taskID a2a.TaskID) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	delete(e.activeTasks, taskID)
+}
+
+func (e *cancellationExecutor) cancelTask(taskID a2a.TaskID) {
+	e.mu.Lock()
+	cancel := e.activeTasks[taskID]
+	e.mu.Unlock()
+	if cancel != nil {
+		cancel(context.Canceled)
 	}
 }
 
