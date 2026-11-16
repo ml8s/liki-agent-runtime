@@ -19,10 +19,9 @@ func nonNilSlice[T any](value []T) []T {
 }
 
 type deploymentDigestInput struct {
-	SchemaVersion string                `json:"schemaVersion"`
-	Deployment    DeploymentMetadata    `json:"deployment"`
-	MCPServers    []MCPServerDefinition `json:"mcpServers"`
-	Agents        []agentDigestInput    `json:"agents"`
+	Deployment DeploymentMetadata    `json:"deployment"`
+	MCPServers []MCPServerDefinition `json:"mcpServers"`
+	Agents     []agentDigestInput    `json:"agents"`
 }
 
 type agentDigestInput struct {
@@ -75,10 +74,9 @@ func deploymentDigest(deployment *AgentDeployment) (string, error) {
 		agents = append(agents, agentDigestInputFrom(&deployment.Spec.Agents[index]))
 	}
 	raw, err := json.Marshal(deploymentDigestInput{
-		SchemaVersion: deployment.SchemaVersion,
-		Deployment:    deployment.Metadata,
-		MCPServers:    mcpServers,
-		Agents:        agents,
+		Deployment: deployment.Metadata,
+		MCPServers: mcpServers,
+		Agents:     agents,
 	})
 	if err != nil {
 		return "", artifactErrorWrap(CodeDeploymentIdentityInvalid, "marshal deployment digest input", err)
@@ -143,10 +141,9 @@ func (d *AgentDeployment) ValidateIntegrity() error {
 		agents = append(agents, agentDigestInputFrom(&d.Spec.Agents[index]))
 	}
 	raw, err := json.Marshal(deploymentDigestInput{
-		SchemaVersion: d.SchemaVersion,
-		Deployment:    d.Metadata,
-		MCPServers:    d.Spec.MCPServers,
-		Agents:        agents,
+		Deployment: d.Metadata,
+		MCPServers: d.Spec.MCPServers,
+		Agents:     agents,
 	})
 	if err != nil {
 		return artifactErrorWrap(CodeDeploymentIdentityInvalid, "validate deployment digest", err)

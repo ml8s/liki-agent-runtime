@@ -13,13 +13,6 @@ func decodeAgentDeployment(raw []byte) (*AgentDeployment, error) {
 	if err := decodeStrictJSON(raw, &deployment); err != nil {
 		return nil, artifactErrorWrap(CodeDeploymentArtifactInvalid, "decode agent deployment", err)
 	}
-	if deployment.SchemaVersion != ContractVersion {
-		return nil, validationError(
-			CodeDeploymentSchemaVersionInvalid,
-			"unsupported schema_version %q; want %q",
-			deployment.SchemaVersion, ContractVersion,
-		)
-	}
 	if err := deployment.validate(); err != nil {
 		return nil, err
 	}

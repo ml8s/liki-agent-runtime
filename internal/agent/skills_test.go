@@ -28,8 +28,7 @@ func validateAgentDefinition(def *deploymentpkg.AgentDefinition, servers map[str
 		mcpServers = append(mcpServers, deploymentpkg.MCPServerDefinition{Name: name})
 	}
 	return (&deploymentpkg.AgentDeployment{
-		SchemaVersion: deploymentpkg.ContractVersion,
-		Metadata:      deploymentpkg.DeploymentMetadata{Name: "skills-test", Version: "1.0.0"},
+		Metadata: deploymentpkg.DeploymentMetadata{Name: "skills-test", Version: "1.0.0"},
 		Spec: deploymentpkg.DeploymentSpec{
 			MCPServers: mcpServers,
 			Agents:     testagent.ResolvedAgents([]deploymentpkg.AgentDefinition{*def}),

@@ -13,7 +13,6 @@ const (
 	CodeDeploymentPathRequired         = "deployment_path_required"
 	CodeDeploymentUnreadable           = "deployment_unreadable"
 	CodeDeploymentManifestTooLarge     = "deployment_manifest_too_large"
-	CodeDeploymentSchemaVersionInvalid = "deployment_schema_version_invalid"
 	CodeDeploymentMetadataInvalid      = "deployment_metadata_invalid"
 	CodeDeploymentArtifactInvalid      = "deployment_artifact_invalid"
 	CodeDeploymentArtifactTooLarge     = "deployment_artifact_too_large"

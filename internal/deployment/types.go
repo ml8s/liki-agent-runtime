@@ -12,17 +12,12 @@ const (
 	maxManifestBytes       = 2 << 20
 	maxTextArtifactBytes   = 2 << 20
 	maxSchemaArtifactBytes = 4 << 20
-
-	// ContractVersion identifies the AgentDeployment JSON shape. Runtime
-	// releases reject artifacts written for an incompatible contract.
-	ContractVersion = "agent.deployment.v1"
 )
 
 // AgentDeployment is the validated AgentDeployment artifact and its derived digest.
 type AgentDeployment struct {
-	SchemaVersion string             `json:"schema_version"`
-	Metadata      DeploymentMetadata `json:"metadata"`
-	Spec          DeploymentSpec     `json:"spec"`
+	Metadata DeploymentMetadata `json:"metadata"`
+	Spec     DeploymentSpec     `json:"spec"`
 
 	// Digest is the canonical semantic identity of all behavior-bearing
 	// deployment state. It intentionally excludes artifact formatting.

@@ -19,8 +19,7 @@ func resolvedAgents(definitions []AgentDefinition) []ResolvedAgentDefinition {
 
 func testDeploymentForEdge() *AgentDeployment {
 	return &AgentDeployment{
-		SchemaVersion: ContractVersion,
-		Metadata:      DeploymentMetadata{Name: "test", Version: "1.0.0"},
+		Metadata: DeploymentMetadata{Name: "test", Version: "1.0.0"},
 		Spec: DeploymentSpec{
 			MCPServers: []MCPServerDefinition{
 				{Name: "mcp-a", EndpointEnv: "MCP_A_URL"},

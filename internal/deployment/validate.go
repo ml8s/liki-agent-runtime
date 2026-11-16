@@ -18,9 +18,6 @@ func (d *AgentDeployment) Validate() error {
 }
 
 func (d *AgentDeployment) validate() error {
-	if d.SchemaVersion != ContractVersion {
-		return validationError(CodeDeploymentSchemaVersionInvalid, "unsupported schema_version %q; want %q", d.SchemaVersion, ContractVersion)
-	}
 	if strings.TrimSpace(d.Metadata.Name) == "" {
 		return validationError(CodeDeploymentMetadataInvalid, "agent deployment metadata.name is required")
 	}

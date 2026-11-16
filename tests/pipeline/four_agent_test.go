@@ -13,7 +13,7 @@ import (
 func TestFourAgentArtifactIsLoadable(t *testing.T) {
 	root := t.TempDir()
 	manifest := `{
-		"schema_version": "agent.deployment.v1", "metadata": {"name": "generic-four-agents", "version": "1.0.0"},
+		"metadata": {"name": "generic-four-agents", "version": "1.0.0"},
 		"spec": {
 			"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}],
 			"agents": [
