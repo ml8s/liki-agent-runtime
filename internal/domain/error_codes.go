@@ -35,7 +35,6 @@ const (
 	CodeAuditRecorderMissing              = "audit_recorder_missing"
 	CodeAgentDefinitionMissing            = "agent_definition_missing"
 	CodeAgentDefinitionInvalid            = "agent_definition_invalid"
-	CodeStructuredOutputCapabilityInvalid = "structured_output_capability_invalid"
 	CodeStructuredSchemaInvalid           = "structured_schema_invalid"
 	CodeSkillToolsetUnavailable           = "skill_toolset_unavailable"
 	CodeSessionRetentionInvalid           = "session_retention_invalid"
