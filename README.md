@@ -10,26 +10,52 @@ Your product code never touches Go, agents, or protocol plumbing.
 ![agentgo simple chat demo](examples/simple-chat/assets/simple-chat.png)
 
 ```mermaid
-flowchart LR
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif",
+    "fontSize": "16px",
+    "primaryColor": "#eef2ff",
+    "primaryBorderColor": "#4f46e5",
+    "lineColor": "#64748b",
+    "clusterBkg": "#f8fafc",
+    "clusterBorder": "#94a3b8"
+  }
+}}%%
+flowchart TB
     browser["Browser / gateway"]
     machine["Machine client"]
 
     subgraph runtime["agentgo runtime"]
-        agui["AG-UI adapter<br/>POST /ag-ui"]
-        a2a["A2A adapter<br/>POST /a2a<br/>GET /.well-known/agent-card.json"]
-        agentGraph["Agent graph orchestration"]
+        direction TB
+        agui["AG-UI adapter<br/>SSE"]
+        a2a["A2A adapter<br/>JSON-RPC"]
+        card["Agent Card<br/>discovery"]
+        agents["Agent graph<br/>orchestration"]
+
+        agui --> agents
+        a2a --> agents
+        card -.-> agents
     end
 
-    provider["LLM provider<br/>OpenAI-compatible / Anthropic / Gemini"]
-    tools["External MCP tools"]
+    provider["LLM provider<br/>OpenAI-compatible /<br/>Anthropic / Gemini"]
+    tools["External MCP tools<br/>allowlisted"]
 
-    browser -- "AG-UI SSE" --> agui
-    machine -- "A2A JSON-RPC" --> a2a
-    machine -- "Agent Card discovery" --> a2a
-    agui --> agentGraph
-    a2a --> agentGraph
-    agentGraph -- "model API" --> provider
-    agentGraph -- "MCP Streamable HTTP<br/>allowlisted tools" --> tools
+    browser -- "POST /ag-ui" --> agui
+    machine -- "POST /a2a" --> a2a
+    machine -. "GET /.well-known/<br/>agent-card.json" .-> card
+    agents -- "model API" --> provider
+    agents -- "MCP Streamable HTTP" --> tools
+
+    classDef client fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef protocol fill:#eef2ff,stroke:#4f46e5,stroke-width:2px,color:#312e81
+    classDef core fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#164e63
+    classDef dependency fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#14532d
+
+    class browser,machine client
+    class agui,a2a,card protocol
+    class agents core
+    class provider,tools dependency
 ```
 
 ## Why agentgo
