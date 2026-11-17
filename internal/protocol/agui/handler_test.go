@@ -35,10 +35,10 @@ func newRuntime(t *testing.T) *agent.Runtime {
 	t.Logf("endpoint=%q", os.Getenv("TEST_MCP_ENDPOINT"))
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	runtime, err := agent.NewRuntime(agent.Config{
-		Model:            "test-model",
-		ModelAPIKey:      "test-key",
-		AgentDeployment:  artifactDeployment,
-		AuditRecorder:    &recordingAuditEvents{},
+		Model:           "test-model",
+		ModelAPIKey:     "test-key",
+		AgentDeployment: artifactDeployment,
+		AuditRecorder:   &recordingAuditEvents{},
 	})
 	if err != nil {
 		t.Fatalf("NewRuntime() error = %v", err)

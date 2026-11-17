@@ -18,15 +18,15 @@ import (
 
 // Config validates and wires the runtime's dependencies.
 type Config struct {
-	AppName          string
-	Model            string
-	ModelBaseURL     string
-	ModelAPIKey      string
-	ModelTimeout     time.Duration
-	Temperature      float64
-	AuditRecorder    audit.Recorder
-	Metrics          execution.Metrics
-	Provider         string
+	AppName       string
+	Model         string
+	ModelBaseURL  string
+	ModelAPIKey   string
+	ModelTimeout  time.Duration
+	Temperature   float64
+	AuditRecorder audit.Recorder
+	Metrics       execution.Metrics
+	Provider      string
 	// ModelBuilder overrides the default provider model construction. Nil
 	// selects the built-in provider dispatch based on Provider.
 	ModelBuilder ModelBuilderFactory

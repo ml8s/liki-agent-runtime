@@ -47,11 +47,11 @@ func newAuditRuntime(t *testing.T) (*agent.Runtime, *recordingAudit) {
 	agentDeployment := agent.NewTestDeployment(t)
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	runtime, err := agent.NewRuntime(agent.Config{
-		Model:            "test-model",
-		ModelAPIKey:      "test-key",
-		AgentDeployment:  agentDeployment,
-		Provider:         "test-provider",
-		AuditRecorder:    events,
+		Model:           "test-model",
+		ModelAPIKey:     "test-key",
+		AgentDeployment: agentDeployment,
+		Provider:        "test-provider",
+		AuditRecorder:   events,
 	})
 	if err != nil {
 		t.Fatalf("NewRuntime() error = %v", err)

@@ -121,12 +121,12 @@ func testRuntimeWithModelHandler(
 	t.Cleanup(modelServer.Close)
 	recorder := &testAuditRecorder{}
 	runtime, err := agent.NewRuntime(agent.Config{
-		Model:            "test-model",
-		ModelAPIKey:      "test-key",
-		ModelBaseURL:     modelServer.URL + "/v1",
-		AgentDeployment:  deployment,
-		Provider:         "test-provider",
-		AuditRecorder:    recorder,
+		Model:           "test-model",
+		ModelAPIKey:     "test-key",
+		ModelBaseURL:    modelServer.URL + "/v1",
+		AgentDeployment: deployment,
+		Provider:        "test-provider",
+		AuditRecorder:   recorder,
 	})
 	if err != nil {
 		t.Fatalf("NewRuntime() error = %v", err)

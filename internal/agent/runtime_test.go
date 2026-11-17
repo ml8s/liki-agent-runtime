@@ -59,10 +59,10 @@ func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
 
 	failing := &interruptingAuditRecorder{err: errors.New("audit recovery unavailable")}
 	_, err := agent.NewRuntime(agent.Config{
-		Model:            "test-model",
-		ModelAPIKey:      "test-key",
-		AgentDeployment:  agentDeployment,
-		AuditRecorder:    failing,
+		Model:           "test-model",
+		ModelAPIKey:     "test-key",
+		AgentDeployment: agentDeployment,
+		AuditRecorder:   failing,
 	})
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRuntimeInitFailed {
@@ -74,10 +74,10 @@ func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
 
 	recovered := &interruptingAuditRecorder{}
 	runtime, err := agent.NewRuntime(agent.Config{
-		Model:            "test-model",
-		ModelAPIKey:      "test-key",
-		AgentDeployment:  agentDeployment,
-		AuditRecorder:    recovered,
+		Model:           "test-model",
+		ModelAPIKey:     "test-key",
+		AgentDeployment: agentDeployment,
+		AuditRecorder:   recovered,
 	})
 	if err != nil {
 		t.Fatalf("NewRuntime(recovery success) error = %v", err)
@@ -129,11 +129,11 @@ func TestNewRuntimeUsesInjectedOfficialSessionService(t *testing.T) {
 	t.Setenv("TEST_MCP_ENDPOINT", "http://127.0.0.1:9/mcp")
 	injected := session.InMemoryService()
 	runtime, err := agent.NewRuntime(agent.Config{
-		Model:            "test-model",
-		ModelAPIKey:      "test-key",
-		AgentDeployment:  agentDeployment,
-		AuditRecorder:    nopAuditRecorder{},
-		SessionService:   injected,
+		Model:           "test-model",
+		ModelAPIKey:     "test-key",
+		AgentDeployment: agentDeployment,
+		AuditRecorder:   nopAuditRecorder{},
+		SessionService:  injected,
 	})
 	if err != nil {
 		t.Fatalf("NewRuntime() error = %v", err)
@@ -147,9 +147,9 @@ func TestNewRuntimeRequiresMCPEndpointEnvironment(t *testing.T) {
 	agentDeployment := agent.NewTestDeployment(t)
 	t.Setenv("TEST_MCP_ENDPOINT", "")
 	_, err := agent.NewRuntime(agent.Config{
-		Model:            "test-model",
-		AgentDeployment:  agentDeployment,
-		AuditRecorder:    nopAuditRecorder{},
+		Model:           "test-model",
+		AgentDeployment: agentDeployment,
+		AuditRecorder:   nopAuditRecorder{},
 	})
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeMCPEndpointEnvMissing {
@@ -171,9 +171,9 @@ func TestNewRuntimeRejectsInvalidMCPEndpoint(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("TEST_MCP_ENDPOINT", test.endpoint)
 			_, err := agent.NewRuntime(agent.Config{
-				Model:            "test-model",
-				AgentDeployment:  agent.NewTestDeployment(t),
-				AuditRecorder:    nopAuditRecorder{},
+				Model:           "test-model",
+				AgentDeployment: agent.NewTestDeployment(t),
+				AuditRecorder:   nopAuditRecorder{},
 			})
 			var domainErr *domain.Error
 			if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeMCPEndpointInvalid {
