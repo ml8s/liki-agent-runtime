@@ -9,10 +9,27 @@ Your product code never touches Go, agents, or protocol plumbing.
 
 ![agentgo simple chat demo](examples/simple-chat/assets/simple-chat.png)
 
-```text
-machine client ──A2A JSON-RPC──┐
-                               ↓
-caller ──AG-UI SSE→ agentgo ──MCP→ external tools
+```mermaid
+flowchart LR
+    browser["Browser / gateway"]
+    machine["Machine client"]
+
+    subgraph runtime["agentgo runtime"]
+        agui["AG-UI adapter<br/>POST /ag-ui"]
+        a2a["A2A adapter<br/>POST /a2a<br/>GET /.well-known/agent-card.json"]
+        agentGraph["Agent graph orchestration"]
+    end
+
+    provider["LLM provider<br/>OpenAI-compatible / Anthropic / Gemini"]
+    tools["External MCP tools"]
+
+    browser -- "AG-UI SSE" --> agui
+    machine -- "A2A JSON-RPC" --> a2a
+    machine -- "Agent Card discovery" --> a2a
+    agui --> agentGraph
+    a2a --> agentGraph
+    agentGraph -- "model API" --> provider
+    agentGraph -- "MCP Streamable HTTP<br/>allowlisted tools" --> tools
 ```
 
 ## Why agentgo
