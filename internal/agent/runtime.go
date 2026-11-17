@@ -13,6 +13,7 @@ import (
 
 	"github.com/ml8s/agentgo/internal/audit"
 	"github.com/ml8s/agentgo/internal/domain"
+	"github.com/ml8s/agentgo/internal/execution"
 	mcppkg "github.com/ml8s/agentgo/internal/mcp"
 	platformconfig "github.com/ml8s/agentgo/internal/platform/config"
 	"go.opentelemetry.io/otel"
@@ -207,7 +208,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		resolveModel:           models.resolve,
 		temperature:            temperature,
 		maxOutputTokens:        config.MaxOutputTokens,
-		nativeStructuredOutput: config.Provider == ProviderAnthropic || config.Provider == ProviderGemini,
+		nativeStructuredOutput: execution.DefaultStructuredOutputMode(config.Provider) == execution.StructuredOutputNative,
 		callAuditor:            callAuditor,
 		delegationAuditor:      delegationAuditor,
 		toolAuditor:            toolAuditor,
