@@ -3,9 +3,9 @@ package agent
 import (
 	"testing"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
-	"github.com/ml8s/agent-runtime/internal/execution"
-	testagentpkg "github.com/ml8s/agent-runtime/internal/testagent"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
+	"github.com/ml8s/agentgo/internal/execution"
+	testagentpkg "github.com/ml8s/agentgo/internal/testagent"
 
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"

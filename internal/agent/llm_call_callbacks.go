@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
-	"github.com/ml8s/agent-runtime/internal/domain"
-	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agentgo/internal/audit"
+	"github.com/ml8s/agentgo/internal/domain"
+	"github.com/ml8s/agentgo/internal/execution"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"

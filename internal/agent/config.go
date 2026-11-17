@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"time"
 
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
 
-	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agentgo/internal/execution"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
-	mcppkg "github.com/ml8s/agent-runtime/internal/mcp"
+	"github.com/ml8s/agentgo/internal/audit"
+	mcppkg "github.com/ml8s/agentgo/internal/mcp"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"

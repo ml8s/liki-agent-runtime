@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/audit"
+	"github.com/ml8s/agentgo/internal/domain"
 	"gorm.io/gorm"
 )
 

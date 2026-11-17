@@ -8,10 +8,10 @@ import (
 	"io"
 	"strings"
 
-	deployment "github.com/ml8s/agent-runtime/internal/deployment"
+	deployment "github.com/ml8s/agentgo/internal/deployment"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/audit"
+	"github.com/ml8s/agentgo/internal/domain"
 	jsonpointer "github.com/qri-io/jsonpointer"
 )
 

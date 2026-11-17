@@ -5,23 +5,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/platform/config"
+	"github.com/ml8s/agentgo/internal/platform/config"
 )
 
 func baseEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("AGENT_RUNTIME_ENV", "development")
-	t.Setenv("AGENT_RUNTIME_PUBLIC_URL", "https://agent.internal")
-	t.Setenv("AGENT_RUNTIME_DEPLOYMENT_FILE", "/tmp/agent-deployment.json")
-	t.Setenv("AGENT_RUNTIME_LLM_PROVIDER", "zhipu")
-	t.Setenv("AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", "json_object")
-	t.Setenv("AGENT_RUNTIME_LLM_BASE_URL", "https://open.bigmodel.cn/api/v1")
-	t.Setenv("AGENT_RUNTIME_LLM_MODEL", "glm-5.3-flash")
+	t.Setenv("AGENTGO_ENV", "development")
+	t.Setenv("AGENTGO_PUBLIC_URL", "https://agent.internal")
+	t.Setenv("AGENTGO_DEPLOYMENT_FILE", "/tmp/agent-deployment.json")
+	t.Setenv("AGENTGO_LLM_PROVIDER", "zhipu")
+	t.Setenv("AGENTGO_LLM_STRUCTURED_OUTPUT", "json_object")
+	t.Setenv("AGENTGO_LLM_BASE_URL", "https://open.bigmodel.cn/api/v1")
+	t.Setenv("AGENTGO_LLM_MODEL", "glm-5.3-flash")
 }
 
 func TestLoadValidConfiguration(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", "none")
+	t.Setenv("AGENTGO_LLM_STRUCTURED_OUTPUT", "none")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -35,7 +35,7 @@ func TestLoadValidConfiguration(t *testing.T) {
 	if cfg.Topology != config.TopologySingle {
 		t.Fatalf("topology = %q, want single", cfg.Topology)
 	}
-	t.Setenv("AGENT_RUNTIME_MAX_CONCURRENT_RUNS", "7")
+	t.Setenv("AGENTGO_MAX_CONCURRENT_RUNS", "7")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(max concurrent runs) error = %v", err)
@@ -45,7 +45,7 @@ func TestLoadValidConfiguration(t *testing.T) {
 	}
 	// The provider vocabulary is open: the value is an audit provenance
 	// label and a structured-output hint, not a protocol switch.
-	t.Setenv("AGENT_RUNTIME_LLM_PROVIDER", "anthropic")
+	t.Setenv("AGENTGO_LLM_PROVIDER", "anthropic")
 	if _, err = config.Load(); err != nil {
 		t.Fatalf("Load(open provider vocabulary) error = %v", err)
 	}
@@ -58,29 +58,29 @@ func TestLoadRejectsInvalidSettings(t *testing.T) {
 		value   string
 		wantErr string
 	}{
-		{name: "missing deployment", key: "AGENT_RUNTIME_DEPLOYMENT_FILE", value: "", wantErr: "AGENT_RUNTIME_DEPLOYMENT_FILE is required"},
-		{name: "unsupported environment", key: "AGENT_RUNTIME_ENV", value: "staging", wantErr: "AGENT_RUNTIME_ENV is unsupported"},
-		{name: "missing llm base url", key: "AGENT_RUNTIME_LLM_BASE_URL", value: "", wantErr: "AGENT_RUNTIME_LLM_BASE_URL is required"},
-		{name: "missing llm model", key: "AGENT_RUNTIME_LLM_MODEL", value: "", wantErr: "AGENT_RUNTIME_LLM_MODEL is required"},
-		{name: "multi topology is fail-closed", key: "AGENT_RUNTIME_TOPOLOGY", value: "multi", wantErr: "AGENT_RUNTIME_TOPOLOGY=multi is not supported yet"},
-		{name: "invalid topology", key: "AGENT_RUNTIME_TOPOLOGY", value: "cluster", wantErr: "AGENT_RUNTIME_TOPOLOGY is unsupported"},
-		{name: "missing provider", key: "AGENT_RUNTIME_LLM_PROVIDER", value: "", wantErr: "AGENT_RUNTIME_LLM_PROVIDER is required"},
-		{name: "unsupported structured output", key: "AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", value: "yaml", wantErr: "AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT is unsupported"},
-		{name: "invalid public url", key: "AGENT_RUNTIME_PUBLIC_URL", value: "agent.internal", wantErr: "AGENT_RUNTIME_PUBLIC_URL must be an absolute HTTP(S) URL"},
-		{name: "invalid llm url", key: "AGENT_RUNTIME_LLM_BASE_URL", value: "api.example", wantErr: "AGENT_RUNTIME_LLM_BASE_URL must be an absolute HTTP(S) URL"},
-		{name: "invalid duration", key: "AGENT_RUNTIME_RUN_TIMEOUT_SECONDS", value: "abc", wantErr: "AGENT_RUNTIME_RUN_TIMEOUT_SECONDS is not a valid integer"},
-		{name: "zero MCP timeout", key: "AGENT_RUNTIME_MCP_TIMEOUT_SECONDS", value: "0", wantErr: "AGENT_RUNTIME_MCP_TIMEOUT_SECONDS must be greater than zero"},
-		{name: "zero concurrent runs", key: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS", value: "0", wantErr: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS must be greater than zero"},
-		{name: "invalid concurrent runs", key: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS", value: "many", wantErr: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS is not a valid integer"},
-		{name: "zero LLM timeout", key: "AGENT_RUNTIME_LLM_TIMEOUT_SECONDS", value: "0", wantErr: "AGENT_RUNTIME_LLM_TIMEOUT_SECONDS must be greater than zero"},
-		{name: "zero max output tokens", key: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", value: "0", wantErr: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS must be greater than zero"},
-		{name: "negative max output tokens", key: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", value: "-1", wantErr: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS must be greater than zero"},
-		{name: "invalid max output tokens", key: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", value: "many", wantErr: "AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS is not a valid integer"},
-		{name: "negative temperature", key: "AGENT_RUNTIME_LLM_TEMPERATURE", value: "-0.1", wantErr: "AGENT_RUNTIME_LLM_TEMPERATURE must be between 0 and 2"},
-		{name: "high temperature", key: "AGENT_RUNTIME_LLM_TEMPERATURE", value: "2.1", wantErr: "AGENT_RUNTIME_LLM_TEMPERATURE must be between 0 and 2"},
-		{name: "unsupported log level", key: "AGENT_RUNTIME_LOG_LEVEL", value: "trace", wantErr: "AGENT_RUNTIME_LOG_LEVEL is unsupported"},
-		{name: "unsupported log format", key: "AGENT_RUNTIME_LOG_FORMAT", value: "yaml", wantErr: "AGENT_RUNTIME_LOG_FORMAT is unsupported"},
-		{name: "zero health timeout", key: "AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS", value: "0", wantErr: "AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS must be greater than zero"},
+		{name: "missing deployment", key: "AGENTGO_DEPLOYMENT_FILE", value: "", wantErr: "AGENTGO_DEPLOYMENT_FILE is required"},
+		{name: "unsupported environment", key: "AGENTGO_ENV", value: "staging", wantErr: "AGENTGO_ENV is unsupported"},
+		{name: "missing llm base url", key: "AGENTGO_LLM_BASE_URL", value: "", wantErr: "AGENTGO_LLM_BASE_URL is required"},
+		{name: "missing llm model", key: "AGENTGO_LLM_MODEL", value: "", wantErr: "AGENTGO_LLM_MODEL is required"},
+		{name: "multi topology is fail-closed", key: "AGENTGO_TOPOLOGY", value: "multi", wantErr: "AGENTGO_TOPOLOGY=multi is not supported yet"},
+		{name: "invalid topology", key: "AGENTGO_TOPOLOGY", value: "cluster", wantErr: "AGENTGO_TOPOLOGY is unsupported"},
+		{name: "missing provider", key: "AGENTGO_LLM_PROVIDER", value: "", wantErr: "AGENTGO_LLM_PROVIDER is required"},
+		{name: "unsupported structured output", key: "AGENTGO_LLM_STRUCTURED_OUTPUT", value: "yaml", wantErr: "AGENTGO_LLM_STRUCTURED_OUTPUT is unsupported"},
+		{name: "invalid public url", key: "AGENTGO_PUBLIC_URL", value: "agent.internal", wantErr: "AGENTGO_PUBLIC_URL must be an absolute HTTP(S) URL"},
+		{name: "invalid llm url", key: "AGENTGO_LLM_BASE_URL", value: "api.example", wantErr: "AGENTGO_LLM_BASE_URL must be an absolute HTTP(S) URL"},
+		{name: "invalid duration", key: "AGENTGO_RUN_TIMEOUT_SECONDS", value: "abc", wantErr: "AGENTGO_RUN_TIMEOUT_SECONDS is not a valid integer"},
+		{name: "zero MCP timeout", key: "AGENTGO_MCP_TIMEOUT_SECONDS", value: "0", wantErr: "AGENTGO_MCP_TIMEOUT_SECONDS must be greater than zero"},
+		{name: "zero concurrent runs", key: "AGENTGO_MAX_CONCURRENT_RUNS", value: "0", wantErr: "AGENTGO_MAX_CONCURRENT_RUNS must be greater than zero"},
+		{name: "invalid concurrent runs", key: "AGENTGO_MAX_CONCURRENT_RUNS", value: "many", wantErr: "AGENTGO_MAX_CONCURRENT_RUNS is not a valid integer"},
+		{name: "zero LLM timeout", key: "AGENTGO_LLM_TIMEOUT_SECONDS", value: "0", wantErr: "AGENTGO_LLM_TIMEOUT_SECONDS must be greater than zero"},
+		{name: "zero max output tokens", key: "AGENTGO_LLM_MAX_OUTPUT_TOKENS", value: "0", wantErr: "AGENTGO_LLM_MAX_OUTPUT_TOKENS must be greater than zero"},
+		{name: "negative max output tokens", key: "AGENTGO_LLM_MAX_OUTPUT_TOKENS", value: "-1", wantErr: "AGENTGO_LLM_MAX_OUTPUT_TOKENS must be greater than zero"},
+		{name: "invalid max output tokens", key: "AGENTGO_LLM_MAX_OUTPUT_TOKENS", value: "many", wantErr: "AGENTGO_LLM_MAX_OUTPUT_TOKENS is not a valid integer"},
+		{name: "negative temperature", key: "AGENTGO_LLM_TEMPERATURE", value: "-0.1", wantErr: "AGENTGO_LLM_TEMPERATURE must be between 0 and 2"},
+		{name: "high temperature", key: "AGENTGO_LLM_TEMPERATURE", value: "2.1", wantErr: "AGENTGO_LLM_TEMPERATURE must be between 0 and 2"},
+		{name: "unsupported log level", key: "AGENTGO_LOG_LEVEL", value: "trace", wantErr: "AGENTGO_LOG_LEVEL is unsupported"},
+		{name: "unsupported log format", key: "AGENTGO_LOG_FORMAT", value: "yaml", wantErr: "AGENTGO_LOG_FORMAT is unsupported"},
+		{name: "zero health timeout", key: "AGENTGO_MCP_HEALTH_TIMEOUT_SECONDS", value: "0", wantErr: "AGENTGO_MCP_HEALTH_TIMEOUT_SECONDS must be greater than zero"},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -96,9 +96,9 @@ func TestLoadRejectsInvalidSettings(t *testing.T) {
 
 func TestProductionConfigurationHardening(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("AGENT_RUNTIME_ENV", "production")
-	t.Setenv("AGENT_RUNTIME_PROTOCOL_TOKEN", "production-service-token")
-	t.Setenv("AGENT_RUNTIME_LLM_API_KEY", "production-model-key")
+	t.Setenv("AGENTGO_ENV", "production")
+	t.Setenv("AGENTGO_PROTOCOL_TOKEN", "production-service-token")
+	t.Setenv("AGENTGO_LLM_API_KEY", "production-model-key")
 
 	_, err := config.Load()
 	if err != nil {
@@ -111,11 +111,11 @@ func TestProductionConfigurationHardening(t *testing.T) {
 		value   string
 		wantErr string
 	}{
-		{name: "llm endpoint must be HTTPS", key: "AGENT_RUNTIME_LLM_BASE_URL", value: "http://127.0.0.1:8080/v1", wantErr: "AGENT_RUNTIME_LLM_BASE_URL must use HTTPS outside development"},
-		{name: "public URL credentials rejected", key: "AGENT_RUNTIME_PUBLIC_URL", value: "https://user:secret@agent.internal", wantErr: "AGENT_RUNTIME_PUBLIC_URL must not contain embedded credentials"},
-		{name: "public URL loopback outside development", key: "AGENT_RUNTIME_PUBLIC_URL", value: "http://127.0.0.1:8083", wantErr: "AGENT_RUNTIME_PUBLIC_URL must be a deployment-reachable address outside development"},
-		{name: "LLM URL credentials rejected", key: "AGENT_RUNTIME_LLM_BASE_URL", value: "https://key:secret@model.internal/v1", wantErr: "AGENT_RUNTIME_LLM_BASE_URL must not contain embedded credentials"},
-		{name: "concurrent runs bounded", key: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS", value: "1025", wantErr: "AGENT_RUNTIME_MAX_CONCURRENT_RUNS must not exceed 1024"},
+		{name: "llm endpoint must be HTTPS", key: "AGENTGO_LLM_BASE_URL", value: "http://127.0.0.1:8080/v1", wantErr: "AGENTGO_LLM_BASE_URL must use HTTPS outside development"},
+		{name: "public URL credentials rejected", key: "AGENTGO_PUBLIC_URL", value: "https://user:secret@agent.internal", wantErr: "AGENTGO_PUBLIC_URL must not contain embedded credentials"},
+		{name: "public URL loopback outside development", key: "AGENTGO_PUBLIC_URL", value: "http://127.0.0.1:8083", wantErr: "AGENTGO_PUBLIC_URL must be a deployment-reachable address outside development"},
+		{name: "LLM URL credentials rejected", key: "AGENTGO_LLM_BASE_URL", value: "https://key:secret@model.internal/v1", wantErr: "AGENTGO_LLM_BASE_URL must not contain embedded credentials"},
+		{name: "concurrent runs bounded", key: "AGENTGO_MAX_CONCURRENT_RUNS", value: "1025", wantErr: "AGENTGO_MAX_CONCURRENT_RUNS must not exceed 1024"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -130,7 +130,7 @@ func TestProductionConfigurationHardening(t *testing.T) {
 
 func TestLoadDerivesPublicURLFromDefaultAddress(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("AGENT_RUNTIME_PUBLIC_URL", "")
+	t.Setenv("AGENTGO_PUBLIC_URL", "")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -149,7 +149,7 @@ func TestLoadA2ATaskRetention(t *testing.T) {
 	if cfg.A2ATaskRetention != 0 {
 		t.Fatalf("unset A2A task retention = %s, want disabled", cfg.A2ATaskRetention)
 	}
-	t.Setenv("AGENT_RUNTIME_A2A_TASK_RETENTION_SECONDS", "86400")
+	t.Setenv("AGENTGO_A2A_TASK_RETENTION_SECONDS", "86400")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(retention) error = %v", err)
@@ -168,11 +168,11 @@ func TestLoadADKSessionRetention(t *testing.T) {
 	if cfg.ADKSessionRetention != 0 {
 		t.Fatalf("unset ADK session retention = %s, want disabled", cfg.ADKSessionRetention)
 	}
-	t.Setenv("AGENT_RUNTIME_ADK_SESSION_RETENTION_SECONDS", "300")
-	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "must be at least AGENT_RUNTIME_RUN_TIMEOUT_SECONDS") {
+	t.Setenv("AGENTGO_ADK_SESSION_RETENTION_SECONDS", "300")
+	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "must be at least AGENTGO_RUN_TIMEOUT_SECONDS") {
 		t.Fatalf("Load(short session retention) error = %v, want run timeout protection", err)
 	}
-	t.Setenv("AGENT_RUNTIME_ADK_SESSION_RETENTION_SECONDS", "600")
+	t.Setenv("AGENTGO_ADK_SESSION_RETENTION_SECONDS", "600")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(valid session retention) error = %v", err)
@@ -191,20 +191,20 @@ func TestLoadIdentitySourceConfiguration(t *testing.T) {
 	if cfg.IdentitySource != config.IdentitySourceHeader {
 		t.Fatalf("default identity source = %q, want trusted_header", cfg.IdentitySource)
 	}
-	t.Setenv("AGENT_RUNTIME_IDENTITY_SOURCE", config.IdentitySourceOIDC)
-	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_OIDC_ISSUER is required") {
+	t.Setenv("AGENTGO_IDENTITY_SOURCE", config.IdentitySourceOIDC)
+	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENTGO_OIDC_ISSUER is required") {
 		t.Fatalf("Load(oidc without issuer) error = %v", err)
 	}
-	t.Setenv("AGENT_RUNTIME_OIDC_ISSUER", "https://issuer.example.com")
-	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_OIDC_AUDIENCE is required") {
+	t.Setenv("AGENTGO_OIDC_ISSUER", "https://issuer.example.com")
+	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENTGO_OIDC_AUDIENCE is required") {
 		t.Fatalf("Load(oidc without audience) error = %v", err)
 	}
-	t.Setenv("AGENT_RUNTIME_OIDC_AUDIENCE", "agent-runtime")
-	t.Setenv("AGENT_RUNTIME_PROTOCOL_TOKEN", "must-not-combine")
-	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_PROTOCOL_TOKEN must be empty") {
+	t.Setenv("AGENTGO_OIDC_AUDIENCE", "agentgo")
+	t.Setenv("AGENTGO_PROTOCOL_TOKEN", "must-not-combine")
+	if _, err = config.Load(); err == nil || !strings.Contains(err.Error(), "AGENTGO_PROTOCOL_TOKEN must be empty") {
 		t.Fatalf("Load(oidc with internal token) error = %v", err)
 	}
-	t.Setenv("AGENT_RUNTIME_PROTOCOL_TOKEN", "")
+	t.Setenv("AGENTGO_PROTOCOL_TOKEN", "")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(oidc) error = %v", err)
@@ -223,7 +223,7 @@ func TestLoadMaxOutputTokens(t *testing.T) {
 	if cfg.LLMMaxOutputTokens != 0 {
 		t.Fatalf("unset max output tokens = %d, want 0 (no output cap)", cfg.LLMMaxOutputTokens)
 	}
-	t.Setenv("AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS", "2048")
+	t.Setenv("AGENTGO_LLM_MAX_OUTPUT_TOKENS", "2048")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(max output tokens) error = %v", err)
@@ -235,7 +235,7 @@ func TestLoadMaxOutputTokens(t *testing.T) {
 
 func TestDevelopmentAllowsLocalHTTPAndUnpinnedDeployment(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("AGENT_RUNTIME_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
+	t.Setenv("AGENTGO_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load(local HTTP development) error = %v", err)
@@ -247,13 +247,13 @@ func TestDevelopmentAllowsLocalHTTPAndUnpinnedDeployment(t *testing.T) {
 
 func TestLoadMTLSConfiguration(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("AGENT_RUNTIME_TLS_ADDR", ":8084")
-	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_TLS_CERT") {
+	t.Setenv("AGENTGO_TLS_ADDR", ":8084")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "AGENTGO_TLS_CERT") {
 		t.Fatalf("Load() error = %v, want a TLS certificate requirement", err)
 	}
-	t.Setenv("AGENT_RUNTIME_TLS_CERT", "/pki/server.crt")
-	t.Setenv("AGENT_RUNTIME_TLS_KEY", "/pki/server.key")
-	t.Setenv("AGENT_RUNTIME_TLS_CLIENT_CA", "/pki/ca.pem")
+	t.Setenv("AGENTGO_TLS_CERT", "/pki/server.crt")
+	t.Setenv("AGENTGO_TLS_KEY", "/pki/server.key")
+	t.Setenv("AGENTGO_TLS_CLIENT_CA", "/pki/ca.pem")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load(mTLS) error = %v", err)
@@ -264,8 +264,8 @@ func TestLoadMTLSConfiguration(t *testing.T) {
 	}
 
 	// 证书文件没有 TLS 地址：配置错误必须显式失败（fail-closed）。
-	t.Setenv("AGENT_RUNTIME_TLS_ADDR", "")
-	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "AGENT_RUNTIME_TLS_ADDR") {
+	t.Setenv("AGENTGO_TLS_ADDR", "")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "AGENTGO_TLS_ADDR") {
 		t.Fatalf("Load(certs without addr) error = %v, want a TLS addr requirement", err)
 	}
 }
@@ -279,7 +279,7 @@ func TestOpsAddrDefaultsAndOverrides(t *testing.T) {
 	if cfg.OpsAddr != ":8085" {
 		t.Fatalf("OpsAddr = %q, want :8085", cfg.OpsAddr)
 	}
-	t.Setenv("AGENT_RUNTIME_OPS_ADDR", "127.0.0.1:9090")
+	t.Setenv("AGENTGO_OPS_ADDR", "127.0.0.1:9090")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(ops addr) error = %v", err)
@@ -295,7 +295,7 @@ func TestLegacyConfigNamesAreIgnored(t *testing.T) {
 	baseEnv(t)
 	t.Setenv("LEGACY_RUN_TIMEOUT_SECONDS", "77")
 	t.Setenv("LEGACY_MAX_CONCURRENT_RUNS", "9")
-	t.Setenv("AGENT_RUNTIME_ADDR", ":9083")
+	t.Setenv("AGENTGO_ADDR", ":9083")
 	t.Setenv("LEGACY_LLM_MODEL", "legacy-model")
 	cfg, err := config.Load()
 	if err != nil {
@@ -324,7 +324,7 @@ func TestMCPHealthTimeoutFollowsToolBudget(t *testing.T) {
 	if cfg.MCPHealthTimeout != 0 {
 		t.Fatalf("unset health timeout = %v, want 0 (follows the tool budget)", cfg.MCPHealthTimeout)
 	}
-	t.Setenv("AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS", "45")
+	t.Setenv("AGENTGO_MCP_HEALTH_TIMEOUT_SECONDS", "45")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load(health timeout) error = %v", err)
@@ -355,9 +355,9 @@ func TestMTLSIdentitySourceHeaderRequiresTLSListener(t *testing.T) {
 
 func TestMTLSIdentitySourceIsRejectedWithOIDC(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("AGENT_RUNTIME_IDENTITY_SOURCE", config.IdentitySourceOIDC)
-	t.Setenv("AGENT_RUNTIME_OIDC_ISSUER", "https://issuer.example.com")
-	t.Setenv("AGENT_RUNTIME_OIDC_AUDIENCE", "agent-runtime")
+	t.Setenv("AGENTGO_IDENTITY_SOURCE", config.IdentitySourceOIDC)
+	t.Setenv("AGENTGO_OIDC_ISSUER", "https://issuer.example.com")
+	t.Setenv("AGENTGO_OIDC_AUDIENCE", "agentgo")
 	t.Setenv(config.EnvMTLSIdentitySource, config.MTLSIdentitySourceCertificate)
 	if _, err := config.Load(); err == nil {
 		t.Fatal("mTLS identity source was accepted while OIDC owns caller authentication")
@@ -377,11 +377,11 @@ func TestPprofDisabledByDefault(t *testing.T) {
 
 func TestProductionOIDCConfiguresTrustedHeaderToken(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("AGENT_RUNTIME_ENV", "production")
-	t.Setenv("AGENT_RUNTIME_IDENTITY_SOURCE", config.IdentitySourceOIDC)
-	t.Setenv("AGENT_RUNTIME_OIDC_ISSUER", "https://issuer.example.com")
-	t.Setenv("AGENT_RUNTIME_OIDC_AUDIENCE", "agent-runtime")
-	t.Setenv("AGENT_RUNTIME_LLM_API_KEY", "test-key")
+	t.Setenv("AGENTGO_ENV", "production")
+	t.Setenv("AGENTGO_IDENTITY_SOURCE", config.IdentitySourceOIDC)
+	t.Setenv("AGENTGO_OIDC_ISSUER", "https://issuer.example.com")
+	t.Setenv("AGENTGO_OIDC_AUDIENCE", "agentgo")
+	t.Setenv("AGENTGO_LLM_API_KEY", "test-key")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatal(err)

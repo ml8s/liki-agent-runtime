@@ -3,7 +3,7 @@ package identity
 import (
 	"net/http"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/domain"
 )
 
 // RequestSource is the transport port for a verified end-user identity. It is

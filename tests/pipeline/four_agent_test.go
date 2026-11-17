@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
 )
 
 // FourAgentArtifactIsLoadable proves the generic runtime can describe a

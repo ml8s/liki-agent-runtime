@@ -1,7 +1,7 @@
 package agent
 
 import (
-	deployment "github.com/ml8s/agent-runtime/internal/deployment"
+	deployment "github.com/ml8s/agentgo/internal/deployment"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )

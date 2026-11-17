@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/domain"
 )
 
 // CallerAuthenticator is implemented by identity sources whose credential also

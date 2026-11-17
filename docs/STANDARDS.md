@@ -21,7 +21,7 @@ rule is:
 | Tool access | [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) | `github.com/modelcontextprotocol/go-sdk` | Keep official `tools/list` and `tools/call`; filtering is application authorization after standard discovery. Discovery results are memoized per server (60s TTL, stale-on-error) without changing the wire protocol or the authorization order. Readiness accepts any SDK-supported protocol revision reached through negotiation (`2025-03-26` and later), not only the newest one. Stand-alone SSE delivery is disabled: the tool surface is deployment-fixed at startup. |
 | A2A protocol state | A2A Task, TaskVersion, and push-config semantics | `github.com/a2aproject/a2a-go/v2` official store ports | Keep. This is protocol state only; it must not be treated as product conversation history. |
 | Typed output | JSON Schema 2020-12 | `github.com/google/jsonschema-go/jsonschema` | Keep. |
-| LLM provider | ADK model packages | `google.golang.org/adk/v2/model/openaimodel`, `anthropicmodel`, `gemini` | Keep. `AGENT_RUNTIME_LLM_PROVIDER` dispatches to the matching ADK model package; unrecognized values fall back to OpenAI-compatible. Anthropic and Gemini use ADK's native genai.Schema translation (structured-output mode `native`); OpenAI-compatible providers use `json_schema` or the `json_object` shim. |
+| LLM provider | ADK model packages | `google.golang.org/adk/v2/model/openaimodel`, `anthropicmodel`, `gemini` | Keep. `AGENTGO_LLM_PROVIDER` dispatches to the matching ADK model package; unrecognized values fall back to OpenAI-compatible. Anthropic and Gemini use ADK's native genai.Schema translation (structured-output mode `native`); OpenAI-compatible providers use `json_schema` or the `json_object` shim. |
 | Output text location | RFC 6901 JSON Pointer | `github.com/qri-io/jsonpointer` plus static JSON Schema traversal | Keep. Pointer parsing must use the RFC library; only schema traversal is local. |
 | Content integrity | SHA-256 (`crypto/sha256`) with a lower-case `sha256:<64-hex>` value | Go standard library | Keep. Deployment pinning is configuration trust, not protocol. |
 | Trace correlation | W3C Trace Context / OpenTelemetry | OpenTelemetry Go SDK and `otelhttp` | Keep correlation and export through OTLP. |
@@ -59,7 +59,7 @@ The service is deliberately **single-process/single-replica**:
 - audit evidence is in a local SQLite file;
 - MCP toolsets and the ADK graph are process-local.
 
-`AGENT_RUNTIME_TOPOLOGY` makes that mode explicit. Its default and only
+`AGENTGO_TOPOLOGY` makes that mode explicit. Its default and only
 supported value is `single`; `multi` is recognized but fails closed so an
 orchestrator cannot accidentally scale an unsafe process.
 

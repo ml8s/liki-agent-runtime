@@ -11,9 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/observability"
-	"github.com/ml8s/agent-runtime/internal/platform"
-	"github.com/ml8s/agent-runtime/internal/platform/identity"
+	"github.com/ml8s/agentgo/internal/observability"
+	"github.com/ml8s/agentgo/internal/platform"
+	"github.com/ml8s/agentgo/internal/platform/identity"
 )
 
 // Services bundles the protocol and operational handlers the transport

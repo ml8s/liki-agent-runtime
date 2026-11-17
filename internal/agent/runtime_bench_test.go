@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	adksqlite "github.com/ml8s/agent-runtime/internal/adksession/sqlite"
-	"github.com/ml8s/agent-runtime/internal/execution"
+	adksqlite "github.com/ml8s/agentgo/internal/adksession/sqlite"
+	"github.com/ml8s/agentgo/internal/execution"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agentgo/internal/audit"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )

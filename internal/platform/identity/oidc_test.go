@@ -21,7 +21,7 @@ func TestOIDCSourceMapsVerifiedClaims(t *testing.T) {
 	issuer := testIssuer(t, key, testJWKS(t, key))
 	source, err := NewOIDCSource(testContext(t), OIDCConfig{
 		Issuer:        issuer.URL,
-		Audience:      "agent-runtime",
+		Audience:      "agentgo",
 		UsernameClaim: "preferred_username",
 		TenantClaim:   "tenant",
 	})
@@ -31,7 +31,7 @@ func TestOIDCSourceMapsVerifiedClaims(t *testing.T) {
 	now := time.Now()
 	raw := testJWT(t, key, map[string]any{
 		"iss":                issuer.URL,
-		"aud":                "agent-runtime",
+		"aud":                "agentgo",
 		"sub":                "auth|123",
 		"preferred_username": "alice",
 		"tenant":             "tenant-a",
@@ -52,12 +52,12 @@ func TestOIDCSourceMapsVerifiedClaims(t *testing.T) {
 func TestOIDCSourceAcceptsCaseInsensitiveBearerScheme(t *testing.T) {
 	key := testRSAKey(t)
 	issuer := testIssuer(t, key, testJWKS(t, key))
-	source, err := NewOIDCSource(testContext(t), OIDCConfig{Issuer: issuer.URL, Audience: "agent-runtime"})
+	source, err := NewOIDCSource(testContext(t), OIDCConfig{Issuer: issuer.URL, Audience: "agentgo"})
 	if err != nil {
 		t.Fatalf("NewOIDCSource() error = %v", err)
 	}
 	raw := testJWT(t, key, map[string]any{
-		"iss": issuer.URL, "aud": "agent-runtime", "sub": "alice",
+		"iss": issuer.URL, "aud": "agentgo", "sub": "alice",
 		"exp": time.Now().Add(time.Hour).Unix(),
 	})
 	request := httptest.NewRequest(http.MethodPost, "/ag-ui", nil)
@@ -73,7 +73,7 @@ func TestOIDCSourceRejectsInvalidCredentials(t *testing.T) {
 	issuer := testIssuer(t, key, testJWKS(t, key))
 	source, err := NewOIDCSource(testContext(t), OIDCConfig{
 		Issuer:   issuer.URL,
-		Audience: "agent-runtime",
+		Audience: "agentgo",
 	})
 	if err != nil {
 		t.Fatalf("NewOIDCSource() error = %v", err)
@@ -98,7 +98,7 @@ func TestOIDCSourceRejectsInvalidCredentials(t *testing.T) {
 	}
 
 	expired := testJWT(t, key, map[string]any{
-		"iss": issuer.URL, "aud": "agent-runtime", "sub": "alice",
+		"iss": issuer.URL, "aud": "agentgo", "sub": "alice",
 		"exp": time.Now().Add(-time.Hour).Unix(), "iat": time.Now().Add(-2 * time.Hour).Unix(),
 	})
 	expiredRequest := httptest.NewRequest(http.MethodPost, "/ag-ui", nil)
@@ -112,13 +112,13 @@ func TestOIDCSourceRejectsInvalidClaims(t *testing.T) {
 	key := testRSAKey(t)
 	issuer := testIssuer(t, key, testJWKS(t, key))
 	source, err := NewOIDCSource(testContext(t), OIDCConfig{
-		Issuer: issuer.URL, Audience: "agent-runtime", UsernameClaim: "login", TenantClaim: "tid",
+		Issuer: issuer.URL, Audience: "agentgo", UsernameClaim: "login", TenantClaim: "tid",
 	})
 	if err != nil {
 		t.Fatalf("NewOIDCSource() error = %v", err)
 	}
 	raw := testJWT(t, key, map[string]any{
-		"iss": issuer.URL, "aud": "agent-runtime", "sub": "subject", "login": "alice",
+		"iss": issuer.URL, "aud": "agentgo", "sub": "subject", "login": "alice",
 		"exp": time.Now().Add(time.Hour).Unix(),
 	})
 	request := httptest.NewRequest(http.MethodPost, "/ag-ui", nil)
@@ -129,7 +129,7 @@ func TestOIDCSourceRejectsInvalidClaims(t *testing.T) {
 	}
 
 	invalid := testJWT(t, key, map[string]any{
-		"iss": issuer.URL, "aud": "agent-runtime", "login": 42,
+		"iss": issuer.URL, "aud": "agentgo", "login": 42,
 		"exp": time.Now().Add(time.Hour).Unix(),
 	})
 	invalidRequest := httptest.NewRequest(http.MethodPost, "/ag-ui", nil)

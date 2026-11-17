@@ -1,4 +1,4 @@
-module github.com/ml8s/agent-runtime
+module github.com/ml8s/agentgo
 
 go 1.26.11
 

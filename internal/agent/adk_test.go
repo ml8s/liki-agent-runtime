@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	adkagent "google.golang.org/adk/v2/agent"

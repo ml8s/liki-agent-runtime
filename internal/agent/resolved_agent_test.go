@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
 )
 
 func mustRuntimeAgentDefinition(t testing.TB, resolved deploymentpkg.ResolvedAgentDefinition) RuntimeAgentDefinition {

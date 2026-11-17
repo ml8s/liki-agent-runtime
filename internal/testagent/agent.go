@@ -1,5 +1,5 @@
 // Package testagent provides a generic AgentDeployment for adapter tests.
-// Domain behavior intentionally remains outside agent-runtime.
+// Domain behavior intentionally remains outside agentgo.
 package testagent
 
 import (
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
 )
 
 // ResolvedAgents is a test-fixture conversion helper. Production deployments

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/domain"
 )
 
 func TestEventValidate(t *testing.T) {

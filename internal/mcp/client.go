@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/deployment"
-	"github.com/ml8s/agent-runtime/internal/domain"
-	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agentgo/internal/deployment"
+	"github.com/ml8s/agentgo/internal/domain"
+	"github.com/ml8s/agentgo/internal/execution"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/adk/v2/tool"

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	execution "github.com/ml8s/agent-runtime/internal/execution"
+	execution "github.com/ml8s/agentgo/internal/execution"
 )
 
 func TestBuildUserContentKeepsUntrustedTextInsideJSONFraming(t *testing.T) {

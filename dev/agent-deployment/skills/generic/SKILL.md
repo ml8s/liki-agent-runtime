@@ -1,6 +1,6 @@
 ---
 name: generic
-description: Development fixture skill for the agent-runtime dev stack. It proves that the skilltoolset binding preloads and serves skills in local development; it carries no methodology and must never be shipped to production images.
+description: Development fixture skill for the agentgo dev stack. It proves that the skilltoolset binding preloads and serves skills in local development; it carries no methodology and must never be shipped to production images.
 ---
 
 # generic (dev fixture)

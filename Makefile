@@ -21,7 +21,7 @@ GIT_SHA ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GOPROXY ?= https://goproxy.cn,direct
-LDFLAGS ?= -s -w -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.BuildID=$(GIT_SHA) -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.Commit=$(COMMIT) -X github.com/ml8s/agent-runtime/internal/platform/buildinfo.BuildTime=$(BUILD_TIME)
+LDFLAGS ?= -s -w -X github.com/ml8s/agentgo/internal/platform/buildinfo.BuildID=$(GIT_SHA) -X github.com/ml8s/agentgo/internal/platform/buildinfo.Commit=$(COMMIT) -X github.com/ml8s/agentgo/internal/platform/buildinfo.BuildTime=$(BUILD_TIME)
 
 TEST_PACKAGES ?= ./...
 BENCH_PACKAGES ?= ./internal/audit/sqlite/... ./internal/agent/...
@@ -37,8 +37,8 @@ help:
 	@echo "make bench    - run focused performance benchmarks"
 	@echo "make gate     - run the full pre-push source gate"
 	@echo "make setup-hooks - install the repository pre-push gate"
-	@echo "make smoke    - smoke the local agent-runtime image"
-	@echo "make build    - build ./bin/agent-runtime"
+	@echo "make smoke    - smoke the local agentgo image"
+	@echo "make build    - build ./bin/agentgo"
 	@echo "make image    - build a local image (tag from git)"
 	@echo "make dev      - run the development Agent and MCP containers in the foreground"
 	@echo "make dev-down - remove the development Agent workload"
@@ -62,21 +62,21 @@ check: ## Run static checks.
 	$(PYTHON) scripts/check-lint-toolchain.py
 	scripts/lint.sh run ./...
 	$(GO) vet ./...
-	$(GO) run ./cmd/agent-runtime validate -deployment $(if $(AGENT_RUNTIME_DEPLOYMENT_FILE),$(AGENT_RUNTIME_DEPLOYMENT_FILE),./dev/agent-deployment/deployment.json)
+	$(GO) run ./cmd/agentgo validate -deployment $(if $(AGENTGO_DEPLOYMENT_FILE),$(AGENTGO_DEPLOYMENT_FILE),./dev/agent-deployment/deployment.json)
 	$(PYTHON) scripts/check_actions_pinned.py
 
-build: ## Build the local agent-runtime binary.
-	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/agent-runtime ./cmd/agent-runtime
+build: ## Build the local agentgo binary.
+	$(GO) build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o bin/agentgo ./cmd/agentgo
 
 # ── 镜像 ──
 # make image/smoke 只构建本地镜像；部署由 deployment system 按 sha 组装。
-IMAGE_REGISTRY ?= agent-runtime-local
+IMAGE_REGISTRY ?= agentgo-local
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)
 
 image: ## Build a local image for development
 	docker build --build-arg GIT_SHA=$(GIT_SHA) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_TIME=$(BUILD_TIME) \
 		--build-arg GOPROXY=$(GOPROXY) \
-		-t $(IMAGE_REGISTRY)/agent-runtime:$(IMAGE_TAG) .
+		-t $(IMAGE_REGISTRY)/agentgo:$(IMAGE_TAG) .
 
 smoke: image ## Smoke the local runtime image with the development deployment
 	IMAGE_TAG=$(IMAGE_TAG) scripts/smoke-image.sh

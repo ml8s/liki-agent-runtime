@@ -3,9 +3,9 @@ package agent
 import (
 	"fmt"
 
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/domain"
 
 	"google.golang.org/genai"
 )

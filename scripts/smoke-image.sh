@@ -6,10 +6,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE_TAG="${IMAGE_TAG:-$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo local)}"
-IMAGE="${IMAGE:-${AGENT_RUNTIME_IMAGE:-agent-runtime-local/agent-runtime:$IMAGE_TAG}}"
+IMAGE="${IMAGE:-${AGENTGO_IMAGE:-agentgo-local/agentgo:$IMAGE_TAG}}"
 PORT="${AGENTS_SMOKE_PORT:-18083}"
 OPS_PORT="${AGENTS_SMOKE_OPS_PORT:-18085}"
-NAME="agent-runtime-smoke-$$"
+NAME="agentgo-smoke-$$"
 
 cleanup() {
   docker rm -f "$NAME" >/dev/null 2>&1 || true
@@ -23,22 +23,22 @@ docker run -d --name "$NAME" \
   -v "$ROOT/dev/agent-deployment:/agent-deployment:ro" \
   -v "$ROOT/dev/agent-deployment/skills:/skills:ro" \
   --tmpfs /data:uid=65532,gid=65532 \
-  -e AGENT_RUNTIME_ENV=development \
-  -e AGENT_RUNTIME_TOPOLOGY=single \
-  -e AGENT_RUNTIME_PROTOCOL_ADDR=:8083 \
-  -e AGENT_RUNTIME_OPS_ADDR=:8085 \
-  -e AGENT_RUNTIME_PROTOCOL_TOKEN=dev-protocol-token \
-  -e AGENT_RUNTIME_PUBLIC_URL=http://127.0.0.1:8083 \
-  -e AGENT_RUNTIME_AUDIT_DB_PATH=/data/agent-runtime-audit.db \
-  -e AGENT_RUNTIME_DEPLOYMENT_FILE=/agent-deployment/deployment.json \
-  -e AGENT_RUNTIME_MCP_TOOLS_A_URL=http://127.0.0.1:9/mcp \
-  -e AGENT_RUNTIME_MCP_TOOLS_B_URL=http://127.0.0.1:9/mcp \
-  -e AGENT_RUNTIME_MCP_TOOLS_A_TOKEN=smoke-not-used \
-  -e AGENT_RUNTIME_MCP_TOOLS_B_TOKEN=smoke-not-used \
-  -e AGENT_RUNTIME_LLM_BASE_URL=http://127.0.0.1:9/v1 \
-  -e AGENT_RUNTIME_LLM_API_KEY=smoke-not-used \
-  -e AGENT_RUNTIME_LLM_MODEL=smoke \
-  -e AGENT_RUNTIME_LLM_PROVIDER=openai \
+  -e AGENTGO_ENV=development \
+  -e AGENTGO_TOPOLOGY=single \
+  -e AGENTGO_PROTOCOL_ADDR=:8083 \
+  -e AGENTGO_OPS_ADDR=:8085 \
+  -e AGENTGO_PROTOCOL_TOKEN=dev-protocol-token \
+  -e AGENTGO_PUBLIC_URL=http://127.0.0.1:8083 \
+  -e AGENTGO_AUDIT_DB_PATH=/data/agentgo-audit.db \
+  -e AGENTGO_DEPLOYMENT_FILE=/agent-deployment/deployment.json \
+  -e AGENTGO_MCP_TOOLS_A_URL=http://127.0.0.1:9/mcp \
+  -e AGENTGO_MCP_TOOLS_B_URL=http://127.0.0.1:9/mcp \
+  -e AGENTGO_MCP_TOOLS_A_TOKEN=smoke-not-used \
+  -e AGENTGO_MCP_TOOLS_B_TOKEN=smoke-not-used \
+  -e AGENTGO_LLM_BASE_URL=http://127.0.0.1:9/v1 \
+  -e AGENTGO_LLM_API_KEY=smoke-not-used \
+  -e AGENTGO_LLM_MODEL=smoke \
+  -e AGENTGO_LLM_PROVIDER=openai \
   "$IMAGE" >/dev/null
 
 live=false
@@ -57,8 +57,8 @@ for _ in $(seq 1 30); do
 done
 
 if [ "$live" != true ]; then
-  echo "❌ agent-runtime image did not become live" >&2
+  echo "❌ agentgo image did not become live" >&2
   docker logs "$NAME" >&2 || true
   exit 1
 fi
-echo "✅ agent-runtime image smoke passed"
+echo "✅ agentgo image smoke passed"

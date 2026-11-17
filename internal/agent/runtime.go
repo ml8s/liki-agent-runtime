@@ -9,14 +9,14 @@ import (
 	"log/slog"
 	"time"
 
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
 
-	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agentgo/internal/execution"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
-	"github.com/ml8s/agent-runtime/internal/domain"
-	mcppkg "github.com/ml8s/agent-runtime/internal/mcp"
-	platformconfig "github.com/ml8s/agent-runtime/internal/platform/config"
+	"github.com/ml8s/agentgo/internal/audit"
+	"github.com/ml8s/agentgo/internal/domain"
+	mcppkg "github.com/ml8s/agentgo/internal/mcp"
+	platformconfig "github.com/ml8s/agentgo/internal/platform/config"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/adk/v2/agent"
@@ -64,7 +64,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		config.Logger = slog.Default()
 	}
 	if config.AppName == "" {
-		config.AppName = "agent-runtime"
+		config.AppName = "agentgo"
 	}
 	if config.Model == "" {
 		return Config{}, domain.NewError(domain.CodeLLMModelMissing, "LLM model is required", domain.ErrInvalidInput)
@@ -95,7 +95,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 	case ProviderAnthropic, ProviderGemini:
 		if config.StructuredOutput != execution.StructuredOutputNone && config.StructuredOutput != execution.StructuredOutputNative {
 			return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid,
-				fmt.Sprintf("provider %q only supports native structured output; unset AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT or set it to %q",
+				fmt.Sprintf("provider %q only supports native structured output; unset AGENTGO_LLM_STRUCTURED_OUTPUT or set it to %q",
 					config.Provider, execution.StructuredOutputNative),
 				domain.ErrInvalidInput,
 			)
@@ -173,7 +173,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err := recoverInterruptedAudits(config); err != nil {
 		return nil, err
 	}
-	tracer := config.TracerProvider.Tracer("github.com/ml8s/agent-runtime/agent")
+	tracer := config.TracerProvider.Tracer("github.com/ml8s/agentgo/agent")
 	// Protocol clients own durable conversation/product history. Each ADK
 	// session is deliberately run-scoped working state and must not become a
 	// second durable conversation store.

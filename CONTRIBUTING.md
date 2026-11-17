@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for improving `agent-runtime`.
+Thanks for improving `agentgo`.
 
 ## Development
 

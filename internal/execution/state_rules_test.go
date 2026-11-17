@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/ml8s/agent-runtime/internal/deployment"
-	"github.com/ml8s/agent-runtime/internal/domain"
-	"github.com/ml8s/agent-runtime/internal/testagent"
+	"github.com/ml8s/agentgo/internal/deployment"
+	"github.com/ml8s/agentgo/internal/domain"
+	"github.com/ml8s/agentgo/internal/testagent"
 )
 
 func TestJSONStringAtPointerFollowsRFC6901(t *testing.T) {

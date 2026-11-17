@@ -11,17 +11,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agentgo/internal/execution"
 
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
 
 	aguievents "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	aguitypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	aguisse "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/encoding/sse"
-	"github.com/ml8s/agent-runtime/internal/domain"
-	"github.com/ml8s/agent-runtime/internal/observability"
-	platformconfig "github.com/ml8s/agent-runtime/internal/platform/config"
-	"github.com/ml8s/agent-runtime/internal/platform/identity"
+	"github.com/ml8s/agentgo/internal/domain"
+	"github.com/ml8s/agentgo/internal/observability"
+	platformconfig "github.com/ml8s/agentgo/internal/platform/config"
+	"github.com/ml8s/agentgo/internal/platform/identity"
 	"google.golang.org/adk/v2/session"
 )
 

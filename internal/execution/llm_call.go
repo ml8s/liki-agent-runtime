@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/domain"
 )
 
 // LLMCallStatus is the lifecycle state of one model call.

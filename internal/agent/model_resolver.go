@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
-	"github.com/ml8s/agent-runtime/internal/domain"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
+	"github.com/ml8s/agentgo/internal/domain"
 	"google.golang.org/adk/v2/model"
 )
 

@@ -16,19 +16,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agentgo/internal/execution"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/push"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
-	"github.com/ml8s/agent-runtime/internal/agent"
-	"github.com/ml8s/agent-runtime/internal/domain"
-	observability "github.com/ml8s/agent-runtime/internal/observability"
-	platformconfig "github.com/ml8s/agent-runtime/internal/platform/config"
-	"github.com/ml8s/agent-runtime/internal/platform/identity"
+	"github.com/ml8s/agentgo/internal/agent"
+	"github.com/ml8s/agentgo/internal/domain"
+	observability "github.com/ml8s/agentgo/internal/observability"
+	platformconfig "github.com/ml8s/agentgo/internal/platform/config"
+	"github.com/ml8s/agentgo/internal/platform/identity"
 	"google.golang.org/adk/v2/server/adka2a/v2"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -120,7 +120,7 @@ func New(runtime *agent.Runtime, config Config) (*Server, error) {
 		config.Logger = slog.Default()
 	}
 	if strings.TrimSpace(config.ServicePrincipal) == "" {
-		config.ServicePrincipal = "agent-runtime-a2a"
+		config.ServicePrincipal = "agentgo-a2a"
 	}
 	if config.Push.partial() && !config.Push.enabled() {
 		return nil, domain.NewError(CodeA2AConfigInvalid, "a2a push notifications require both config store and sender", domain.ErrInvalidInput)

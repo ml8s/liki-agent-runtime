@@ -1,4 +1,4 @@
-// Command agent-runtime runs the generic multi-agent runtime and its operational
+// Command agentgo runs the generic multi-agent runtime and its operational
 // subcommands.
 package main
 
@@ -10,15 +10,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/platform/config"
+	"github.com/ml8s/agentgo/internal/platform/config"
 )
 
 // healthcheck is the container-native readiness probe used by Docker Compose.
 // It intentionally checks the process-local /readyz endpoint without importing
 // a shell into the distroless runtime image. Readiness lives on the dedicated
-// ops listener, so the probe follows AGENT_RUNTIME_OPS_ADDR.
+// ops listener, so the probe follows AGENTGO_OPS_ADDR.
 func healthcheck() error {
-	address := strings.TrimSpace(os.Getenv("AGENT_RUNTIME_OPS_ADDR"))
+	address := strings.TrimSpace(os.Getenv("AGENTGO_OPS_ADDR"))
 	if address == "" {
 		address = config.DefaultOpsAddr
 	}

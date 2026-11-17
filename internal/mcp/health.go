@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/ml8s/agent-runtime/internal/deployment"
-	"github.com/ml8s/agent-runtime/internal/platform"
-	"github.com/ml8s/agent-runtime/internal/platform/buildinfo"
+	"github.com/ml8s/agentgo/internal/deployment"
+	"github.com/ml8s/agentgo/internal/platform"
+	"github.com/ml8s/agentgo/internal/platform/buildinfo"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -55,7 +55,7 @@ func (c *HealthChecker) check(ctx context.Context, server ResolvedServer) (err e
 	defer cancel()
 
 	client := mcpsdk.NewClient(
-		&mcpsdk.Implementation{Name: "agent-runtime", Version: buildinfo.BuildID},
+		&mcpsdk.Implementation{Name: "agentgo", Version: buildinfo.BuildID},
 		nil,
 	)
 	var transport mcpsdk.Transport = newTransport(c.config, server)

@@ -10,7 +10,7 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/push"
-	observability "github.com/ml8s/agent-runtime/internal/observability"
+	observability "github.com/ml8s/agentgo/internal/observability"
 )
 
 // validatingPushConfigStore enforces the callback policy before a webhook can

@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/ml8s/agent-runtime/internal/agent"
+	agent "github.com/ml8s/agentgo/internal/agent"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/audit"
+	"github.com/ml8s/agentgo/internal/domain"
 )
 
 type recordingAudit struct {
