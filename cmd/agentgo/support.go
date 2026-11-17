@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ml8s/agent-runtime/internal/platform/config"
+	"github.com/ml8s/agentgo/internal/platform/config"
 )
 
 func newLogger(cfg config.Config) *slog.Logger {

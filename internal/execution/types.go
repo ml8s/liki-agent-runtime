@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"time"
 
-	deployment "github.com/ml8s/agent-runtime/internal/deployment"
+	deployment "github.com/ml8s/agentgo/internal/deployment"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/domain"
 )
 
 // structuredOutputStateKeyPrefix matches llmagent.Config.OutputKey. ADK parses

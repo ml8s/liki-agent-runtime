@@ -2,7 +2,7 @@
 
 ## System boundary
 
-`agent-runtime` is a generic multi-agent runtime. `caller` owns users,
+`agentgo` is a generic multi-agent runtime. `caller` owns users,
 authentication, products, payments, entitlements, quota, and durable product
 conversations. The domain content repository owns prompts, skills, domain policy, and
 tool semantics. External MCP servers expose deterministic and judgment tools.
@@ -11,7 +11,7 @@ tool semantics. External MCP servers expose deterministic and judgment tools.
 Server / machine client
   ↓ A2A JSON-RPC
 ┌──────────────┐   MCP Streamable HTTP
-│ agent-runtime │──────────────────→ external MCP tools
+│ agentgo │──────────────────→ external MCP tools
 └──────────────┘
   ↑ AG-UI SSE
 caller gateway
@@ -75,7 +75,7 @@ instructions, schemas, and skills roll out and roll back as one unit.
 ## Dependencies and modules
 
 ```text
-cmd/agent-runtime
+cmd/agentgo
   → internal/transport
   → internal/protocol/a2a
   → internal/protocol/agui
@@ -152,7 +152,7 @@ session; a successful A2A attempt preserves the ContextID-owned session so the
 standard protocol state can continue.
 Both protocol adapters enforce the configured total run deadline, and the
 runtime bounds concurrent model/MCP executions with
-`AGENT_RUNTIME_MAX_CONCURRENT_RUNS`.
+`AGENTGO_MAX_CONCURRENT_RUNS`.
 
 The entrypoint `AgentDefinition` supplies instruction, an optional output
 schema, and the tool allowlist. Plain text is the default. When structured
@@ -299,11 +299,11 @@ join the core as pure functions and the shell as explicit, lock-annotated state 
 ## Operations
 
 The operational surface (`/livez`, `/readyz`, `/metrics`) is served on a
-dedicated ops listener (`AGENT_RUNTIME_OPS_ADDR`, default `:8085`) so protocol
+dedicated ops listener (`AGENTGO_OPS_ADDR`, default `:8085`) so protocol
 mutual TLS never gates healthchecks or scrapers; `/metrics` is internal and
 credential-free. `/debug/pprof` is disabled unless explicitly enabled for
 internal debugging. The protocol listener can additionally expose a mutual-TLS
-endpoint (`AGENT_RUNTIME_TLS_ADDR` plus the certificate trio, client
+endpoint (`AGENTGO_TLS_ADDR` plus the certificate trio, client
 certificates verified against the CA). All POST endpoints enforce a 2 MB body
 limit.
 
@@ -319,7 +319,7 @@ through a mature OIDC/JWKS library and authenticates both protocol surfaces.
 On the mutual-TLS listener the default `CertificateSource` maps the verified
 client-certificate subject (URI SAN, then email SAN, then common name;
 organization maps to the tenant); the relay-header mapping on that listener is
-an explicit `AGENT_RUNTIME_MTLS_IDENTITY_SOURCE=header` deployment opt-in.
+an explicit `AGENTGO_MTLS_IDENTITY_SOURCE=header` deployment opt-in.
 
 Readiness checks SQLite and every declared MCP dependency through the official
 MCP discovery RPC. It requires the configured MCP revision, server identity,

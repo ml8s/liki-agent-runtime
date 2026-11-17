@@ -1,9 +1,9 @@
 package agent
 
 import (
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
-	mcppkg "github.com/ml8s/agent-runtime/internal/mcp"
-	"github.com/ml8s/agent-runtime/internal/platform"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
+	mcppkg "github.com/ml8s/agentgo/internal/mcp"
+	"github.com/ml8s/agentgo/internal/platform"
 )
 
 // MCPHealthChecks returns one readiness checker per declared logical MCP

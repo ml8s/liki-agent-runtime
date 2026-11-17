@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/deployment"
-	"github.com/ml8s/agent-runtime/internal/execution"
-	testagentpkg "github.com/ml8s/agent-runtime/internal/testagent"
+	"github.com/ml8s/agentgo/internal/deployment"
+	"github.com/ml8s/agentgo/internal/execution"
+	testagentpkg "github.com/ml8s/agentgo/internal/testagent"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"

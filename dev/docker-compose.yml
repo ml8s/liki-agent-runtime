@@ -1,5 +1,5 @@
 x-mcp-fixture: &mcp-fixture
-  image: agent-runtime-example/mcp-fixture:local
+  image: agentgo-example/mcp-fixture:local
   build:
     context: ..
     dockerfile: dev/mcp-fixture.Dockerfile
@@ -35,42 +35,42 @@ services:
       mcp-tools-a:
         condition: service_started
 
-  agent-runtime:
-    image: agent-runtime:local
+  agentgo:
+    image: agentgo:local
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${AGENT_RUNTIME_VERSION:-local}
-        COMMIT: ${AGENT_RUNTIME_COMMIT:-unknown}
-        BUILD_TIME: ${AGENT_RUNTIME_BUILD_TIME:-unknown}
+        VERSION: ${AGENTGO_VERSION:-local}
+        COMMIT: ${AGENTGO_COMMIT:-unknown}
+        BUILD_TIME: ${AGENTGO_BUILD_TIME:-unknown}
     environment:
-      AGENT_RUNTIME_ENV: development
-      AGENT_RUNTIME_TOPOLOGY: ${AGENT_RUNTIME_TOPOLOGY:-single}
-      AGENT_RUNTIME_PROTOCOL_TOKEN: ${AGENT_RUNTIME_PROTOCOL_TOKEN:-dev-agent-token}
+      AGENTGO_ENV: development
+      AGENTGO_TOPOLOGY: ${AGENTGO_TOPOLOGY:-single}
+      AGENTGO_PROTOCOL_TOKEN: ${AGENTGO_PROTOCOL_TOKEN:-dev-agent-token}
       # The Compose profile is the trusted-header relay topology. The mutual
       # TLS listener (address + certificate trio + identity mapping) is wired
       # by the deployment system, not by this development workload.
-      AGENT_RUNTIME_IDENTITY_SOURCE: ${AGENT_RUNTIME_IDENTITY_SOURCE:-trusted_header}
-      AGENT_RUNTIME_OIDC_ISSUER: ${AGENT_RUNTIME_OIDC_ISSUER:-}
-      AGENT_RUNTIME_OIDC_AUDIENCE: ${AGENT_RUNTIME_OIDC_AUDIENCE:-}
-      AGENT_RUNTIME_OIDC_USERNAME_CLAIM: ${AGENT_RUNTIME_OIDC_USERNAME_CLAIM:-sub}
-      AGENT_RUNTIME_OIDC_TENANT_CLAIM: ${AGENT_RUNTIME_OIDC_TENANT_CLAIM:-}
-      AGENT_RUNTIME_PUBLIC_URL: ${AGENT_RUNTIME_PUBLIC_URL:-http://127.0.0.1:8083}
-      AGENT_RUNTIME_MCP_TOOLS_A_URL: http://mcp-tools-a:8085/mcp
-      AGENT_RUNTIME_MCP_TOOLS_B_URL: http://mcp-tools-b:8086/mcp
-      AGENT_RUNTIME_MCP_TOOLS_A_TOKEN: ${AGENT_RUNTIME_MCP_TOOLS_A_TOKEN:-}
-      AGENT_RUNTIME_MCP_TOOLS_B_TOKEN: ${AGENT_RUNTIME_MCP_TOOLS_B_TOKEN:-}
-      AGENT_RUNTIME_MCP_TIMEOUT_SECONDS: ${AGENT_RUNTIME_MCP_TIMEOUT_SECONDS:-30}
-      AGENT_RUNTIME_MAX_CONCURRENT_RUNS: ${AGENT_RUNTIME_MAX_CONCURRENT_RUNS:-32}
-      AGENT_RUNTIME_DEPLOYMENT_FILE: /agent-deployment/deployment.json
-      AGENT_RUNTIME_LLM_BASE_URL: ${AGENT_RUNTIME_LLM_BASE_URL:?AGENT_RUNTIME_LLM_BASE_URL is required}
-      AGENT_RUNTIME_LLM_API_KEY: ${AGENT_RUNTIME_LLM_API_KEY}
-      AGENT_RUNTIME_LLM_MODEL: ${AGENT_RUNTIME_LLM_MODEL:?AGENT_RUNTIME_LLM_MODEL is required}
-      AGENT_RUNTIME_LLM_TEMPERATURE: ${AGENT_RUNTIME_LLM_TEMPERATURE:-0.2}
-      AGENT_RUNTIME_LLM_PROVIDER: ${AGENT_RUNTIME_LLM_PROVIDER:?AGENT_RUNTIME_LLM_PROVIDER is required}
-      AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT: ${AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT:-}
-      AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS: ${AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS:-}
+      AGENTGO_IDENTITY_SOURCE: ${AGENTGO_IDENTITY_SOURCE:-trusted_header}
+      AGENTGO_OIDC_ISSUER: ${AGENTGO_OIDC_ISSUER:-}
+      AGENTGO_OIDC_AUDIENCE: ${AGENTGO_OIDC_AUDIENCE:-}
+      AGENTGO_OIDC_USERNAME_CLAIM: ${AGENTGO_OIDC_USERNAME_CLAIM:-sub}
+      AGENTGO_OIDC_TENANT_CLAIM: ${AGENTGO_OIDC_TENANT_CLAIM:-}
+      AGENTGO_PUBLIC_URL: ${AGENTGO_PUBLIC_URL:-http://127.0.0.1:8083}
+      AGENTGO_MCP_TOOLS_A_URL: http://mcp-tools-a:8085/mcp
+      AGENTGO_MCP_TOOLS_B_URL: http://mcp-tools-b:8086/mcp
+      AGENTGO_MCP_TOOLS_A_TOKEN: ${AGENTGO_MCP_TOOLS_A_TOKEN:-}
+      AGENTGO_MCP_TOOLS_B_TOKEN: ${AGENTGO_MCP_TOOLS_B_TOKEN:-}
+      AGENTGO_MCP_TIMEOUT_SECONDS: ${AGENTGO_MCP_TIMEOUT_SECONDS:-30}
+      AGENTGO_MAX_CONCURRENT_RUNS: ${AGENTGO_MAX_CONCURRENT_RUNS:-32}
+      AGENTGO_DEPLOYMENT_FILE: /agent-deployment/deployment.json
+      AGENTGO_LLM_BASE_URL: ${AGENTGO_LLM_BASE_URL:?AGENTGO_LLM_BASE_URL is required}
+      AGENTGO_LLM_API_KEY: ${AGENTGO_LLM_API_KEY}
+      AGENTGO_LLM_MODEL: ${AGENTGO_LLM_MODEL:?AGENTGO_LLM_MODEL is required}
+      AGENTGO_LLM_TEMPERATURE: ${AGENTGO_LLM_TEMPERATURE:-0.2}
+      AGENTGO_LLM_PROVIDER: ${AGENTGO_LLM_PROVIDER:?AGENTGO_LLM_PROVIDER is required}
+      AGENTGO_LLM_STRUCTURED_OUTPUT: ${AGENTGO_LLM_STRUCTURED_OUTPUT:-}
+      AGENTGO_LLM_MAX_OUTPUT_TOKENS: ${AGENTGO_LLM_MAX_OUTPUT_TOKENS:-}
     ports:
       - "8083:8083"
       - "8085:8085"
@@ -84,7 +84,7 @@ services:
     init: true
     stop_grace_period: 35s
     healthcheck:
-      test: ["CMD", "/agent-runtime", "healthcheck"]
+      test: ["CMD", "/agentgo", "healthcheck"]
       interval: 30s
       timeout: 3s
       start_period: 10s

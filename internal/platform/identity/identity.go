@@ -1,5 +1,5 @@
 // Package identity carries the verified caller identity across service
-// boundaries. caller authenticates the end user; agent-runtime trusts this
+// boundaries. caller authenticates the end user; agentgo trusts this
 // kernel identity only after its own service authentication.
 package identity
 

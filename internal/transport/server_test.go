@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
-	"github.com/ml8s/agent-runtime/internal/observability"
-	"github.com/ml8s/agent-runtime/internal/platform"
-	"github.com/ml8s/agent-runtime/internal/platform/identity"
-	"github.com/ml8s/agent-runtime/internal/transport"
+	"github.com/ml8s/agentgo/internal/domain"
+	"github.com/ml8s/agentgo/internal/observability"
+	"github.com/ml8s/agentgo/internal/platform"
+	"github.com/ml8s/agentgo/internal/platform/identity"
+	"github.com/ml8s/agentgo/internal/transport"
 )
 
 type healthy struct{}

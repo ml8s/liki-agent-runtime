@@ -10,7 +10,7 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-export AGENT_RUNTIME_ENV="${AGENT_RUNTIME_ENV:-development}"
-export AGENT_RUNTIME_LOG_LEVEL="${AGENT_RUNTIME_LOG_LEVEL:-debug}"
+export AGENTGO_ENV="${AGENTGO_ENV:-development}"
+export AGENTGO_LOG_LEVEL="${AGENTGO_LOG_LEVEL:-debug}"
 
-exec go run ./cmd/agent-runtime
+exec go run ./cmd/agentgo

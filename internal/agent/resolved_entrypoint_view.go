@@ -1,8 +1,8 @@
 package agent
 
 import (
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
-	"github.com/ml8s/agent-runtime/internal/execution"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
+	"github.com/ml8s/agentgo/internal/execution"
 )
 
 // ResolvedEntrypointView is the read-only boundary for structured-output

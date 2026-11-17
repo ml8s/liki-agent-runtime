@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
-	mcppkg "github.com/ml8s/agent-runtime/internal/mcp"
-	testagentpkg "github.com/ml8s/agent-runtime/internal/testagent"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
+	mcppkg "github.com/ml8s/agentgo/internal/mcp"
+	testagentpkg "github.com/ml8s/agentgo/internal/testagent"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

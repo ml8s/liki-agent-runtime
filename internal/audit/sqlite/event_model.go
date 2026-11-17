@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agentgo/internal/audit"
 )
 
 type auditEventModel struct {

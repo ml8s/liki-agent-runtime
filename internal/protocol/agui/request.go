@@ -9,7 +9,7 @@ import (
 
 	aguitypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agentgo/internal/execution"
 )
 
 // BFF-declared AG-UI client tools are a controlled await-result extension to

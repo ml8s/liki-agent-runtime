@@ -1,17 +1,17 @@
 {
   "metadata": {
-    "name": "agent-runtime-deployment",
+    "name": "agentgo-deployment",
     "version": "1.0.0"
   },
   "spec": {
     "mcpServers": [
       {
         "name": "tools-a",
-        "endpointEnv": "AGENT_RUNTIME_MCP_TOOLS_A_URL"
+        "endpointEnv": "AGENTGO_MCP_TOOLS_A_URL"
       },
       {
         "name": "tools-b",
-        "endpointEnv": "AGENT_RUNTIME_MCP_TOOLS_B_URL"
+        "endpointEnv": "AGENTGO_MCP_TOOLS_B_URL"
       }
     ],
     "agents": [

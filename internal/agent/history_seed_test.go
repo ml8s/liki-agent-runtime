@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agentgo/internal/execution"
 
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/deployment"
-	"github.com/ml8s/agent-runtime/internal/platform"
+	"github.com/ml8s/agentgo/internal/deployment"
+	"github.com/ml8s/agentgo/internal/platform"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"

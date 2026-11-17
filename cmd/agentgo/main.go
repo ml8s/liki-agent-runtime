@@ -14,41 +14,41 @@ import (
 	"time"
 
 	a2apush "github.com/a2aproject/a2a-go/v2/a2asrv/push"
-	adksqlite "github.com/ml8s/agent-runtime/internal/adksession/sqlite"
-	agentruntime "github.com/ml8s/agent-runtime/internal/agent"
-	"github.com/ml8s/agent-runtime/internal/audit/sqlite"
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
-	"github.com/ml8s/agent-runtime/internal/observability/otel"
-	"github.com/ml8s/agent-runtime/internal/observability/prometheus"
-	"github.com/ml8s/agent-runtime/internal/platform"
-	"github.com/ml8s/agent-runtime/internal/platform/buildinfo"
-	"github.com/ml8s/agent-runtime/internal/platform/config"
-	"github.com/ml8s/agent-runtime/internal/platform/identity"
-	"github.com/ml8s/agent-runtime/internal/platform/tlsconf"
-	a2aadapter "github.com/ml8s/agent-runtime/internal/protocol/a2a"
-	aguiadapter "github.com/ml8s/agent-runtime/internal/protocol/agui"
-	protocolstate "github.com/ml8s/agent-runtime/internal/protocolstate/sqlite"
-	"github.com/ml8s/agent-runtime/internal/transport"
+	adksqlite "github.com/ml8s/agentgo/internal/adksession/sqlite"
+	agentruntime "github.com/ml8s/agentgo/internal/agent"
+	"github.com/ml8s/agentgo/internal/audit/sqlite"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
+	"github.com/ml8s/agentgo/internal/observability/otel"
+	"github.com/ml8s/agentgo/internal/observability/prometheus"
+	"github.com/ml8s/agentgo/internal/platform"
+	"github.com/ml8s/agentgo/internal/platform/buildinfo"
+	"github.com/ml8s/agentgo/internal/platform/config"
+	"github.com/ml8s/agentgo/internal/platform/identity"
+	"github.com/ml8s/agentgo/internal/platform/tlsconf"
+	a2aadapter "github.com/ml8s/agentgo/internal/protocol/a2a"
+	aguiadapter "github.com/ml8s/agentgo/internal/protocol/agui"
+	protocolstate "github.com/ml8s/agentgo/internal/protocolstate/sqlite"
+	"github.com/ml8s/agentgo/internal/transport"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "validate" {
 		if err := validate(os.Args[2:]); err != nil {
-			slog.Error("agent-runtime deployment validation failed", "error", err)
+			slog.Error("agentgo deployment validation failed", "error", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		if err := healthcheck(); err != nil {
-			slog.Error("agent-runtime healthcheck failed", "error", err)
+			slog.Error("agentgo healthcheck failed", "error", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if err := run(); err != nil {
-		slog.Error("agent-runtime exited", "error", err)
+		slog.Error("agentgo exited", "error", err)
 		os.Exit(1)
 	}
 }
@@ -63,7 +63,7 @@ func run() (err error) {
 
 	tracerProvider, err := otel.NewTracerProvider(
 		context.Background(),
-		"agent-runtime",
+		"agentgo",
 		buildinfo.BuildID,
 		cfg.Env,
 	)
@@ -130,7 +130,7 @@ func run() (err error) {
 		return err
 	}
 	runtime, err := agentruntime.NewRuntime(agentruntime.Config{
-		AppName:              "agent-runtime",
+		AppName:              "agentgo",
 		Model:                cfg.LLMModel,
 		ModelBaseURL:         cfg.LLMBaseURL,
 		ModelAPIKey:          cfg.LLMAPIKey,
@@ -233,7 +233,7 @@ func run() (err error) {
 		return err
 	}
 
-	httpHandler := otelhttp.NewHandler(protocolServer, "agent-runtime",
+	httpHandler := otelhttp.NewHandler(protocolServer, "agentgo",
 		otelhttp.WithTracerProvider(tracerProvider.Provider()),
 		otelhttp.WithPropagators(otel.Propagator()),
 	)
@@ -259,7 +259,7 @@ func run() (err error) {
 	}
 	errCh := make(chan error, len(servers))
 	go func() {
-		logger.Info("agent-runtime listening",
+		logger.Info("agentgo listening",
 			"addr", cfg.ProtocolAddr,
 			"ops_addr", cfg.OpsAddr,
 			"public_url", cfg.PublicURL,
@@ -274,7 +274,7 @@ func run() (err error) {
 	}()
 	if tlsServer != nil {
 		go func() {
-			logger.Info("agent-runtime mutual TLS listening", "addr", cfg.TLSAddr)
+			logger.Info("agentgo mutual TLS listening", "addr", cfg.TLSAddr)
 			// 证书由 TLSConfig 提供（RequireAndVerifyClientCert）。
 			errCh <- tlsServer.ListenAndServeTLS("", "")
 		}()
@@ -282,7 +282,7 @@ func run() (err error) {
 
 	select {
 	case <-ctx.Done():
-		logger.Info("agent-runtime draining", "shutdown_timeout", cfg.ShutdownTimeout)
+		logger.Info("agentgo draining", "shutdown_timeout", cfg.ShutdownTimeout)
 		return shutdownServers(servers, protocolServer, cfg.ShutdownTimeout)
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {

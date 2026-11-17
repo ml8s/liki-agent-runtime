@@ -23,7 +23,7 @@ func TestFixtureUsesOfficialStreamableMCP(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "agent-runtime-test", Version: "1.0.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "agentgo-test", Version: "1.0.0"}, nil)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint:             httpServer.URL + "/mcp",
 		DisableStandaloneSSE: true,

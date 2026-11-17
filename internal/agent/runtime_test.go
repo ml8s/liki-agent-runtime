@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/ml8s/agent-runtime/internal/agent"
-	"github.com/ml8s/agent-runtime/internal/execution"
+	agent "github.com/ml8s/agentgo/internal/agent"
+	"github.com/ml8s/agentgo/internal/execution"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/audit"
+	"github.com/ml8s/agentgo/internal/domain"
 	"google.golang.org/adk/v2/session"
 )
 

@@ -7,23 +7,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"time"
 
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
 
-	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agentgo/internal/execution"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
-	"github.com/ml8s/agent-runtime/internal/domain"
-	mcppkg "github.com/ml8s/agent-runtime/internal/mcp"
-	platformconfig "github.com/ml8s/agent-runtime/internal/platform/config"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"github.com/ml8s/agentgo/internal/audit"
+	"github.com/ml8s/agentgo/internal/domain"
+	mcppkg "github.com/ml8s/agentgo/internal/mcp"
+	platformconfig "github.com/ml8s/agentgo/internal/platform/config"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/adk/v2/agent"
-	"google.golang.org/adk/v2/model"
-	"google.golang.org/adk/v2/model/openaimodel"
 	"google.golang.org/adk/v2/plugin"
 	"google.golang.org/adk/v2/plugin/retryandreflect"
 	"google.golang.org/adk/v2/runner"
@@ -68,7 +64,7 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		config.Logger = slog.Default()
 	}
 	if config.AppName == "" {
-		config.AppName = "agent-runtime"
+		config.AppName = "agentgo"
 	}
 	if config.Model == "" {
 		return Config{}, domain.NewError(domain.CodeLLMModelMissing, "LLM model is required", domain.ErrInvalidInput)
@@ -91,9 +87,19 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 		return Config{}, domain.NewError(domain.CodeAgentDefinitionMissing, "AgentDefinition is required", domain.ErrInvalidInput)
 	}
 	switch config.StructuredOutput {
-	case execution.StructuredOutputNone, execution.StructuredOutputJSONSchema, execution.StructuredOutputJSONObject:
+	case execution.StructuredOutputNone, execution.StructuredOutputJSONSchema, execution.StructuredOutputJSONObject, execution.StructuredOutputNative:
 	default:
 		return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output capability is invalid", domain.ErrInvalidInput)
+	}
+	switch config.Provider {
+	case ProviderAnthropic, ProviderGemini:
+		if config.StructuredOutput != execution.StructuredOutputNone && config.StructuredOutput != execution.StructuredOutputNative {
+			return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid,
+				fmt.Sprintf("provider %q only supports native structured output; unset AGENTGO_LLM_STRUCTURED_OUTPUT or set it to %q",
+					config.Provider, execution.StructuredOutputNative),
+				domain.ErrInvalidInput,
+			)
+		}
 	}
 	structuredAgents := 0
 	for _, candidate := range config.AgentDeployment.AgentDeclarations() {
@@ -149,37 +155,6 @@ func recoverInterruptedAudits(config Config) error {
 	return nil
 }
 
-// newModelBuilder builds one OpenAI-compatible model client. json_object
-// compatibility is applied by the provider-aware adapter.
-func newModelBuilder(config Config) func(string) (model.LLM, error) {
-	if config.modelOverride != nil {
-		return func(string) (model.LLM, error) { return config.modelOverride, nil }
-	}
-	useJSONObject := config.StructuredOutput == execution.StructuredOutputJSONObject
-	build := func(modelName string) (model.LLM, error) {
-		built, err := openaimodel.NewModel(context.Background(), modelName, &openaimodel.ClientConfig{
-			APIKey:  config.ModelAPIKey,
-			BaseURL: config.ModelBaseURL,
-			HTTPClient: &http.Client{
-				Timeout:   config.ModelTimeout,
-				Transport: otelhttp.NewTransport(config.outboundTransport),
-			},
-		})
-		if err != nil {
-			return nil, domain.NewError(domain.CodeLLMUnavailable, "create LLM model", err)
-		}
-		if !useJSONObject {
-			return built, nil
-		}
-		compatModel, err := newJSONObjectModel(built)
-		if err != nil {
-			return nil, domain.NewError(domain.CodeRuntimeInitFailed, "create provider structured output model", err)
-		}
-		return compatModel, nil
-	}
-	return build
-}
-
 // NewRuntime builds the runtime from a validated deployment and its
 // dependencies. It fails closed on any invalid or missing dependency.
 func NewRuntime(config Config) (*Runtime, error) {
@@ -198,7 +173,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 	if err := recoverInterruptedAudits(config); err != nil {
 		return nil, err
 	}
-	tracer := config.TracerProvider.Tracer("github.com/ml8s/agent-runtime/agent")
+	tracer := config.TracerProvider.Tracer("github.com/ml8s/agentgo/agent")
 	// Protocol clients own durable conversation/product history. Each ADK
 	// session is deliberately run-scoped working state and must not become a
 	// second durable conversation store.
@@ -249,15 +224,16 @@ func NewRuntime(config Config) (*Runtime, error) {
 		callAuditor.auditScope,
 	)
 	graph := newAgentGraphBuilder(aggregate, entrypoint.Name, agentGraphDeps{
-		mcpToolsets:       mcpToolsets,
-		clientToolset:     newClientToolset(),
-		modelName:         config.Model,
-		resolveModel:      models.resolve,
-		temperature:       temperature,
-		maxOutputTokens:   config.MaxOutputTokens,
-		callAuditor:       callAuditor,
-		delegationAuditor: delegationAuditor,
-		toolAuditor:       toolAuditor,
+		mcpToolsets:            mcpToolsets,
+		clientToolset:          newClientToolset(),
+		modelName:              config.Model,
+		resolveModel:           models.resolve,
+		temperature:            temperature,
+		maxOutputTokens:        config.MaxOutputTokens,
+		nativeStructuredOutput: config.StructuredOutput == execution.StructuredOutputNative,
+		callAuditor:            callAuditor,
+		delegationAuditor:      delegationAuditor,
+		toolAuditor:            toolAuditor,
 	})
 	root, err := graph.build(entrypoint)
 	if err != nil {

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
-	"github.com/ml8s/agent-runtime/internal/execution"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
+	"github.com/ml8s/agentgo/internal/execution"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/adk/v2/session"
 )

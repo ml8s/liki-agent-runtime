@@ -3,7 +3,7 @@ package pipeline_test
 import (
 	"testing"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
 )
 
 // DevelopmentAgentDeploymentRegistersComplementaryMCPTools keeps the local
@@ -18,14 +18,14 @@ func TestDevelopmentAgentDeploymentRegistersComplementaryMCPTools(t *testing.T) 
 	for _, server := range artifact.Spec.MCPServers {
 		servers[server.Name] = server
 	}
-	// MCP endpoints share the AGENT_RUNTIME_MCP_<NAME> prefix so a server's
+	// MCP endpoints share the AGENTGO_MCP_<NAME> prefix so a server's
 	// binding can be found by name. MCP is token-free.
 	engine, ok := servers["tools-a"]
-	if !ok || engine.EndpointEnv != "AGENT_RUNTIME_MCP_TOOLS_A_URL" {
+	if !ok || engine.EndpointEnv != "AGENTGO_MCP_TOOLS_A_URL" {
 		t.Fatalf("Tools A MCP declaration = %+v", engine)
 	}
 	counsel, ok := servers["tools-b"]
-	if !ok || counsel.EndpointEnv != "AGENT_RUNTIME_MCP_TOOLS_B_URL" {
+	if !ok || counsel.EndpointEnv != "AGENTGO_MCP_TOOLS_B_URL" {
 		t.Fatalf("Tools B MCP declaration = %+v", counsel)
 	}
 

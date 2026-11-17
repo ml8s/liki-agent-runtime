@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/domain"
 )
 
 // Recorder persists immutable audit facts. Implementations must treat Record

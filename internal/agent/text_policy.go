@@ -1,7 +1,7 @@
 package agent
 
 import (
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
 )
 
 // deploymentTextPolicy adapts the immutable aggregate to the runtime's

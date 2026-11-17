@@ -16,7 +16,7 @@ func TestSQLiteSessionServicePersistsAcrossReopen(t *testing.T) {
 		t.Fatalf("OpenSQLiteSessionService() error = %v", err)
 	}
 	created, err := service.SessionService().Create(context.Background(), &session.CreateRequest{
-		AppName:   "agent-runtime",
+		AppName:   "agentgo",
 		UserID:    "user-1",
 		SessionID: "context-1",
 		State:     map[string]any{"attempt": "attempt-1"},
@@ -34,7 +34,7 @@ func TestSQLiteSessionServicePersistsAcrossReopen(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = reopened.Close() })
 	got, err := reopened.SessionService().Get(context.Background(), &session.GetRequest{
-		AppName:   "agent-runtime",
+		AppName:   "agentgo",
 		UserID:    "user-1",
 		SessionID: "context-1",
 	})

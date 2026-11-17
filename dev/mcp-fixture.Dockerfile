@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 COPY --from=build /out/mcp-fixture /mcp-fixture
-LABEL org.opencontainers.image.title="agent-runtime MCP fixture" \
+LABEL org.opencontainers.image.title="agentgo MCP fixture" \
       org.opencontainers.image.description="Domain-neutral deterministic MCP development fixture"
 ENV LISTEN_ADDR=:8085
 EXPOSE 8085

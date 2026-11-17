@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ml8s/agent-runtime/internal/testagent"
+	"github.com/ml8s/agentgo/internal/testagent"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
 )
 
 func minimalSkillAgent() *deploymentpkg.AgentDefinition {

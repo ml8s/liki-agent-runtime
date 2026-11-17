@@ -1,11 +1,11 @@
 # Security Policy
 
-`agent-runtime` is an internal runtime and must not be exposed directly to the
+`agentgo` is an internal runtime and must not be exposed directly to the
 public internet.
 
 Required controls:
 
-- Internal bearer token between the gateway and `agent-runtime` outside local
+- Internal bearer token between the gateway and `agentgo` outside local
   development.
 - A dedicated internal ops listener for `/metrics`; pprof is disabled unless
   explicitly enabled for debugging. Network isolation and optional
@@ -15,7 +15,7 @@ Required controls:
   sharing the internal token cannot spoof a user identity.
 - Direct mutual-TLS callers are identified by their verified certificate
   subject by default. Trusting relayed identity headers on that listener
-  (`AGENT_RUNTIME_MTLS_IDENTITY_SOURCE=header`) is an explicit deployment
+  (`AGENTGO_MTLS_IDENTITY_SOURCE=header`) is an explicit deployment
   opt-in for gateway peers and must be documented as such.
 - Internet-facing request rate limiting is owned by the gateway; the runtime's
   internal per-source limiter only resists token brute force.

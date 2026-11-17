@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
-	"github.com/ml8s/agent-runtime/internal/platform/identity"
+	"github.com/ml8s/agentgo/internal/domain"
+	"github.com/ml8s/agentgo/internal/platform/identity"
 )
 
 const (

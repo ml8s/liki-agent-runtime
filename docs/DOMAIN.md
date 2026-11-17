@@ -1,6 +1,6 @@
 # Runtime Domain Model
 
-`agent-runtime` is a generic multi-agent runtime. Prompts, skill workflow, tool
+`agentgo` is a generic multi-agent runtime. Prompts, skill workflow, tool
 semantics, domain schemas, and domain evaluation belong to the domain content
 skill/project.
 
@@ -134,7 +134,7 @@ own the append-only persistence invariants.
 
 Callers own users, products, entitlements, quota, and durable conversations.
 The domain content repository owns domain behavior and MCP tool semantics.
-`agent-runtime` owns generic execution, protocol adaptation, evidence, and
+`agentgo` owns generic execution, protocol adaptation, evidence, and
 operations.
 
 ## Protocol-owned A2A task invariants

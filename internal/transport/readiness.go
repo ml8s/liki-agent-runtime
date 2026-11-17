@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ml8s/agent-runtime/internal/platform"
+	"github.com/ml8s/agentgo/internal/platform"
 )
 
 const (

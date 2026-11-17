@@ -7,11 +7,11 @@ import (
 	"sync"
 	"testing"
 
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/domain"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agentgo/internal/audit"
 )
 
 // scriptedAuditEvents 按事件类型注入记录失败，其余照常记录。

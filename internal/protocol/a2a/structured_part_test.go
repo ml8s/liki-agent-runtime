@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"testing"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
-	"github.com/ml8s/agent-runtime/internal/execution"
-	"github.com/ml8s/agent-runtime/internal/testagent"
+	"github.com/ml8s/agentgo/internal/execution"
+	"github.com/ml8s/agentgo/internal/testagent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"

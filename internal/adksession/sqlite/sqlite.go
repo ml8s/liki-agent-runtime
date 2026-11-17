@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"github.com/ml8s/agent-runtime/internal/platform"
+	"github.com/ml8s/agentgo/internal/platform"
 	"google.golang.org/adk/v2/session"
 	adksession "google.golang.org/adk/v2/session/database"
 	"gorm.io/gorm"

@@ -36,7 +36,7 @@ const (
 
 	// EnvMTLSIdentitySource is read directly so validation can distinguish an
 	// explicit opt-in from the fail-closed default.
-	EnvMTLSIdentitySource = "AGENT_RUNTIME_MTLS_IDENTITY_SOURCE"
+	EnvMTLSIdentitySource = "AGENTGO_MTLS_IDENTITY_SOURCE"
 
 	DefaultMCPTimeout        = 30 * time.Second
 	DefaultMaxConcurrentRuns = 32
@@ -51,11 +51,11 @@ const (
 
 	// DefaultProtocolStateDBPath keeps A2A task and push-notification config state out of the
 	// append-only audit database.
-	DefaultProtocolStateDBPath = "./data/agent-runtime-protocol-state.db"
+	DefaultProtocolStateDBPath = "./data/agentgo-protocol-state.db"
 
 	// DefaultADKSessionDBPath persists official ADK session state separately
 	// from append-only audit evidence.
-	DefaultADKSessionDBPath = "./data/agent-runtime-adk-sessions.db"
+	DefaultADKSessionDBPath = "./data/agentgo-adk-sessions.db"
 )
 
 // DefaultAddr is the default HTTP listen address. The server and the
@@ -132,78 +132,78 @@ const (
 // Load reads configuration from the environment and validates it.
 func Load() (Config, error) {
 	cfg := Config{
-		Env:                 getEnv("AGENT_RUNTIME_ENV", "development"),
-		Topology:            Topology(strings.ToLower(strings.TrimSpace(getEnv("AGENT_RUNTIME_TOPOLOGY", string(TopologySingle))))),
-		ProtocolAddr:        getEnv("AGENT_RUNTIME_PROTOCOL_ADDR", DefaultAddr),
-		OpsAddr:             getEnv("AGENT_RUNTIME_OPS_ADDR", DefaultOpsAddr),
-		TLSAddr:             getEnv("AGENT_RUNTIME_TLS_ADDR", ""),
-		TLSCertFile:         getEnv("AGENT_RUNTIME_TLS_CERT", ""),
-		TLSKeyFile:          getEnv("AGENT_RUNTIME_TLS_KEY", ""),
-		TLSClientCAFile:     getEnv("AGENT_RUNTIME_TLS_CLIENT_CA", ""),
-		PublicURL:           getEnv("AGENT_RUNTIME_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
-		ProtocolToken:       getEnv("AGENT_RUNTIME_PROTOCOL_TOKEN", ""),
-		PprofEnabled:        getEnv("AGENT_RUNTIME_PPROF_ENABLED", "") == "1",
-		IdentitySource:      getEnv("AGENT_RUNTIME_IDENTITY_SOURCE", DefaultIdentitySource),
+		Env:                 getEnv("AGENTGO_ENV", "development"),
+		Topology:            Topology(strings.ToLower(strings.TrimSpace(getEnv("AGENTGO_TOPOLOGY", string(TopologySingle))))),
+		ProtocolAddr:        getEnv("AGENTGO_PROTOCOL_ADDR", DefaultAddr),
+		OpsAddr:             getEnv("AGENTGO_OPS_ADDR", DefaultOpsAddr),
+		TLSAddr:             getEnv("AGENTGO_TLS_ADDR", ""),
+		TLSCertFile:         getEnv("AGENTGO_TLS_CERT", ""),
+		TLSKeyFile:          getEnv("AGENTGO_TLS_KEY", ""),
+		TLSClientCAFile:     getEnv("AGENTGO_TLS_CLIENT_CA", ""),
+		PublicURL:           getEnv("AGENTGO_PUBLIC_URL", "http://127.0.0.1"+DefaultAddr),
+		ProtocolToken:       getEnv("AGENTGO_PROTOCOL_TOKEN", ""),
+		PprofEnabled:        getEnv("AGENTGO_PPROF_ENABLED", "") == "1",
+		IdentitySource:      getEnv("AGENTGO_IDENTITY_SOURCE", DefaultIdentitySource),
 		MTLSIdentitySource:  getEnv(EnvMTLSIdentitySource, DefaultMTLSIdentitySource),
-		AuditDBPath:         getEnv("AGENT_RUNTIME_AUDIT_DB_PATH", "./data/agent-runtime-audit.db"),
-		ProtocolStateDBPath: getEnv("AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH", DefaultProtocolStateDBPath),
-		ADKSessionDBPath:    getEnv("AGENT_RUNTIME_ADK_SESSION_DB_PATH", DefaultADKSessionDBPath),
-		A2ATenant:           getEnv("AGENT_RUNTIME_A2A_TENANT", ""),
-		A2APrincipal:        getEnv("AGENT_RUNTIME_A2A_PRINCIPAL", "agent-runtime"),
-		DeploymentFile:      getEnv("AGENT_RUNTIME_DEPLOYMENT_FILE", ""),
-		LLMBaseURL:          getEnv("AGENT_RUNTIME_LLM_BASE_URL", ""),
-		LLMAPIKey:           getEnv("AGENT_RUNTIME_LLM_API_KEY", ""),
-		LLMModel:            getEnv("AGENT_RUNTIME_LLM_MODEL", ""),
-		LLMProvider:         getEnv("AGENT_RUNTIME_LLM_PROVIDER", ""),
-		LLMStructuredOutput: getEnv("AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT", ""),
-		OIDCIssuer:          getEnv("AGENT_RUNTIME_OIDC_ISSUER", ""),
-		OIDCAudience:        getEnv("AGENT_RUNTIME_OIDC_AUDIENCE", ""),
-		OIDCUsernameClaim:   getEnv("AGENT_RUNTIME_OIDC_USERNAME_CLAIM", "sub"),
-		OIDCTenantClaim:     getEnv("AGENT_RUNTIME_OIDC_TENANT_CLAIM", ""),
-		LogFormat:           getEnv("AGENT_RUNTIME_LOG_FORMAT", "json"),
-		LogLevel:            getEnv("AGENT_RUNTIME_LOG_LEVEL", "info"),
+		AuditDBPath:         getEnv("AGENTGO_AUDIT_DB_PATH", "./data/agentgo-audit.db"),
+		ProtocolStateDBPath: getEnv("AGENTGO_PROTOCOL_STATE_DB_PATH", DefaultProtocolStateDBPath),
+		ADKSessionDBPath:    getEnv("AGENTGO_ADK_SESSION_DB_PATH", DefaultADKSessionDBPath),
+		A2ATenant:           getEnv("AGENTGO_A2A_TENANT", ""),
+		A2APrincipal:        getEnv("AGENTGO_A2A_PRINCIPAL", "agentgo"),
+		DeploymentFile:      getEnv("AGENTGO_DEPLOYMENT_FILE", ""),
+		LLMBaseURL:          getEnv("AGENTGO_LLM_BASE_URL", ""),
+		LLMAPIKey:           getEnv("AGENTGO_LLM_API_KEY", ""),
+		LLMModel:            getEnv("AGENTGO_LLM_MODEL", ""),
+		LLMProvider:         getEnv("AGENTGO_LLM_PROVIDER", ""),
+		LLMStructuredOutput: getEnv("AGENTGO_LLM_STRUCTURED_OUTPUT", ""),
+		OIDCIssuer:          getEnv("AGENTGO_OIDC_ISSUER", ""),
+		OIDCAudience:        getEnv("AGENTGO_OIDC_AUDIENCE", ""),
+		OIDCUsernameClaim:   getEnv("AGENTGO_OIDC_USERNAME_CLAIM", "sub"),
+		OIDCTenantClaim:     getEnv("AGENTGO_OIDC_TENANT_CLAIM", ""),
+		LogFormat:           getEnv("AGENTGO_LOG_FORMAT", "json"),
+		LogLevel:            getEnv("AGENTGO_LOG_LEVEL", "info"),
 	}
 	if cfg.LLMStructuredOutput == "none" {
 		cfg.LLMStructuredOutput = ""
 	}
 	var err error
-	if cfg.MCPTimeout, err = getDuration("AGENT_RUNTIME_MCP_TIMEOUT_SECONDS", DefaultMCPTimeout); err != nil {
+	if cfg.MCPTimeout, err = getDuration("AGENTGO_MCP_TIMEOUT_SECONDS", DefaultMCPTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.MCPHealthTimeout, err = getOptionalDuration("AGENT_RUNTIME_MCP_HEALTH_TIMEOUT_SECONDS"); err != nil {
+	if cfg.MCPHealthTimeout, err = getOptionalDuration("AGENTGO_MCP_HEALTH_TIMEOUT_SECONDS"); err != nil {
 		return Config{}, err
 	}
-	if cfg.A2APushEnabled, err = getBool("AGENT_RUNTIME_A2A_PUSH_ENABLED", false); err != nil {
+	if cfg.A2APushEnabled, err = getBool("AGENTGO_A2A_PUSH_ENABLED", false); err != nil {
 		return Config{}, err
 	}
-	if cfg.A2APushTimeout, err = getDuration("AGENT_RUNTIME_A2A_PUSH_TIMEOUT_SECONDS", DefaultPushTimeout); err != nil {
+	if cfg.A2APushTimeout, err = getDuration("AGENTGO_A2A_PUSH_TIMEOUT_SECONDS", DefaultPushTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.A2APushAllowPrivateNetworks, err = getBool("AGENT_RUNTIME_A2A_PUSH_ALLOW_PRIVATE_NETWORKS", false); err != nil {
+	if cfg.A2APushAllowPrivateNetworks, err = getBool("AGENTGO_A2A_PUSH_ALLOW_PRIVATE_NETWORKS", false); err != nil {
 		return Config{}, err
 	}
-	if cfg.A2ATaskRetention, err = getOptionalDuration("AGENT_RUNTIME_A2A_TASK_RETENTION_SECONDS"); err != nil {
+	if cfg.A2ATaskRetention, err = getOptionalDuration("AGENTGO_A2A_TASK_RETENTION_SECONDS"); err != nil {
 		return Config{}, err
 	}
-	if cfg.ADKSessionRetention, err = getOptionalDuration("AGENT_RUNTIME_ADK_SESSION_RETENTION_SECONDS"); err != nil {
+	if cfg.ADKSessionRetention, err = getOptionalDuration("AGENTGO_ADK_SESSION_RETENTION_SECONDS"); err != nil {
 		return Config{}, err
 	}
-	if cfg.MaxConcurrentRuns, err = getInt("AGENT_RUNTIME_MAX_CONCURRENT_RUNS", DefaultMaxConcurrentRuns); err != nil {
+	if cfg.MaxConcurrentRuns, err = getInt("AGENTGO_MAX_CONCURRENT_RUNS", DefaultMaxConcurrentRuns); err != nil {
 		return Config{}, err
 	}
-	if cfg.RunTimeout, err = getDuration("AGENT_RUNTIME_RUN_TIMEOUT_SECONDS", DefaultRunTimeout); err != nil {
+	if cfg.RunTimeout, err = getDuration("AGENTGO_RUN_TIMEOUT_SECONDS", DefaultRunTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.ShutdownTimeout, err = getDuration("AGENT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS", DefaultShutdownTimeout); err != nil {
+	if cfg.ShutdownTimeout, err = getDuration("AGENTGO_SHUTDOWN_TIMEOUT_SECONDS", DefaultShutdownTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMTimeout, err = getDuration("AGENT_RUNTIME_LLM_TIMEOUT_SECONDS", DefaultLLMTimeout); err != nil {
+	if cfg.LLMTimeout, err = getDuration("AGENTGO_LLM_TIMEOUT_SECONDS", DefaultLLMTimeout); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMMaxOutputTokens, err = getOptionalPositiveInt("AGENT_RUNTIME_LLM_MAX_OUTPUT_TOKENS"); err != nil {
+	if cfg.LLMMaxOutputTokens, err = getOptionalPositiveInt("AGENTGO_LLM_MAX_OUTPUT_TOKENS"); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMTemperature, err = getFloat("AGENT_RUNTIME_LLM_TEMPERATURE", DefaultLLMTemperature); err != nil {
+	if cfg.LLMTemperature, err = getFloat("AGENTGO_LLM_TEMPERATURE", DefaultLLMTemperature); err != nil {
 		return Config{}, err
 	}
 	return validate(cfg)
@@ -213,7 +213,7 @@ func validate(cfg Config) (Config, error) {
 	switch cfg.Env {
 	case "development", "production":
 	default:
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_ENV is unsupported: %q (expected development or production)", cfg.Env)
+		return Config{}, fmt.Errorf("AGENTGO_ENV is unsupported: %q (expected development or production)", cfg.Env)
 	}
 	isDevelopment := cfg.Env == "development"
 
@@ -221,38 +221,38 @@ func validate(cfg Config) (Config, error) {
 	case "", IdentitySourceHeader:
 		cfg.IdentitySource = IdentitySourceHeader
 		if !isDevelopment && cfg.ProtocolToken == "" {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_PROTOCOL_TOKEN is required for trusted-header identity outside development")
+			return Config{}, fmt.Errorf("AGENTGO_PROTOCOL_TOKEN is required for trusted-header identity outside development")
 		}
 	case IdentitySourceOIDC:
 		if cfg.ProtocolToken != "" {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_PROTOCOL_TOKEN must be empty when AGENT_RUNTIME_IDENTITY_SOURCE=oidc; the OIDC bearer token owns authentication")
+			return Config{}, fmt.Errorf("AGENTGO_PROTOCOL_TOKEN must be empty when AGENTGO_IDENTITY_SOURCE=oidc; the OIDC bearer token owns authentication")
 		}
 		if strings.TrimSpace(cfg.OIDCIssuer) == "" {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_ISSUER is required when identity source is oidc")
+			return Config{}, fmt.Errorf("AGENTGO_OIDC_ISSUER is required when identity source is oidc")
 		}
 		if strings.TrimSpace(cfg.OIDCAudience) == "" {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_AUDIENCE is required when identity source is oidc")
+			return Config{}, fmt.Errorf("AGENTGO_OIDC_AUDIENCE is required when identity source is oidc")
 		}
 		if strings.TrimSpace(cfg.OIDCUsernameClaim) == "" {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_USERNAME_CLAIM must not be empty when identity source is oidc")
+			return Config{}, fmt.Errorf("AGENTGO_OIDC_USERNAME_CLAIM must not be empty when identity source is oidc")
 		}
 		issuerURL, err := url.Parse(cfg.OIDCIssuer)
 		if err != nil || issuerURL.Scheme != "http" && issuerURL.Scheme != "https" || issuerURL.Host == "" {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_ISSUER must be an absolute HTTP(S) URL")
+			return Config{}, fmt.Errorf("AGENTGO_OIDC_ISSUER must be an absolute HTTP(S) URL")
 		}
 		if issuerURL.User != nil {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_ISSUER must not contain embedded credentials")
+			return Config{}, fmt.Errorf("AGENTGO_OIDC_ISSUER must not contain embedded credentials")
 		}
 		if !isDevelopment && issuerURL.Scheme != "https" {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_OIDC_ISSUER must use HTTPS outside development")
+			return Config{}, fmt.Errorf("AGENTGO_OIDC_ISSUER must use HTTPS outside development")
 		}
 	default:
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_IDENTITY_SOURCE is unsupported: %q (expected %q or %q)", cfg.IdentitySource, IdentitySourceHeader, IdentitySourceOIDC)
+		return Config{}, fmt.Errorf("AGENTGO_IDENTITY_SOURCE is unsupported: %q (expected %q or %q)", cfg.IdentitySource, IdentitySourceHeader, IdentitySourceOIDC)
 	}
 	// OIDC owns caller authentication on both protocol surfaces; a separate
 	// mTLS identity mapping would be dead, misleading configuration.
 	if os.Getenv(EnvMTLSIdentitySource) != "" && cfg.IdentitySource == IdentitySourceOIDC {
-		return Config{}, fmt.Errorf("%s is only valid with %s=%s; OIDC verifies the caller credential directly", EnvMTLSIdentitySource, "AGENT_RUNTIME_IDENTITY_SOURCE", IdentitySourceHeader)
+		return Config{}, fmt.Errorf("%s is only valid with %s=%s; OIDC verifies the caller credential directly", EnvMTLSIdentitySource, "AGENTGO_IDENTITY_SOURCE", IdentitySourceHeader)
 	}
 	switch cfg.MTLSIdentitySource {
 	case "", MTLSIdentitySourceCertificate:
@@ -261,128 +261,128 @@ func validate(cfg Config) (Config, error) {
 		// The header contract trusts the mTLS peer to relay an authenticated
 		// end user, so it must not be configured without that listener.
 		if cfg.TLSAddr == "" {
-			return Config{}, fmt.Errorf("%s=%s requires AGENT_RUNTIME_TLS_ADDR to be configured", EnvMTLSIdentitySource, MTLSIdentitySourceHeader)
+			return Config{}, fmt.Errorf("%s=%s requires AGENTGO_TLS_ADDR to be configured", EnvMTLSIdentitySource, MTLSIdentitySourceHeader)
 		}
 	default:
 		return Config{}, fmt.Errorf("%s is unsupported: %q (expected %q or %q)", EnvMTLSIdentitySource, cfg.MTLSIdentitySource, MTLSIdentitySourceCertificate, MTLSIdentitySourceHeader)
 	}
 	if cfg.TLSAddr != "" {
 		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.TLSClientCAFile == "" {
-			return Config{}, fmt.Errorf("AGENT_RUNTIME_TLS_CERT, AGENT_RUNTIME_TLS_KEY and AGENT_RUNTIME_TLS_CLIENT_CA are required when AGENT_RUNTIME_TLS_ADDR is set")
+			return Config{}, fmt.Errorf("AGENTGO_TLS_CERT, AGENTGO_TLS_KEY and AGENTGO_TLS_CLIENT_CA are required when AGENTGO_TLS_ADDR is set")
 		}
 	} else if cfg.TLSCertFile != "" || cfg.TLSKeyFile != "" || cfg.TLSClientCAFile != "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_TLS_ADDR is required when TLS certificate files are configured")
+		return Config{}, fmt.Errorf("AGENTGO_TLS_ADDR is required when TLS certificate files are configured")
 	}
 	if cfg.OpsAddr == cfg.ProtocolAddr || (cfg.TLSAddr != "" && (cfg.TLSAddr == cfg.ProtocolAddr || cfg.TLSAddr == cfg.OpsAddr)) {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_PROTOCOL_ADDR, AGENT_RUNTIME_OPS_ADDR and AGENT_RUNTIME_TLS_ADDR must be distinct listen addresses")
+		return Config{}, fmt.Errorf("AGENTGO_PROTOCOL_ADDR, AGENTGO_OPS_ADDR and AGENTGO_TLS_ADDR must be distinct listen addresses")
 	}
 	if !isDevelopment && cfg.LLMAPIKey == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_API_KEY is required outside development")
+		return Config{}, fmt.Errorf("AGENTGO_LLM_API_KEY is required outside development")
 	}
 	if cfg.LLMBaseURL == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_BASE_URL is required")
+		return Config{}, fmt.Errorf("AGENTGO_LLM_BASE_URL is required")
 	}
 	if cfg.LLMModel == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_MODEL is required")
+		return Config{}, fmt.Errorf("AGENTGO_LLM_MODEL is required")
 	}
 	if cfg.LLMProvider == "" {
 		// The provider vocabulary is open: the value is the audit provenance
 		// label and the structured-output mode hint, not a protocol switch.
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_PROVIDER is required")
+		return Config{}, fmt.Errorf("AGENTGO_LLM_PROVIDER is required")
 	}
 	if cfg.DeploymentFile == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_DEPLOYMENT_FILE is required")
+		return Config{}, fmt.Errorf("AGENTGO_DEPLOYMENT_FILE is required")
 	}
 	if cfg.ProtocolStateDBPath == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_PROTOCOL_STATE_DB_PATH is required")
+		return Config{}, fmt.Errorf("AGENTGO_PROTOCOL_STATE_DB_PATH is required")
 	}
 	if cfg.ADKSessionDBPath == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_ADK_SESSION_DB_PATH is required")
+		return Config{}, fmt.Errorf("AGENTGO_ADK_SESSION_DB_PATH is required")
 	}
 	if cfg.A2APrincipal == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_A2A_PRINCIPAL is required")
+		return Config{}, fmt.Errorf("AGENTGO_A2A_PRINCIPAL is required")
 	}
 	switch cfg.Topology {
 	case TopologySingle:
 	case TopologyMulti:
 		return Config{}, fmt.Errorf(
-			"AGENT_RUNTIME_TOPOLOGY=multi is not supported yet; it requires shared ADK session storage, a database-backed A2A task store, transactional audit/run ownership, deployment digest pinning, and explicit task routing",
+			"AGENTGO_TOPOLOGY=multi is not supported yet; it requires shared ADK session storage, a database-backed A2A task store, transactional audit/run ownership, deployment digest pinning, and explicit task routing",
 		)
 	case "":
 		cfg.Topology = TopologySingle
 	default:
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_TOPOLOGY is unsupported: %q", cfg.Topology)
+		return Config{}, fmt.Errorf("AGENTGO_TOPOLOGY is unsupported: %q", cfg.Topology)
 	}
 	switch strings.ToLower(cfg.LogLevel) {
 	case "debug", "info", "warn", "error":
 	default:
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LOG_LEVEL is unsupported: %q (expected debug, info, warn, or error)", cfg.LogLevel)
+		return Config{}, fmt.Errorf("AGENTGO_LOG_LEVEL is unsupported: %q (expected debug, info, warn, or error)", cfg.LogLevel)
 	}
 	switch strings.ToLower(cfg.LogFormat) {
 	case "json", "text":
 	default:
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LOG_FORMAT is unsupported: %q (expected json or text)", cfg.LogFormat)
+		return Config{}, fmt.Errorf("AGENTGO_LOG_FORMAT is unsupported: %q (expected json or text)", cfg.LogFormat)
 	}
 	switch cfg.LLMStructuredOutput {
 	case "", "none", "json_schema", "json_object":
 	default:
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT is unsupported: %q", cfg.LLMStructuredOutput)
+		return Config{}, fmt.Errorf("AGENTGO_LLM_STRUCTURED_OUTPUT is unsupported: %q", cfg.LLMStructuredOutput)
 	}
 	if cfg.ADKSessionRetention > 0 && cfg.ADKSessionRetention < cfg.RunTimeout {
 		return Config{}, fmt.Errorf(
-			"AGENT_RUNTIME_ADK_SESSION_RETENTION_SECONDS must be at least AGENT_RUNTIME_RUN_TIMEOUT_SECONDS (%s), got %s",
+			"AGENTGO_ADK_SESSION_RETENTION_SECONDS must be at least AGENTGO_RUN_TIMEOUT_SECONDS (%s), got %s",
 			cfg.RunTimeout, cfg.ADKSessionRetention,
 		)
 	}
 	if cfg.RunTimeout <= 0 {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_RUN_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("AGENTGO_RUN_TIMEOUT_SECONDS must be greater than zero")
 	}
 	if cfg.MCPTimeout <= 0 {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_MCP_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("AGENTGO_MCP_TIMEOUT_SECONDS must be greater than zero")
 	}
 	if cfg.MaxConcurrentRuns <= 0 {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_MAX_CONCURRENT_RUNS must be greater than zero")
+		return Config{}, fmt.Errorf("AGENTGO_MAX_CONCURRENT_RUNS must be greater than zero")
 	}
 	if cfg.MaxConcurrentRuns > MaxConcurrentRunsLimit {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_MAX_CONCURRENT_RUNS must not exceed %d", MaxConcurrentRunsLimit)
+		return Config{}, fmt.Errorf("AGENTGO_MAX_CONCURRENT_RUNS must not exceed %d", MaxConcurrentRunsLimit)
 	}
 	if cfg.LLMTimeout <= 0 {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("AGENTGO_LLM_TIMEOUT_SECONDS must be greater than zero")
 	}
 	if cfg.LLMTemperature < 0 || cfg.LLMTemperature > 2 ||
 		math.IsNaN(cfg.LLMTemperature) || math.IsInf(cfg.LLMTemperature, 0) {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_TEMPERATURE must be between 0 and 2")
+		return Config{}, fmt.Errorf("AGENTGO_LLM_TEMPERATURE must be between 0 and 2")
 	}
 	if _, err := url.Parse(cfg.PublicURL); err != nil {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_PUBLIC_URL is invalid: %w", err)
+		return Config{}, fmt.Errorf("AGENTGO_PUBLIC_URL is invalid: %w", err)
 	}
 	if cfg.ShutdownTimeout <= 0 {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS must be greater than zero")
+		return Config{}, fmt.Errorf("AGENTGO_SHUTDOWN_TIMEOUT_SECONDS must be greater than zero")
 	}
 	publicURL, err := url.Parse(cfg.PublicURL)
 	if err != nil || publicURL.Scheme != "http" && publicURL.Scheme != "https" || publicURL.Host == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_PUBLIC_URL must be an absolute HTTP(S) URL")
+		return Config{}, fmt.Errorf("AGENTGO_PUBLIC_URL must be an absolute HTTP(S) URL")
 	}
 	if publicURL.User != nil {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_PUBLIC_URL must not contain embedded credentials")
+		return Config{}, fmt.Errorf("AGENTGO_PUBLIC_URL must not contain embedded credentials")
 	}
 	if !isDevelopment {
 		if host := publicURL.Hostname(); host == "localhost" || host == "127.0.0.1" || host == "::1" {
 			return Config{}, fmt.Errorf(
-				"AGENT_RUNTIME_PUBLIC_URL must be a deployment-reachable address outside development, got loopback %q",
+				"AGENTGO_PUBLIC_URL must be a deployment-reachable address outside development, got loopback %q",
 				host,
 			)
 		}
 	}
 	llmURL, err := url.Parse(cfg.LLMBaseURL)
 	if err != nil || llmURL.Scheme != "http" && llmURL.Scheme != "https" || llmURL.Host == "" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_BASE_URL must be an absolute HTTP(S) URL")
+		return Config{}, fmt.Errorf("AGENTGO_LLM_BASE_URL must be an absolute HTTP(S) URL")
 	}
 	if llmURL.User != nil {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_BASE_URL must not contain embedded credentials")
+		return Config{}, fmt.Errorf("AGENTGO_LLM_BASE_URL must not contain embedded credentials")
 	}
 	if !isDevelopment && llmURL.Scheme != "https" {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_LLM_BASE_URL must use HTTPS outside development")
+		return Config{}, fmt.Errorf("AGENTGO_LLM_BASE_URL must use HTTPS outside development")
 	}
 	return cfg, nil
 }

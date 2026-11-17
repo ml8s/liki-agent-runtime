@@ -3,8 +3,8 @@ package agent
 import (
 	"strings"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
-	"github.com/ml8s/agent-runtime/internal/execution"
+	"github.com/ml8s/agentgo/internal/domain"
+	"github.com/ml8s/agentgo/internal/execution"
 )
 
 // AuditAttemptHandle separates the identifiers that A2A intentionally keeps

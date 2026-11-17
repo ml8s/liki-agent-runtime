@@ -3,9 +3,9 @@ package agent
 import (
 	"fmt"
 
-	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
+	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/domain"
 
 	"google.golang.org/genai"
 )
@@ -20,9 +20,12 @@ type RuntimeAgentDefinition struct {
 }
 
 // NewRuntimeAgentDefinition compiles the resolved schema into the provider view
-// required by ADK. Plain-text Agents have no output-schema mappings.
+// required by ADK. Plain-text Agents have no output-schema mappings. When
+// nativeStructuredOutput is true the raw JSON Schema callback is skipped; the
+// provider model translates genai.Schema natively.
 func NewRuntimeAgentDefinition(
 	resolved agentdeployment.ResolvedAgentDefinition,
+	nativeStructuredOutput bool,
 ) (RuntimeAgentDefinition, error) {
 	if !resolved.Output.Structured() {
 		return RuntimeAgentDefinition{Definition: resolved}, nil
@@ -43,9 +46,12 @@ func NewRuntimeAgentDefinition(
 			fmt.Sprintf("agent %q output schema root must be an object", resolved.Name), nil,
 		)
 	}
-	return RuntimeAgentDefinition{
+	result := RuntimeAgentDefinition{
 		Definition:        resolved,
 		GenaiOutputSchema: genaiSchema,
-		RawOutputSchema:   resolved.RawOutputSchema,
-	}, nil
+	}
+	if !nativeStructuredOutput {
+		result.RawOutputSchema = resolved.RawOutputSchema
+	}
+	return result, nil
 }

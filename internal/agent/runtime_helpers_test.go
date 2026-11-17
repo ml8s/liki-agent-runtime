@@ -6,14 +6,14 @@ import (
 	"sync"
 	"testing"
 
-	deploymentpkg "github.com/ml8s/agent-runtime/internal/deployment"
+	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
 
-	"github.com/ml8s/agent-runtime/internal/testagent"
+	"github.com/ml8s/agentgo/internal/testagent"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/ml8s/agent-runtime/internal/audit"
+	"github.com/ml8s/agentgo/internal/audit"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"

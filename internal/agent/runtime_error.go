@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ml8s/agent-runtime/internal/domain"
+	"github.com/ml8s/agentgo/internal/domain"
 )
 
 func runtimeError(err error) error {
