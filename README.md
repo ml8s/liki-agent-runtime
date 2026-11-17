@@ -147,10 +147,14 @@ MCP endpoint values are complete URLs; the gateway may own service prefixes
 (`/tools-a/mcp`, `/tools-b/mcp`) while services expose `/mcp` and
 `/mcp/{domain}`. The runtime rewrites no MCP paths and adds no private headers.
 
-Empty `AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT` derives the mode from the deployment and
-provider; explicit modes fail closed without an output schema. Per-Agent model
-settings live in the artifact. Concurrency is bounded to 1–1024; development
-alone permits local HTTP LLMs.
+`AGENT_RUNTIME_LLM_PROVIDER` selects the ADK model implementation: `openai`
+(or any OpenAI-compatible value), `anthropic` (Claude native API), or
+`gemini` (Gemini API). Empty `AGENT_RUNTIME_LLM_STRUCTURED_OUTPUT` derives the
+mode from the deployment and provider (`json_schema` for OpenAI, `native` for
+Anthropic/Gemini, `json_object` for other OpenAI-compatible providers);
+explicit modes fail closed without an output schema, and native providers
+reject non-native modes. Per-Agent model settings live in the artifact.
+Concurrency is bounded to 1–1024; development alone permits local HTTP LLMs.
 
 ## Operations
 

@@ -28,6 +28,9 @@ type Config struct {
 	Metrics          execution.Metrics
 	Provider         string
 	StructuredOutput string
+	// ModelBuilder overrides the default provider model construction. Nil
+	// selects the built-in provider dispatch based on Provider.
+	ModelBuilder ModelBuilderFactory
 	// MaxOutputTokens bounds every model response; 0 leaves the provider
 	// default unbounded.
 	MaxOutputTokens int
@@ -53,7 +56,7 @@ type Config struct {
 	SessionService session.Service
 
 	// modelOverride is an internal test seam. Production builds always
-	// construct the OpenAI-compatible provider in NewRuntime.
+	// construct the configured provider in NewRuntime.
 	modelOverride model.LLM
 
 	// mcpTransportOverrides is an internal test seam for protocol health

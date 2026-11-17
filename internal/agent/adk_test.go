@@ -46,7 +46,7 @@ func TestAgentDefinitionCompilesToStandardADKConfig(t *testing.T) {
 		OutputSchema:    outputSchema,
 		ResolvedOutput:  resolved,
 		RawOutputSchema: map[string]any{"type": "object", "additionalProperties": false},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}

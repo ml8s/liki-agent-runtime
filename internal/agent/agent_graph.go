@@ -6,6 +6,8 @@ package agent
 // Agent's allowlist never enter that Agent's toolset (deny-by-default).
 
 import (
+	"context"
+
 	"fmt"
 
 	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
@@ -13,22 +15,22 @@ import (
 	"github.com/ml8s/agent-runtime/internal/execution"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/llmagent"
-	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/tool"
 )
 
 // agentGraphDeps bundles the collaborators required by graph construction
 // (assembled by NewRuntime).
 type agentGraphDeps struct {
-	mcpToolsets       []tool.Toolset
-	clientToolset     tool.Toolset
-	modelName         string
-	resolveModel      func(string) (model.LLM, error)
-	temperature       float32
-	maxOutputTokens   int
-	callAuditor       *llmCallAuditor
-	delegationAuditor *DelegationAuditor
-	toolAuditor       *ToolExecutionAuditor
+	mcpToolsets            []tool.Toolset
+	clientToolset          tool.Toolset
+	modelName              string
+	resolveModel           ModelBuilderFactory
+	temperature            float32
+	maxOutputTokens        int
+	nativeStructuredOutput bool
+	callAuditor            *llmCallAuditor
+	delegationAuditor      *DelegationAuditor
+	toolAuditor            *ToolExecutionAuditor
 }
 
 // agentGraphBuilder constructs the Agent dependency graph rooted at the
@@ -104,11 +106,11 @@ func (b *agentGraphBuilder) build(definition *agentdeployment.ResolvedAgentDefin
 	}
 	delete(b.building, definition.Name)
 	// Per-Agent model settings fall back to the runtime-wide defaults.
-	aiModel, err := b.deps.resolveModel(declaration.EffectiveModel(b.deps.modelName))
+	aiModel, err := b.deps.resolveModel(context.Background(), declaration.EffectiveModel(b.deps.modelName))
 	if err != nil {
 		return nil, err
 	}
-	runtimeDefinition, err := NewRuntimeAgentDefinition(*definition)
+	runtimeDefinition, err := NewRuntimeAgentDefinition(*definition, b.deps.nativeStructuredOutput)
 	if err != nil {
 		return nil, domain.NewError(domain.CodeRuntimeInitFailed, fmt.Sprintf("build runtime agent %q", declaration.Name), err)
 	}

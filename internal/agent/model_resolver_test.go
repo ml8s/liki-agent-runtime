@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"context"
 	"testing"
 
 	"github.com/ml8s/agent-runtime/internal/domain"
@@ -11,7 +12,7 @@ import (
 func TestModelRegistryBuildsEachNameOnce(t *testing.T) {
 	t.Parallel()
 	calls := 0
-	build := func(_ string) (model.LLM, error) {
+	build := func(_ context.Context, _ string) (model.LLM, error) {
 		calls++
 		return &fakeLLM{}, nil
 	}
@@ -21,18 +22,18 @@ func TestModelRegistryBuildsEachNameOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := registry.resolve("glm-5.3-flash")
+	first, err := registry.resolve(context.Background(), "glm-5.3-flash")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := registry.resolve("glm-5.3-flash")
+	second, err := registry.resolve(context.Background(), "glm-5.3-flash")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if first != second || calls != 2 {
 		t.Fatalf("same name: same-instance=%v builds=%d, want one cached build per name", first == second, calls)
 	}
-	third, err := registry.resolve("gpt-4.1")
+	third, err := registry.resolve(context.Background(), "gpt-4.1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,18 +46,18 @@ func TestModelRegistryResolvesTestOverride(t *testing.T) {
 	t.Parallel()
 	override := &fakeLLM{}
 	buildCalls := 0
-	registry, err := newModelRegistryWithBuilder(func(_ string) (model.LLM, error) {
+	registry, err := newModelRegistryWithBuilder(func(_ context.Context, _ string) (model.LLM, error) {
 		buildCalls++
 		return override, nil
 	}, []string{"glm-5.3-flash"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := registry.resolve("glm-5.3-flash")
+	first, err := registry.resolve(context.Background(), "glm-5.3-flash")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = registry.resolve("missing")
+	_, err = registry.resolve(context.Background(), "missing")
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeLLMModelMissing {
 		t.Fatalf("resolve(missing) error = %v, want %s", err, domain.CodeLLMModelMissing)
@@ -69,7 +70,7 @@ func TestModelRegistryResolvesTestOverride(t *testing.T) {
 func TestModelRegistryRejectsUnknownModel(t *testing.T) {
 	t.Parallel()
 	registry := modelRegistry{models: map[string]model.LLM{}}
-	_, err := registry.resolve("missing")
+	_, err := registry.resolve(context.Background(), "missing")
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeLLMModelMissing {
 		t.Fatalf("resolve(missing) error = %v, want %s", err, domain.CodeLLMModelMissing)

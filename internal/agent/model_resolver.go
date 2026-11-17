@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+
 	agentdeployment "github.com/ml8s/agent-runtime/internal/deployment"
 	"github.com/ml8s/agent-runtime/internal/domain"
 	"google.golang.org/adk/v2/model"
@@ -15,11 +17,11 @@ type modelRegistry struct {
 }
 
 func newModelRegistry(config Config, deployment *agentdeployment.AgentDeployment) (modelRegistry, error) {
-	return newModelRegistryWithBuilder(newModelBuilder(config), deploymentModelNames(deployment, config.Model))
+	return newModelRegistryWithBuilder(newModelFactory(config), deploymentModelNames(deployment, config.Model))
 }
 
 func newModelRegistryWithBuilder(
-	build func(name string) (model.LLM, error),
+	build ModelBuilderFactory,
 	names []string,
 ) (modelRegistry, error) {
 	models := make(map[string]model.LLM, len(names))
@@ -27,7 +29,7 @@ func newModelRegistryWithBuilder(
 		if _, built := models[name]; built {
 			continue
 		}
-		built, err := build(name)
+		built, err := build(context.Background(), name)
 		if err != nil {
 			return modelRegistry{}, err
 		}
@@ -44,7 +46,7 @@ func deploymentModelNames(deployment *agentdeployment.AgentDeployment, defaultMo
 	return names
 }
 
-func (r modelRegistry) resolve(name string) (model.LLM, error) {
+func (r modelRegistry) resolve(ctx context.Context, name string) (model.LLM, error) {
 	if built, ok := r.models[name]; ok {
 		return built, nil
 	}
