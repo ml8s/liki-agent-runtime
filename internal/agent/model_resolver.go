@@ -46,7 +46,7 @@ func deploymentModelNames(deployment *agentdeployment.AgentDeployment, defaultMo
 	return names
 }
 
-func (r modelRegistry) resolve(ctx context.Context, name string) (model.LLM, error) {
+func (r modelRegistry) resolve(_ context.Context, name string) (model.LLM, error) {
 	if built, ok := r.models[name]; ok {
 		return built, nil
 	}
