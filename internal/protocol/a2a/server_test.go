@@ -126,7 +126,6 @@ func testRuntimeWithModelHandler(
 		ModelAPIKey:      "test-key",
 		ModelBaseURL:     modelServer.URL + "/v1",
 		AgentDeployment:  deployment,
-		StructuredOutput: execution.StructuredOutputJSONSchema,
 		Provider:         "test-provider",
 		AuditRecorder:    recorder,
 	})
