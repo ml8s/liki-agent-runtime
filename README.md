@@ -62,17 +62,25 @@ to the user-facing string.
 
 ## LLM providers
 
-`AGENTGO_LLM_PROVIDER` selects the model implementation:
+`AGENTGO_LLM_PROVIDER` selects the model implementation. The provider value
+determines both the SDK adapter and the structured-output wire mode:
 
 | Provider | Value | Structured output |
 |---|---|---|
-| OpenAI / DeepSeek / any compatible | `openai` | `json_schema` (native) |
+| OpenAI (and any backend that supports json_schema) | `openai` | `json_schema` (native) |
 | Anthropic Claude | `anthropic` | `native` (ADK translates genai.Schema) |
 | Google Gemini | `gemini` | `native` (ADK translates genai.Schema) |
-| Other OpenAI-compatible | any value | `json_object` (compatibility shim) |
+| Other OpenAI-compatible (e.g. DeepSeek, Zhipu) | any other value | `json_object` (compatibility shim) |
 
 The structured-output mode is derived automatically from the provider; no
 operator override is needed.
+
+For example, DeepSeek exposes an OpenAI-compatible endpoint. Set
+`AGENTGO_LLM_PROVIDER=openai` with `AGENTGO_LLM_BASE_URL=https://api.deepseek.com/v1`
+to use json_schema mode, or set `AGENTGO_LLM_PROVIDER=deepseek` for json_object mode.
+
+Per-Agent artifact settings (`model`, `temperature`, `maxOutputTokens`) override
+the environment defaults. Priority: per-agent artifact > env default > provider default.
 
 ## Protocols
 
@@ -111,7 +119,7 @@ See [`SECURITY.md`](SECURITY.md) for the full security policy.
 | `AGENTGO_PROTOCOL_TOKEN` | internal service credential for production callers |
 | `AGENTGO_MCP_*` | endpoint/token bindings for logical MCP servers |
 | `AGENTGO_MAX_CONCURRENT_RUNS` | bounded concurrent executions (1–1024) |
-| `AGENTGO_LLM_*` | provider, base URL, model, API key, temperature, timeout |
+| `AGENTGO_LLM_*` | provider, base URL, model, API key, temperature, max output tokens, timeout |
 | `AGENTGO_IDENTITY_SOURCE` | `trusted_header` (default) or `oidc` |
 | `AGENTGO_MTLS_IDENTITY_SOURCE` | mutual-TLS identity mapping |
 | `AGENTGO_OIDC_*` | OIDC issuer, audience, and verified claim mapping |
@@ -154,6 +162,12 @@ check`, `make test`, `make gate`, and `make build`.
 
 `make gate` is the pre-push gate. It runs documentation linting, Go static
 checks, race tests, and the coverage floor.
+
+### Validate a deployment artifact
+
+```bash
+go run ./cmd/agentgo validate -deployment ./path/to/deployment.json
+```
 
 ### Contributing
 
