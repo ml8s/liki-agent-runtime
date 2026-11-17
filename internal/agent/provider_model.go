@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/ml8s/agentgo/internal/domain"
-	"github.com/ml8s/agentgo/internal/execution"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/anthropicmodel"
@@ -71,7 +70,10 @@ func outboundModelClient(config Config) *http.Client {
 // compatibility is applied by the provider-aware adapter when the operator
 // selected json_object mode.
 func newOpenAIModelFactory(config Config) ModelBuilderFactory {
-	useJSONObject := config.StructuredOutput == execution.StructuredOutputJSONObject
+	// OpenAI-compatible providers other than "openai" use json_object mode.
+	// Provider "openai" requests json_schema natively through the raw schema
+	// callback; anthropic and gemini dispatch to their own factories above.
+	useJSONObject := config.Provider != ProviderOpenAI
 	return func(_ context.Context, modelName string) (model.LLM, error) {
 		built, err := openaimodel.NewModel(context.Background(), modelName, &openaimodel.ClientConfig{
 			APIKey:     config.ModelAPIKey,

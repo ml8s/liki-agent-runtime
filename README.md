@@ -71,8 +71,8 @@ to the user-facing string.
 | Google Gemini | `gemini` | `native` (ADK translates genai.Schema) |
 | Other OpenAI-compatible | any value | `json_object` (compatibility shim) |
 
-Leave `AGENTGO_LLM_STRUCTURED_OUTPUT` empty to auto-derive the mode from the
-provider. Explicit modes fail closed if no Agent declares an output schema.
+The structured-output mode is derived automatically from the provider; no
+operator override is needed.
 
 ## Protocols
 
@@ -111,7 +111,7 @@ See [`SECURITY.md`](SECURITY.md) for the full security policy.
 | `AGENTGO_PROTOCOL_TOKEN` | internal service credential for production callers |
 | `AGENTGO_MCP_*` | endpoint/token bindings for logical MCP servers |
 | `AGENTGO_MAX_CONCURRENT_RUNS` | bounded concurrent executions (1–1024) |
-| `AGENTGO_LLM_*` | provider, base URL, model, API key, timeout, structured output |
+| `AGENTGO_LLM_*` | provider, base URL, model, API key, temperature, timeout |
 | `AGENTGO_IDENTITY_SOURCE` | `trusted_header` (default) or `oidc` |
 | `AGENTGO_MTLS_IDENTITY_SOURCE` | mutual-TLS identity mapping |
 | `AGENTGO_OIDC_*` | OIDC issuer, audience, and verified claim mapping |

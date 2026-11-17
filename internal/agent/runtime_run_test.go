@@ -16,22 +16,6 @@ import (
 	"google.golang.org/genai"
 )
 
-// The agentDeployment is the single source of truth for whether structured output
-// is used. An explicit mode with a plain-text agentDeployment carries no
-// information and fails closed instead of being silently ignored.
-func TestNewRuntimeRejectsRedundantStructuredOutputMode(t *testing.T) {
-	_, err := NewRuntime(Config{
-		Model:            "fake-model",
-		AgentDeployment:  plainTestDeployment(t),
-		StructuredOutput: execution.StructuredOutputJSONObject,
-		AuditRecorder:    &recordingAudit{},
-	})
-	var domainErr *domain.Error
-	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeStructuredOutputCapabilityInvalid {
-		t.Fatalf("NewRuntime() error = %v, want %s", err, domain.CodeStructuredOutputCapabilityInvalid)
-	}
-}
-
 func TestRuntimeRunReturnsPlainTextForGenericAgent(t *testing.T) {
 	answer := "generic plain-text answer"
 	events := &recordingAudit{}

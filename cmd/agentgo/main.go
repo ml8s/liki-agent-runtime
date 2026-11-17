@@ -140,7 +140,6 @@ func run() (err error) {
 		Metrics:              metricsCollector,
 		TracerProvider:       tracerProvider.Provider(),
 		Provider:             cfg.LLMProvider,
-		StructuredOutput:     cfg.LLMStructuredOutput,
 		MaxOutputTokens:      cfg.LLMMaxOutputTokens,
 		AgentDeployment:      deployment,
 		MCPTimeout:           cfg.MCPTimeout,

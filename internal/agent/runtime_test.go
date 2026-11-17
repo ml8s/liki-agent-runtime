@@ -7,8 +7,6 @@ import (
 	"time"
 
 	agent "github.com/ml8s/agentgo/internal/agent"
-	"github.com/ml8s/agentgo/internal/execution"
-
 	"github.com/ml8s/agentgo/internal/audit"
 	"github.com/ml8s/agentgo/internal/domain"
 	"google.golang.org/adk/v2/session"
@@ -43,16 +41,6 @@ func TestNewRuntimeValidatesDeployment(t *testing.T) {
 			},
 			expected: domain.CodeLLMModelMissing,
 		},
-		{
-			name: "invalid structured output capability",
-			config: agent.Config{
-				Model:            "test-model",
-				AgentDeployment:  agent.NewTestDeployment(t),
-				AuditRecorder:    nopAuditRecorder{},
-				StructuredOutput: "yaml",
-			},
-			expected: domain.CodeStructuredOutputCapabilityInvalid,
-		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -75,7 +63,6 @@ func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
 		ModelAPIKey:      "test-key",
 		AgentDeployment:  agentDeployment,
 		AuditRecorder:    failing,
-		StructuredOutput: execution.StructuredOutputJSONSchema,
 	})
 	var domainErr *domain.Error
 	if !errors.As(err, &domainErr) || domainErr.Code != domain.CodeRuntimeInitFailed {
@@ -91,7 +78,6 @@ func TestNewRuntimeRecoversInterruptedAuditBeforeServing(t *testing.T) {
 		ModelAPIKey:      "test-key",
 		AgentDeployment:  agentDeployment,
 		AuditRecorder:    recovered,
-		StructuredOutput: execution.StructuredOutputJSONSchema,
 	})
 	if err != nil {
 		t.Fatalf("NewRuntime(recovery success) error = %v", err)
@@ -146,7 +132,6 @@ func TestNewRuntimeUsesInjectedOfficialSessionService(t *testing.T) {
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
 		AgentDeployment:  agentDeployment,
-		StructuredOutput: execution.StructuredOutputJSONSchema,
 		AuditRecorder:    nopAuditRecorder{},
 		SessionService:   injected,
 	})
@@ -164,7 +149,6 @@ func TestNewRuntimeRequiresMCPEndpointEnvironment(t *testing.T) {
 	_, err := agent.NewRuntime(agent.Config{
 		Model:            "test-model",
 		AgentDeployment:  agentDeployment,
-		StructuredOutput: execution.StructuredOutputJSONSchema,
 		AuditRecorder:    nopAuditRecorder{},
 	})
 	var domainErr *domain.Error
@@ -189,7 +173,6 @@ func TestNewRuntimeRejectsInvalidMCPEndpoint(t *testing.T) {
 			_, err := agent.NewRuntime(agent.Config{
 				Model:            "test-model",
 				AgentDeployment:  agent.NewTestDeployment(t),
-				StructuredOutput: execution.StructuredOutputJSONSchema,
 				AuditRecorder:    nopAuditRecorder{},
 			})
 			var domainErr *domain.Error

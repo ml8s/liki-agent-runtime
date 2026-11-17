@@ -11,8 +11,6 @@ import (
 
 	agentdeployment "github.com/ml8s/agentgo/internal/deployment"
 
-	"github.com/ml8s/agentgo/internal/execution"
-
 	"github.com/ml8s/agentgo/internal/audit"
 	"github.com/ml8s/agentgo/internal/domain"
 	mcppkg "github.com/ml8s/agentgo/internal/mcp"
@@ -86,32 +84,11 @@ func normalizeRuntimeConfig(config Config) (Config, error) {
 	if config.AgentDeployment == nil {
 		return Config{}, domain.NewError(domain.CodeAgentDefinitionMissing, "AgentDefinition is required", domain.ErrInvalidInput)
 	}
-	switch config.StructuredOutput {
-	case execution.StructuredOutputNone, execution.StructuredOutputJSONSchema, execution.StructuredOutputJSONObject, execution.StructuredOutputNative:
-	default:
-		return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output capability is invalid", domain.ErrInvalidInput)
-	}
-	switch config.Provider {
-	case ProviderAnthropic, ProviderGemini:
-		if config.StructuredOutput != execution.StructuredOutputNone && config.StructuredOutput != execution.StructuredOutputNative {
-			return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid,
-				fmt.Sprintf("provider %q only supports native structured output; unset AGENTGO_LLM_STRUCTURED_OUTPUT or set it to %q",
-					config.Provider, execution.StructuredOutputNative),
-				domain.ErrInvalidInput,
-			)
-		}
-	}
 	structuredAgents := 0
 	for _, candidate := range config.AgentDeployment.AgentDeclarations() {
 		if candidate.Output.Structured() {
 			structuredAgents++
 		}
-	}
-	switch {
-	case structuredAgents == 0 && config.StructuredOutput != execution.StructuredOutputNone:
-		return Config{}, domain.NewError(domain.CodeStructuredOutputCapabilityInvalid, "structured output mode is set but no Agent declares an output schema", domain.ErrInvalidInput)
-	case structuredAgents > 0 && config.StructuredOutput == execution.StructuredOutputNone:
-		config.StructuredOutput = execution.DefaultStructuredOutputMode(config.Provider)
 	}
 	if config.MCPTimeout <= 0 {
 		config.MCPTimeout = platformconfig.DefaultMCPTimeout
@@ -230,7 +207,7 @@ func NewRuntime(config Config) (*Runtime, error) {
 		resolveModel:           models.resolve,
 		temperature:            temperature,
 		maxOutputTokens:        config.MaxOutputTokens,
-		nativeStructuredOutput: config.StructuredOutput == execution.StructuredOutputNative,
+		nativeStructuredOutput: config.Provider == ProviderAnthropic || config.Provider == ProviderGemini,
 		callAuditor:            callAuditor,
 		delegationAuditor:      delegationAuditor,
 		toolAuditor:            toolAuditor,

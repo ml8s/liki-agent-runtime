@@ -27,7 +27,6 @@ type Config struct {
 	AuditRecorder    audit.Recorder
 	Metrics          execution.Metrics
 	Provider         string
-	StructuredOutput string
 	// ModelBuilder overrides the default provider model construction. Nil
 	// selects the built-in provider dispatch based on Provider.
 	ModelBuilder ModelBuilderFactory

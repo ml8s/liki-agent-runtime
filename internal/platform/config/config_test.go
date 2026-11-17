@@ -14,20 +14,15 @@ func baseEnv(t *testing.T) {
 	t.Setenv("AGENTGO_PUBLIC_URL", "https://agent.internal")
 	t.Setenv("AGENTGO_DEPLOYMENT_FILE", "/tmp/agent-deployment.json")
 	t.Setenv("AGENTGO_LLM_PROVIDER", "zhipu")
-	t.Setenv("AGENTGO_LLM_STRUCTURED_OUTPUT", "json_object")
 	t.Setenv("AGENTGO_LLM_BASE_URL", "https://open.bigmodel.cn/api/v1")
 	t.Setenv("AGENTGO_LLM_MODEL", "glm-5.3-flash")
 }
 
 func TestLoadValidConfiguration(t *testing.T) {
 	baseEnv(t)
-	t.Setenv("AGENTGO_LLM_STRUCTURED_OUTPUT", "none")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.LLMProvider != "zhipu" || cfg.LLMStructuredOutput != "" {
-		t.Fatalf("provider/capability = %q/%q", cfg.LLMProvider, cfg.LLMStructuredOutput)
 	}
 	if cfg.DeploymentFile != "/tmp/agent-deployment.json" {
 		t.Fatalf("definition file = %q", cfg.DeploymentFile)
@@ -65,7 +60,6 @@ func TestLoadRejectsInvalidSettings(t *testing.T) {
 		{name: "multi topology is fail-closed", key: "AGENTGO_TOPOLOGY", value: "multi", wantErr: "AGENTGO_TOPOLOGY=multi is not supported yet"},
 		{name: "invalid topology", key: "AGENTGO_TOPOLOGY", value: "cluster", wantErr: "AGENTGO_TOPOLOGY is unsupported"},
 		{name: "missing provider", key: "AGENTGO_LLM_PROVIDER", value: "", wantErr: "AGENTGO_LLM_PROVIDER is required"},
-		{name: "unsupported structured output", key: "AGENTGO_LLM_STRUCTURED_OUTPUT", value: "yaml", wantErr: "AGENTGO_LLM_STRUCTURED_OUTPUT is unsupported"},
 		{name: "invalid public url", key: "AGENTGO_PUBLIC_URL", value: "agent.internal", wantErr: "AGENTGO_PUBLIC_URL must be an absolute HTTP(S) URL"},
 		{name: "invalid llm url", key: "AGENTGO_LLM_BASE_URL", value: "api.example", wantErr: "AGENTGO_LLM_BASE_URL must be an absolute HTTP(S) URL"},
 		{name: "invalid duration", key: "AGENTGO_RUN_TIMEOUT_SECONDS", value: "abc", wantErr: "AGENTGO_RUN_TIMEOUT_SECONDS is not a valid integer"},

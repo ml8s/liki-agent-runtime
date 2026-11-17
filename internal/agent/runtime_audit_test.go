@@ -50,7 +50,6 @@ func newAuditRuntime(t *testing.T) (*agent.Runtime, *recordingAudit) {
 		Model:            "test-model",
 		ModelAPIKey:      "test-key",
 		AgentDeployment:  agentDeployment,
-		StructuredOutput: "json_schema",
 		Provider:         "test-provider",
 		AuditRecorder:    events,
 	})
@@ -101,7 +100,6 @@ func newAuditRuntimeWithClock(t *testing.T, recorder audit.Recorder, maxConcurre
 		Model:             "test-model",
 		ModelAPIKey:       "test-key",
 		AgentDeployment:   agentDeployment,
-		StructuredOutput:  "json_schema",
 		Provider:          "test-provider",
 		AuditRecorder:     recorder,
 		MaxConcurrentRuns: maxConcurrent,
@@ -153,7 +151,6 @@ func TestRuntimeRejectsConcurrencyAboveSharedLimit(t *testing.T) {
 		Model:             "test-model",
 		ModelAPIKey:       "test-key",
 		AgentDeployment:   agentDeployment,
-		StructuredOutput:  "json_schema",
 		Provider:          "test-provider",
 		AuditRecorder:     recorder,
 		MaxConcurrentRuns: 1025,

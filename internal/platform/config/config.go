@@ -91,7 +91,6 @@ type Config struct {
 	MaxConcurrentRuns           int
 	RunTimeout                  time.Duration
 	ShutdownTimeout             time.Duration
-	LLMStructuredOutput         string
 	LLMBaseURL                  string
 	LLMAPIKey                   string
 	LLMModel                    string
@@ -155,16 +154,12 @@ func Load() (Config, error) {
 		LLMAPIKey:           getEnv("AGENTGO_LLM_API_KEY", ""),
 		LLMModel:            getEnv("AGENTGO_LLM_MODEL", ""),
 		LLMProvider:         getEnv("AGENTGO_LLM_PROVIDER", ""),
-		LLMStructuredOutput: getEnv("AGENTGO_LLM_STRUCTURED_OUTPUT", ""),
 		OIDCIssuer:          getEnv("AGENTGO_OIDC_ISSUER", ""),
 		OIDCAudience:        getEnv("AGENTGO_OIDC_AUDIENCE", ""),
 		OIDCUsernameClaim:   getEnv("AGENTGO_OIDC_USERNAME_CLAIM", "sub"),
 		OIDCTenantClaim:     getEnv("AGENTGO_OIDC_TENANT_CLAIM", ""),
 		LogFormat:           getEnv("AGENTGO_LOG_FORMAT", "json"),
 		LogLevel:            getEnv("AGENTGO_LOG_LEVEL", "info"),
-	}
-	if cfg.LLMStructuredOutput == "none" {
-		cfg.LLMStructuredOutput = ""
 	}
 	var err error
 	if cfg.MCPTimeout, err = getDuration("AGENTGO_MCP_TIMEOUT_SECONDS", DefaultMCPTimeout); err != nil {
@@ -322,11 +317,6 @@ func validate(cfg Config) (Config, error) {
 	case "json", "text":
 	default:
 		return Config{}, fmt.Errorf("AGENTGO_LOG_FORMAT is unsupported: %q (expected json or text)", cfg.LogFormat)
-	}
-	switch cfg.LLMStructuredOutput {
-	case "", "none", "json_schema", "json_object":
-	default:
-		return Config{}, fmt.Errorf("AGENTGO_LLM_STRUCTURED_OUTPUT is unsupported: %q", cfg.LLMStructuredOutput)
 	}
 	if cfg.ADKSessionRetention > 0 && cfg.ADKSessionRetention < cfg.RunTimeout {
 		return Config{}, fmt.Errorf(
