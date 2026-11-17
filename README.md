@@ -1,8 +1,11 @@
-# Agent Runtime
+# agentgo
 
-`agentgo` is a generic multi-agent runtime for externally defined
-`AgentDeployment` artifacts. It executes an ADK Agent tree, orchestrates model
-calls and MCP tools, and exposes standard machine and browser protocols.
+**Deploy production multi-agent systems from a JSON artifact — no agent infrastructure to build.**
+
+agentgo is a standalone multi-agent runtime. You write an `AgentDeployment`
+artifact (JSON + prompt files); agentgo runs the agent tree, orchestrates LLM
+calls and MCP tools, and serves them over standard protocols. Your product
+code never touches Go, agents, or protocol plumbing.
 
 ```text
 machine client ──A2A JSON-RPC──┐
@@ -10,55 +13,66 @@ machine client ──A2A JSON-RPC──┐
 caller ──AG-UI SSE→ agentgo ──MCP→ external tools
 ```
 
-The runtime is domain-neutral: deployments supply instructions, output schemas,
-delegation topology, and tool allowlists; `agentgo` provides
-execution, protocol adaptation, security, evidence, and observability.
+## Why agentgo
 
-## Install
+Building a production agent system from scratch means implementing, testing,
+and maintaining all of this yourself:
 
-Requires the Go toolchain selected by `go.mod` (currently 1.26.11), Node.js
-24.14.1 (see `.nvmrc`), and Docker Compose. Clone the repository and run
-`make build`; the binary is written to `bin/agentgo`.
+| Concern | What you'd build | What agentgo gives you |
+|---|---|---|
+| Protocol serving | A2A JSON-RPC server, AG-UI SSE stream, Agent Card discovery | Standard protocol adapters over one shared runtime |
+| Agent orchestration | Multi-agent delegation graph, tool routing, model selection | ADK Agent tree from your deployment artifact |
+| Tool access | MCP client, tool allowlist, deny-by-default authorization | Server-scoped MCP allowlists; denied unless explicitly listed |
+| Security | Bearer auth, OIDC verification, mutual TLS, identity mapping | Built-in, fail-closed, with explicit per-channel trust |
+| Structured output | JSON Schema validation, provider-specific wire formats, text extraction | Declare a schema + JSON Pointer; agentgo handles the rest |
+| Audit evidence | Immutable execution records with digests and error codes | Append-only audit; no prompts or payloads stored |
+| Observability | Metrics, tracing, structured logs, health probes | Prometheus, OpenTelemetry, `log/slog` with stable event names |
+
+agentgo is not a framework you import into your code. It is a runtime you
+deploy: write the artifact, point it at your LLM and MCP tools, and it serves.
 
 ## Quick start
 
-Copy `.env.example` to `.env`; set `AGENTGO_LLM_API_KEY` and every
-endpoint/token variable named by `mcpServers` (a token variable may be present
-but empty). Local development may leave the internal token empty to disable
-bearer authentication. Then run:
+Requires Go (see `go.mod`), Node.js 24 (see `.nvmrc`), and Docker Compose.
 
 ```bash
+git clone https://github.com/ml8s/agentgo.git
+cd agentgo
+cp .env.example .env
+# Edit .env: set AGENTGO_LLM_API_KEY and MCP endpoint/token variables.
 make dev
-curl -sS http://127.0.0.1:8085/readyz | jq   # ops listener (AGENTGO_OPS_ADDR)
+curl -sS http://127.0.0.1:8085/readyz | jq
 ```
 
-`make dev` is the supported development path: it mounts the deployment and
-skill fixtures, then builds one domain-neutral MCP fixture image and starts `mcp-tools-a` / `mcp-tools-b` instances with `.env`. `make run` is an advanced host-mode
-entry point; because the fixture artifact pins `/skills`, use it only with a
-host-specific artifact whose skill roots are accessible to that process.
-Browser testing uses
-`scripts/dev-chat-ui.sh` at <http://127.0.0.1:8084> (development-only).
+`make dev` builds one MCP fixture image, starts two tool servers, and runs the
+runtime against the development deployment artifact. Open the chat UI at
+<http://127.0.0.1:8084> to interact with the agent in your browser.
 
-## Runtime model
+### Your first deployment
 
-An `AgentDeployment` is the sole source of Agent behavior and topology: each
-Agent has an ADK mode, instruction file, optional output schema, and an explicit
-`tools.allow`; `mcpServers` binds logical servers to endpoint/token environment
-variables; the unique root (no incoming `sub_agents` edge) is the entrypoint and
-ADK owns delegation and execution.
+Copy `dev/agent-deployment/` as a starting point. The artifact declares:
 
-Prompts are external files and plain text is the default; typed output declares
-a JSON Schema plus a JSON Pointer to the user-facing string. Tool access is
-denied unless the tool is listed in the Agent's server-scoped `tools.allow`.
+- one or more agents (instruction file, optional output schema, tool allowlist);
+- logical MCP servers bound to environment variables;
+- delegation edges (`sub_agents`) for multi-agent trees.
 
-The artifact is validated by this runtime's strict JSON decoder and deployment
-invariants; external boundaries follow [`docs/STANDARDS.md`](docs/STANDARDS.md).
-Its provenance carries a canonical semantic digest over behavior-bearing
-declarations and resolved artifacts, plus a separate exact-byte manifest digest.
-Audit provenance uses the immutable deployment version and digest already
-carried by the artifact. Deployment integrity is owned by deployment system, which
-assembles and deploys the images by commit sha; no duplicate artifact pin is
-configured by the environment.
+The unique root agent is the entrypoint. Prompts are external files; plain
+text is the default. Typed output declares a JSON Schema plus a JSON Pointer
+to the user-facing string.
+
+## LLM providers
+
+`AGENTGO_LLM_PROVIDER` selects the model implementation:
+
+| Provider | Value | Structured output |
+|---|---|---|
+| OpenAI / DeepSeek / any compatible | `openai` | `json_schema` (native) |
+| Anthropic Claude | `anthropic` | `native` (ADK translates genai.Schema) |
+| Google Gemini | `gemini` | `native` (ADK translates genai.Schema) |
+| Other OpenAI-compatible | any value | `json_object` (compatibility shim) |
+
+Leave `AGENTGO_LLM_STRUCTURED_OUTPUT` empty to auto-derive the mode from the
+provider. Explicit modes fail closed if no Agent declares an output schema.
 
 ## Protocols
 
@@ -69,124 +83,57 @@ configured by the environment.
 | Machine discovery | A2A Agent Card | `GET /.well-known/agent-card.json` | standard capability metadata |
 | Tool server | MCP Streamable HTTP | outbound | deterministic tools |
 
-Operational endpoints are public `/livez` and `/readyz`, plus `/metrics` and
-`/debug/pprof`. Liveness proves that the process is serving without consulting
-external dependencies; readiness fails closed on dependency health or drain.
-Metrics are internal and credential-free; profiling is disabled unless
-`AGENTGO_PPROF_ENABLED=1`.
-There is no private application API or ADK Launcher control plane.
+Operational endpoints: `/livez`, `/readyz`, `/metrics`, `/debug/pprof`
+(opt-in via `AGENTGO_PPROF_ENABLED=1`).
 
-## Security boundary
+## Security
 
-The default trusted-header mode requires production protocol callers to present
-the internal service token:
+- **Deny-by-default tool access** — a tool call succeeds only if the tool is
+  listed in the Agent's server-scoped `tools.allow`.
+- **Internal bearer token** — production callers present
+  `Authorization: Bearer <AGENTGO_PROTOCOL_TOKEN>`.
+- **OIDC identity** — set `AGENTGO_IDENTITY_SOURCE=oidc` to verify standard
+  ID tokens on both AG-UI and A2A.
+- **Mutual TLS** — optional listener maps identity from client certificates.
+- **Audit evidence** — append-only records with deployment digests, durations,
+  and error codes; never contains prompts or payloads.
+- **No direct public exposure** — the runtime sits behind your gateway.
 
-```text
-Authorization: Bearer <AGENTGO_PROTOCOL_TOKEN>
-```
-
-AG-UI additionally requires `caller` to authenticate the browser user and
-inject `X-Agent-User-ID`. The header is a browser-only trust signal: it is
-adopted on `/ag-ui` only and never on A2A, so a machine client sharing the
-internal token cannot spoof a user identity into audit/provenance.
-
-Set `AGENTGO_IDENTITY_SOURCE=oidc` to replace internal bearer + trusted
-headers with one standard OIDC ID-token credential. The runtime performs
-discovery and verifies signature, issuer, audience, and expiry through
-`coreos/go-oidc`; `sub` (or the configured claim) becomes the verified identity
-on both AG-UI and A2A.
-
-The transport consumes a pluggable `identity.RequestSource`; the bundled
-trusted-header adapter is channel-aware and accepts only headers owned by the
-authenticated channel, and the bundled OIDC and certificate-identity adapters
-implement the same port without changing protocol handlers.
-
-On the optional mutual-TLS listener, the default
-`AGENTGO_MTLS_IDENTITY_SOURCE=certificate` maps the identity from the
-verified client certificate (first URI SAN, then email SAN, then common name;
-certificate organization maps to the tenant). A certificate holder therefore
-cannot claim another user through `Remote-User` headers. Deployments whose mTLS
-peer is a gateway that has already authenticated the end user may opt into
-`AGENTGO_MTLS_IDENTITY_SOURCE=header`, which restores the relay-header
-contract on that listener; the opt-in requires the TLS listener and documents
-that trust assumption explicitly.
-
-The runtime is never directly public and never authenticates end users, issues
-sessions, stores conversations, or trusts unverified identities. Internet-facing
-rate limiting is the gateway's job; the internal per-source limiter only resists
-token brute force, while `AGENTGO_MAX_CONCURRENT_RUNS` bounds run concurrency.
-
-Local development may leave `AGENTGO_PROTOCOL_TOKEN` empty, disabling bearer
-authentication, while AG-UI still requires `X-Agent-User-ID`. Invalid attempts
-are throttled per socket source and return HTTP 429 (`rate_limited`).
-
-MCP access is allowlisted per Agent and server, and evidence never contains
-prompts, raw model output, or tool payloads. Outside development the LLM
-endpoint is HTTPS-only without embedded credentials.
+See [`SECURITY.md`](SECURITY.md) for the full security policy.
 
 ## Configuration
 
-`.env.example` is the complete configuration surface. Important groups are:
+`.env.example` is the complete configuration surface. Key groups:
 
 | Prefix / variable | Purpose |
 |---|---|
-| `AGENTGO_*` | service address, token, audit DB path, topology, deployment file, ops address (`OPS_ADDR`, default `:8085`), mutual-TLS listener (`TLS_ADDR` + `TLS_CERT`/`TLS_KEY`/`TLS_CLIENT_CA`) |
-| `AGENTGO_PROTOCOL_TOKEN` / `AGENTGO_PPROF_ENABLED` | protocol service credential; explicit opt-in for `/debug/pprof` |
-| `AGENTGO_MCP_*` | endpoint/token bindings for logical MCP servers (`AGENTGO_MCP_<NAME>_URL` / `AGENTGO_MCP_<NAME>_TOKEN`) |
-| `AGENTGO_MAX_CONCURRENT_RUNS` | bounded concurrent executions |
-| `AGENTGO_LLM_*` | OpenAI-compatible client; provider is an audit label, base URL/model/provider required |
-| `AGENTGO_LOG_*` | structured logging |
+| `AGENTGO_*` | service address, token, audit DB path, topology, deployment file, ops address |
+| `AGENTGO_PROTOCOL_TOKEN` | internal service credential for production callers |
+| `AGENTGO_MCP_*` | endpoint/token bindings for logical MCP servers |
+| `AGENTGO_MAX_CONCURRENT_RUNS` | bounded concurrent executions (1–1024) |
+| `AGENTGO_LLM_*` | provider, base URL, model, API key, timeout, structured output |
 | `AGENTGO_IDENTITY_SOURCE` | `trusted_header` (default) or `oidc` |
-| `AGENTGO_MTLS_IDENTITY_SOURCE` | mutual-TLS identity mapping: `certificate` (default, fail-closed) or explicit `header` gateway-relay opt-in |
+| `AGENTGO_MTLS_IDENTITY_SOURCE` | mutual-TLS identity mapping |
 | `AGENTGO_OIDC_*` | OIDC issuer, audience, and verified claim mapping |
-| `AGENTGO_A2A_TASK_RETENTION_SECONDS` | optional terminal A2A task retention; unset/zero disables cleanup |
-| `AGENTGO_ADK_SESSION_RETENTION_SECONDS` | optional idle ADK session retention; unset/zero disables, explicit value must be at least run timeout |
 | `OTEL_*` | standard OpenTelemetry tracing settings |
-
-MCP endpoint values are complete URLs; the gateway may own service prefixes
-(`/tools-a/mcp`, `/tools-b/mcp`) while services expose `/mcp` and
-`/mcp/{domain}`. The runtime rewrites no MCP paths and adds no private headers.
-
-`AGENTGO_LLM_PROVIDER` selects the ADK model implementation: `openai`
-(or any OpenAI-compatible value), `anthropic` (Claude native API), or
-`gemini` (Gemini API). Empty `AGENTGO_LLM_STRUCTURED_OUTPUT` derives the
-mode from the deployment and provider (`json_schema` for OpenAI, `native` for
-Anthropic/Gemini, `json_object` for other OpenAI-compatible providers);
-explicit modes fail closed without an output schema, and native providers
-reject non-native modes. Per-Agent model settings live in the artifact.
-Concurrency is bounded to 1–1024; development alone permits local HTTP LLMs.
 
 ## Operations
 
-Use `make dev` for Compose; `make dev-down` removes the workload. `make run`
-is an advanced host-mode command and requires a host-specific deployment
-artifact. The ops surface (`/livez`, `/readyz`, `/metrics`) listens on
-`AGENTGO_OPS_ADDR` (default `:8085`) so protocol mutual TLS never gates
-healthchecks; metrics are internal and credential-free, while profiling is an
-explicit opt-in. `/readyz` reuses one dependency-check round for 10 seconds
-and fails closed, so probes never amplify into outbound MCP discovery storms.
-Release images probe `/readyz` via the built-in `healthcheck` subcommand; the
-runtime is single-replica (see
-[`docs/STANDARDS.md`](docs/STANDARDS.md) for scaling).
+Use `make dev` for Compose; `make dev-down` removes the workload. The ops
+surface (`/livez`, `/readyz`, `/metrics`) listens on `AGENTGO_OPS_ADDR`
+(default `:8085`). Release images probe `/readyz` via the built-in
+`healthcheck` subcommand.
 
 ## Observability
 
-Prometheus exposes protocol latency, active streams, model calls, tokens,
-model-call durations, tool calls and durations, delegation activity, audit
-append outcomes, durations, batch sizes and queue depth, MCP catalog cache
-outcomes, run rejections, durable record growth, and dependency readiness. Logs use `log/slog`
+Prometheus metrics cover protocol latency, active streams, model calls, tool
+calls, delegation activity, and dependency readiness. Logs use `log/slog`
 with stable event names. Distributed tracing uses W3C context propagation and
-standard OTLP export; MCP and LLM outbound requests carry the same trace
-context. Tracing is disabled unless a standard OTLP endpoint is configured:
+OTLP export (disabled unless configured).
 
-```text
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4318/v1/traces
-```
-
-SQLite stores append-only audit events (metadata, versions, digests, duration,
-error codes). On startup the single-process runtime closes interrupted run,
-model, tool, and delegation lifecycles with synthetic `runtime_interrupted`
-failures, never editing history; records exclude conversation or domain payloads.
+SQLite stores append-only audit events. On startup the runtime closes
+interrupted lifecycles with synthetic `runtime_interrupted` failures, never
+editing history.
 
 ## Documentation
 
@@ -206,12 +153,7 @@ Run `make setup-hooks` once so every push runs the local gate. Then use `make
 check`, `make test`, `make gate`, and `make build`.
 
 `make gate` is the pre-push gate. It runs documentation linting, Go static
-checks, race tests, and the coverage floor. The installed pre-push hook runs the
-same gate before uploading a branch. `make check` includes deployment
-validation. Neither command calls a real model provider or external MCP. CI
-additionally runs `govulncheck`. CI builds the tagged local image for smoke
-testing but does not publish it. Callers consume the local image as their
-runtime base and assemble their own deployment set.
+checks, race tests, and the coverage floor.
 
 ### Contributing
 
@@ -220,14 +162,15 @@ before submitting a change.
 
 ## Project boundary
 
-`agentgo` is not an Agent management control plane. It does not provide
-Agent CRUD APIs, deployment registries, tenant management, quota enforcement,
+agentgo is not an Agent management control plane. It does not provide Agent
+CRUD APIs, deployment registries, tenant management, quota enforcement,
 approval workflows, or a management console.
 
 `caller` owns users, products, entitlements, quotas, and durable product
-conversations. A domain content repository owns prompts, skills, workflow policy, and
-tool semantics; external MCP tool services own deterministic MCP implementations.
+conversations. A domain content repository owns prompts, skills, workflow
+policy, and tool semantics; external MCP tool services own deterministic MCP
+implementations.
 
 ### License
 
-Released under the [MIT License](LICENSE) by ml8s and the Agent Runtime contributors.
+Released under the [MIT License](LICENSE).
