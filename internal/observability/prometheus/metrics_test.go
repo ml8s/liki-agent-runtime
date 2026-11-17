@@ -33,48 +33,48 @@ func TestMetricsExposeStandardRuntimeDimensions(t *testing.T) {
 	response := httptest.NewRecorder()
 	metrics.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	for _, name := range []string{
-		"agent_runtime_protocol_requests_total",
-		"agent_runtime_protocol_request_duration_seconds",
-		"agent_runtime_protocol_active_streams",
-		"agent_runtime_llm_calls_total",
-		"agent_runtime_llm_tokens_total",
-		"agent_runtime_llm_call_duration_seconds",
-		"agent_runtime_tool_calls_total",
-		"agent_runtime_tool_duration_seconds",
-		"agent_runtime_delegations_total",
-		"agent_runtime_delegation_duration_seconds",
-		"agent_runtime_dependency_up",
-		"agent_runtime_audit_appends_total",
-		"agent_runtime_audit_append_duration_seconds",
-		"agent_runtime_mcp_catalog_requests_total",
-		"agent_runtime_audit_batch_events",
-		"agent_runtime_audit_queue_depth",
-		"agent_runtime_run_rejections_total",
-		"agent_runtime_run_terminal_reconciliation_total",
-		"agent_runtime_run_terminal_reconciliation_duration_seconds",
-		"agent_runtime_pending_terminal_runs",
-		"agent_runtime_run_reservations_total",
+		"agentgo_protocol_requests_total",
+		"agentgo_protocol_request_duration_seconds",
+		"agentgo_protocol_active_streams",
+		"agentgo_llm_calls_total",
+		"agentgo_llm_tokens_total",
+		"agentgo_llm_call_duration_seconds",
+		"agentgo_tool_calls_total",
+		"agentgo_tool_duration_seconds",
+		"agentgo_delegations_total",
+		"agentgo_delegation_duration_seconds",
+		"agentgo_dependency_up",
+		"agentgo_audit_appends_total",
+		"agentgo_audit_append_duration_seconds",
+		"agentgo_mcp_catalog_requests_total",
+		"agentgo_audit_batch_events",
+		"agentgo_audit_queue_depth",
+		"agentgo_run_rejections_total",
+		"agentgo_run_terminal_reconciliation_total",
+		"agentgo_run_terminal_reconciliation_duration_seconds",
+		"agentgo_pending_terminal_runs",
+		"agentgo_run_reservations_total",
 	} {
 		if !strings.Contains(response.Body.String(), name) {
 			t.Fatalf("metrics body missing %q", name)
 		}
 	}
-	if !strings.Contains(response.Body.String(), `agent_runtime_llm_tokens_total{model="gpt-test",type="thought"} 3`) {
+	if !strings.Contains(response.Body.String(), `agentgo_llm_tokens_total{model="gpt-test",type="thought"} 3`) {
 		t.Fatalf("thought token usage was not observed: %s", response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `agent_runtime_tool_calls_total{agent="coordinator",status="succeeded",tool="tool_a"} 1`) {
+	if !strings.Contains(response.Body.String(), `agentgo_tool_calls_total{agent="coordinator",status="succeeded",tool="tool_a"} 1`) {
 		t.Fatalf("tool call was not observed: %s", response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `agent_runtime_delegations_total{caller="coordinator",status="succeeded",target="worker"} 1`) {
+	if !strings.Contains(response.Body.String(), `agentgo_delegations_total{caller="coordinator",status="succeeded",target="worker"} 1`) {
 		t.Fatalf("delegation was not observed: %s", response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `agent_runtime_run_terminal_reconciliation_total{status="succeeded"} 1`) {
+	if !strings.Contains(response.Body.String(), `agentgo_run_terminal_reconciliation_total{status="succeeded"} 1`) {
 		t.Fatalf("terminal reconciliation was not observed: %s", response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `agent_runtime_pending_terminal_runs 1`) {
+	if !strings.Contains(response.Body.String(), `agentgo_pending_terminal_runs 1`) {
 		t.Fatalf("pending terminal gauge was not observed: %s", response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `agent_runtime_run_reservations_total{result="reserved"} 1`) {
+	if !strings.Contains(response.Body.String(), `agentgo_run_reservations_total{result="reserved"} 1`) {
 		t.Fatalf("run reservation was not observed: %s", response.Body.String())
 	}
 }

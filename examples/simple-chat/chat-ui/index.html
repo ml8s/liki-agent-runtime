@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>agentgo simple chat</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: system-ui, sans-serif;
+    }
+
+    body {
+      margin: 0 auto;
+      max-width: 760px;
+      padding: 1rem;
+    }
+
+    h1 { font-size: 1.15rem; margin: 0 0 1rem; }
+    form { display: grid; gap: .5rem; }
+    textarea, button {
+      border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+      border-radius: .4rem;
+      font: inherit;
+      padding: .5rem;
+    }
+    textarea { resize: vertical; }
+    button { cursor: pointer; }
+    button:disabled { opacity: .6; }
+    #conversation { display: grid; gap: .75rem; margin: 1rem 0; }
+    .message {
+      border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+      border-radius: .5rem;
+      overflow-wrap: anywhere;
+      padding: .75rem;
+      white-space: pre-wrap;
+    }
+    .user { background: color-mix(in srgb, royalblue 10%, transparent); }
+    .assistant { background: color-mix(in srgb, currentColor 5%, transparent); }
+    #status {
+      font-size: .85rem;
+      min-height: 1.2em;
+      opacity: .75;
+    }
+    #status.error { color: #c62828; font-weight: 600; opacity: 1; }
+  </style>
+</head>
+<body>
+  <h1>agentgo simple chat</h1>
+  <main id="conversation"></main>
+  <p id="status" aria-live="polite"></p>
+  <form>
+    <textarea id="prompt" rows="4" placeholder="Message" required></textarea>
+    <div>
+      <button id="send" type="submit">Send</button>
+      <button id="stop" type="button" disabled>Stop</button>
+    </div>
+  </form>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

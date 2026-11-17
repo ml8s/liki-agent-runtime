@@ -170,7 +170,7 @@ first model call. A failed refresh serves the last known catalog — declaration
 stay available — while every tool call still uses the live fast-fail transport,
 so a removed server-side tool fails its call rather than being hidden. The
 allowlist is applied after the memoized discovery, never bypassed by it
-(`agent_runtime_mcp_catalog_requests_total` exposes hit/refresh/stale/error).
+(`agentgo_mcp_catalog_requests_total` exposes hit/refresh/stale/error).
 ADK's built-in `transfer_to_agent` call is not an MCP tool. It remains visible
 on AG-UI as a tool event and is audited through Agent delegation lifecycle
 events rather than MCP tool provenance.

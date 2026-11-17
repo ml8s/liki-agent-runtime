@@ -7,14 +7,14 @@ import (
 func securitySchemes(config SecurityConfig) a2a.NamedSecuritySchemes {
 	schemes := a2a.NamedSecuritySchemes{}
 	if config.Bearer {
-		schemes["agent_runtime_service_bearer"] = a2a.HTTPAuthSecurityScheme{
+		schemes["agentgo_service_bearer"] = a2a.HTTPAuthSecurityScheme{
 			Scheme:       "Bearer",
 			BearerFormat: "opaque",
 			Description:  "Runtime bearer credential",
 		}
 	}
 	if config.MutualTLS {
-		schemes["agent_runtime_service_mtls"] = a2a.MutualTLSSecurityScheme{
+		schemes["agentgo_service_mtls"] = a2a.MutualTLSSecurityScheme{
 			Description: "Runtime verified client-certificate channel",
 		}
 	}
@@ -24,10 +24,10 @@ func securitySchemes(config SecurityConfig) a2a.NamedSecuritySchemes {
 func securityRequirements(config SecurityConfig) a2a.SecurityRequirementsOptions {
 	var options a2a.SecurityRequirementsOptions
 	if config.Bearer {
-		options = append(options, a2a.SecurityRequirements{"agent_runtime_service_bearer": {}})
+		options = append(options, a2a.SecurityRequirements{"agentgo_service_bearer": {}})
 	}
 	if config.MutualTLS {
-		options = append(options, a2a.SecurityRequirements{"agent_runtime_service_mtls": {}})
+		options = append(options, a2a.SecurityRequirements{"agentgo_service_mtls": {}})
 	}
 	return options
 }
