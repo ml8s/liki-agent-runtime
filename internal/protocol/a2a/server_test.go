@@ -23,7 +23,6 @@ import (
 	"github.com/ml8s/agentgo/internal/agent"
 	"github.com/ml8s/agentgo/internal/audit"
 	deploymentpkg "github.com/ml8s/agentgo/internal/deployment"
-	"github.com/ml8s/agentgo/internal/execution"
 	"github.com/ml8s/agentgo/internal/protocol/a2a"
 	protocolstate "github.com/ml8s/agentgo/internal/protocolstate/sqlite"
 	"github.com/ml8s/agentgo/internal/testagent"
