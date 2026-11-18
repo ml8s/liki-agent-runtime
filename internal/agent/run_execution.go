@@ -29,14 +29,15 @@ type runExecution struct {
 	nextCall          int
 	activeCalls       map[string]llmCallRuntime
 
-	llmCalls          int
-	promptTokens      int
-	completionTokens  int
-	thoughtTokens     int
-	totalTokens       int64
-	cachedInputTokens int64
-	modelUsage        []execution.ModelTokenUsage
-	modelUsageIndexes map[string]int
+	llmCalls           int
+	promptTokens       int
+	completionTokens   int
+	thoughtTokens      int
+	totalTokens        int64
+	cachedInputTokens  int64
+	modelUsage         []execution.ModelTokenUsage
+	modelUsageIndexes  map[string]int
+	pendingClientTools []execution.PendingClientTool
 }
 
 // runExecutionParams is the immutable construction contract shared by the
@@ -124,6 +125,10 @@ func (s *runExecution) modelUsageSnapshot() []execution.ModelTokenUsage {
 		return nil
 	}
 	return append([]execution.ModelTokenUsage(nil), s.modelUsage...)
+}
+
+func (s *runExecution) pauseWithClientTools(pending []execution.PendingClientTool) {
+	s.pendingClientTools = append([]execution.PendingClientTool(nil), pending...)
 }
 
 type llmCallRuntime struct {

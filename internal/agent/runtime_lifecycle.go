@@ -64,11 +64,11 @@ func (r *Runtime) startRunExecution(ctx context.Context, handle AuditAttemptHand
 	if !r.callAuditor.begin(handle, scope) {
 		return domain.NewError(domain.CodeAuditSessionActive, "an audit run is already active for this session", domain.ErrInvalidInput)
 	}
-	if err := r.recordRunAudit(ctx, scope, audit.EventRunStarted, audit.StatusRunning, nil); err != nil {
+	if err := r.recordRunAudit(ctx, scope, audit.EventRunStarted, audit.StatusRunning, nil, nil); err != nil {
 		auditScope, _ := r.callAuditor.scope(string(handle.AttemptID))
 		r.callAuditor.end(handle, err)
 		_ = r.delegationAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
-		_ = r.toolAuditor.FailPending(context.WithoutCancel(ctx), auditScope)
+		_ = r.toolAuditor.FailPending(context.WithoutCancel(ctx), auditScope, false)
 		return err
 	}
 	return nil
@@ -238,8 +238,6 @@ func (r *Runtime) runEvent(
 	event.AgentName = r.entrypoint.Name
 	event.AgentVersion = r.entrypoint.Version
 	event.AgentDefinitionDigest = r.entrypoint.Digest
-	event.Model = r.entrypoint.EffectiveModel(r.config.Model)
-	event.Provider = r.config.Provider
 	event.Status = status
 	event.DurationMS = r.config.Now().Sub(scope.startedAt).Milliseconds()
 	event.TraceID = traceIDFromContext(ctx)

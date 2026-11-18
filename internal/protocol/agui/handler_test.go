@@ -525,7 +525,7 @@ func TestAGUIProjectsStandardResumeRun(t *testing.T) {
 	if !strings.Contains(body, "档案已更新") || !strings.Contains(body, `"outcome":{"type":"success"}`) {
 		t.Fatalf("resumed run missing success completion: %s", body)
 	}
-	if len(captured.Resume) != 1 || !captured.Resume[0].Resolved || captured.Resume[0].ToolCallID != "call_birth_time" {
+	if len(captured.Resume) != 1 || captured.Resume[0].Status != execution.ClientToolResolutionResolved || captured.Resume[0].ToolCallID != "call_birth_time" {
 		t.Fatalf("Resume = %#v, want resolved call_birth_time", captured.Resume)
 	}
 	var toolMessage *execution.Message
@@ -536,6 +536,36 @@ func TestAGUIProjectsStandardResumeRun(t *testing.T) {
 	}
 	if toolMessage == nil || toolMessage.ToolCallID != "call_birth_time" || string(toolMessage.ToolOutput) != `{"status":"updated"}` {
 		t.Fatalf("History tool response = %#v, want authoritative update result", toolMessage)
+	}
+}
+
+func TestAGUIRejectsUnsupportedResumeStatus(t *testing.T) {
+	var captured execution.RunRequest
+	runtime := &capturingRuntime{capture: &captured}
+	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := authenticatedRequest(t, `{
+		"threadId":"t","runId":"r_bad",
+		"messages":[
+			{"id":"m1","role":"user","content":"校正时间"},
+			{"id":"m2","role":"assistant","content":"","toolCalls":[{"id":"call_birth_time","type":"function","function":{"name":"propose_birth_time","arguments":"{}"}}]},
+			{"id":"m3","role":"tool","toolCallId":"call_birth_time","content":"{}"}
+		],
+		"resume":[{"interruptId":"int_1","status":"maybe","metadata":{"tool_call_id":"call_birth_time"}}]
+	}`)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+	}
+	if !strings.Contains(response.Body.String(), "unsupported status") {
+		t.Fatalf("body lacks unsupported status error: %s", response.Body.String())
+	}
+	if len(captured.Resume) != 0 {
+		t.Fatalf("runtime received rejected resume = %#v", captured.Resume)
 	}
 }
 

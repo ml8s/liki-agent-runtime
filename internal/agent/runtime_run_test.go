@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -149,7 +150,7 @@ func TestRuntimeRunDeletesRunScopedSession(t *testing.T) {
 	}
 }
 
-func TestRunAuditUsesEntrypointModelOverride(t *testing.T) {
+func TestLLMCallsUseEntrypointModelOverride(t *testing.T) {
 	agentDeployment := NewTestDeployment(t)
 	agentDeployment.Spec.Agents[0].Model = "artifact-model"
 	events := &recordingAudit{}
@@ -163,8 +164,12 @@ func TestRunAuditUsesEntrypointModelOverride(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	started := events.eventsOfType(audit.EventRunStarted)
-	if len(started) != 1 || started[0].Model != "artifact-model" {
-		t.Fatalf("run started model = %#v, want artifact-model", started)
+	if len(started) != 1 || started[0].Model != "" {
+		t.Fatalf("run started model = %#v, want blank because run lifecycle is graph-level", started)
+	}
+	completed := events.eventsOfType(audit.EventLLMCallCompleted)
+	if len(completed) != 1 || completed[0].Model != "artifact-model" {
+		t.Fatalf("LLM completed model = %#v, want artifact-model", completed)
 	}
 }
 
@@ -348,6 +353,10 @@ func TestRuntimeRunPausesOnAwaitedClientTool(t *testing.T) {
 	}
 	if got := len(events.eventsOfType(audit.EventRunPaused)); got != 1 {
 		t.Fatalf("paused run audit events = %d, want 1", got)
+	}
+	paused := events.eventsOfType(audit.EventRunPaused)
+	if got, want := paused[0].Payload["pending_tool_call_ids"], []string{"call_ui"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("paused payload pending IDs = %#v, want %#v", got, want)
 	}
 }
 

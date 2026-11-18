@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -189,11 +190,15 @@ func (a *ToolExecutionAuditor) AfterTool(
 func (a *ToolExecutionAuditor) FailPending(
 	ctx context.Context,
 	scope *runExecution,
+	preserveClientTools bool,
 ) error {
 	a.mu.Lock()
 	pending := make(map[string]evidence.ToolCallRecord)
 	for key, record := range a.pending {
 		if scope == nil || string(record.RunID) == string(scope.identity.RunID) {
+			if preserveClientTools && record.MCPServer == ClientToolServer {
+				continue
+			}
 			pending[key] = record
 		}
 	}
@@ -322,4 +327,115 @@ func (a *ToolExecutionAuditor) record(
 
 func (a *ToolExecutionAuditor) pendingKey(ctx adkagent.Context, callID string) string {
 	return ctx.SessionID() + "\x00" + callID
+}
+
+func clientToolInputFromHistory(history []execution.Message, toolCallID string) json.RawMessage {
+	for _, message := range history {
+		for _, call := range message.ToolCalls {
+			if call.ID != toolCallID {
+				continue
+			}
+			if len(call.Args) != 0 && string(call.Args) != "null" {
+				return call.Args
+			}
+			return []byte("{}")
+		}
+	}
+	return []byte("{}")
+}
+
+func clientToolOutputFromHistory(history []execution.Message, toolCallID string) (json.RawMessage, string) {
+	for _, message := range history {
+		if message.Role != execution.RoleTool || message.ToolCallID != toolCallID {
+			continue
+		}
+		output := message.ToolOutput
+		if len(output) == 0 || string(output) == "null" {
+			output = []byte("{}")
+		}
+		return output, message.ToolError
+	}
+	return []byte("{}"), ""
+}
+
+// RecordClientToolResolutions closes frontend tool calls accepted through a
+// trusted protocol resume. Only canonical digest/size provenance is audited;
+// the caller-owned result payload is never persisted.
+func (a *ToolExecutionAuditor) RecordClientToolResolutions(
+	ctx context.Context,
+	scope *runExecution,
+	agentName string,
+	resolutions []execution.ClientToolResolution,
+	history []execution.Message,
+) error {
+	for _, resolution := range resolutions {
+		input := clientToolInputFromHistory(history, resolution.ToolCallID)
+		output, outputError := clientToolOutputFromHistory(history, resolution.ToolCallID)
+		if len(output) == 0 || string(output) == "null" {
+			output = []byte("{}")
+		}
+
+		inputDigest, inputBytes, err := audit.CanonicalDigest(input)
+		if err != nil {
+			return domain.NewError(domain.CodeToolProvenanceInvalid, "digest client tool input", err)
+		}
+		outputDigest, outputBytes, err := audit.CanonicalDigest(output)
+		if err != nil {
+			return domain.NewError(domain.CodeToolProvenanceInvalid, "digest client tool output", err)
+		}
+
+		eventType := audit.EventToolCallCompleted
+		status := audit.StatusSucceeded
+		errorCode := ""
+		errorMessage := ""
+		if !resolution.Status.Resolved() {
+			eventType = audit.EventToolCallFailed
+			status = audit.StatusFailed
+			errorCode = domain.CodeToolExecutionCancelled
+			errorMessage = "client tool was cancelled"
+		}
+		if outputError != "" && status == audit.StatusSucceeded {
+			eventType = audit.EventToolCallFailed
+			status = audit.StatusFailed
+			errorCode = domain.CodeToolExecutionFailed
+			errorMessage = outputError
+		}
+
+		now := a.now()
+		record := evidence.ToolCallRecord{
+			RootRunID:    scope.identity.RunID,
+			RunID:        scope.identity.RunID,
+			ThreadID:     scope.identity.ThreadID,
+			UserID:       scope.identity.UserID,
+			CallID:       resolution.ToolCallID,
+			Tool:         resolution.ToolName,
+			AgentName:    agentName,
+			MCPServer:    ClientToolServer,
+			Status:       status,
+			StartedAt:    now,
+			FinishedAt:   now,
+			DurationMS:   0,
+			InputDigest:  inputDigest,
+			InputBytes:   inputBytes,
+			OutputDigest: outputDigest,
+			OutputBytes:  outputBytes,
+			ErrorCode:    errorCode,
+			ErrorMessage: errorMessage,
+		}
+		if auditErr := a.record(ctx, scope, record, eventType); auditErr != nil {
+			return auditErr
+		}
+		a.removeClientPendingResolution(resolution.ToolCallID)
+	}
+	return nil
+}
+
+func (a *ToolExecutionAuditor) removeClientPendingResolution(toolCallID string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for key, record := range a.pending {
+		if record.MCPServer == ClientToolServer && record.CallID == toolCallID {
+			delete(a.pending, key)
+		}
+	}
 }

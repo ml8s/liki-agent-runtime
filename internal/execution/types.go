@@ -101,7 +101,24 @@ type ClientToolResolution struct {
 	InterruptID string
 	ToolCallID  string
 	ToolName    string
-	Resolved    bool
+	Status      ClientToolResolutionStatus
+}
+
+// ClientToolResolutionStatus is the runtime-neutral state of a frontend
+// interrupt resolution.
+type ClientToolResolutionStatus string
+
+const (
+	// ClientToolResolutionResolved means the frontend accepted and executed the
+	// tool call.
+	ClientToolResolutionResolved ClientToolResolutionStatus = "resolved"
+	// ClientToolResolutionCancelled means the frontend explicitly cancelled it.
+	ClientToolResolutionCancelled ClientToolResolutionStatus = "cancelled"
+)
+
+// Resolved reports whether the frontend supplied an authoritative result.
+func (s ClientToolResolutionStatus) Resolved() bool {
+	return s == ClientToolResolutionResolved
 }
 
 // Identity projects caller-owned request identity for lifecycle validation.

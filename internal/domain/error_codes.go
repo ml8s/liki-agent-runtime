@@ -30,6 +30,7 @@ const (
 	CodeToolProvenanceInvalid    = "tool_provenance_invalid"
 	CodeToolExecutionFailed      = "tool_execution_failed"
 	CodeToolExecutionInterrupted = "tool_execution_interrupted"
+	CodeToolExecutionCancelled   = "tool_execution_cancelled"
 	CodeDelegationUnknown        = "agent_delegation_unknown"
 	CodeDelegationFailed         = "agent_delegation_failed"
 	CodeAuditRecorderMissing     = "audit_recorder_missing"

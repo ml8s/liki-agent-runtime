@@ -40,7 +40,7 @@ func (r *Runtime) closeRunEvidence(ctx context.Context, scope *runExecution, cau
 	if err := r.delegationAuditor.FailPending(ctx, scope); err != nil && cause == nil {
 		cause = err
 	}
-	if err := r.toolAuditor.FailPending(ctx, scope); err != nil && cause == nil {
+	if err := r.toolAuditor.FailPending(ctx, scope, outcome == auditOutcomePaused); err != nil && cause == nil {
 		cause = err
 	}
 	if cause != nil && outcome == auditOutcomeCompleted {
@@ -62,5 +62,13 @@ func (r *Runtime) closeRunEvidence(ctx context.Context, scope *runExecution, cau
 		eventType = audit.EventRunFailed
 	}
 	status := audit.StatusFor(eventType)
-	return r.recordRunAudit(ctx, scope, eventType, status, cause)
+	eventPayload := map[string]any(nil)
+	if outcome == auditOutcomePaused && len(scope.pendingClientTools) != 0 {
+		pendingIDs := make([]string, 0, len(scope.pendingClientTools))
+		for _, pending := range scope.pendingClientTools {
+			pendingIDs = append(pendingIDs, pending.ToolCallID)
+		}
+		eventPayload = map[string]any{"pending_tool_call_ids": pendingIDs}
+	}
+	return r.recordRunAudit(ctx, scope, eventType, status, cause, eventPayload)
 }

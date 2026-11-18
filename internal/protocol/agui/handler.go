@@ -243,7 +243,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"definition": result.Definition,
 			"output":     json.RawMessage(result.Output),
 			"answer":     result.Text,
-			"usage":      result.Usage,
 		}
 		next, outgoing := streamer.finishRun(finished)
 		if err := emitAll(outgoing); err != nil {

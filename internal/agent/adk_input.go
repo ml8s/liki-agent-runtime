@@ -35,7 +35,7 @@ func BuildResumeContent(request execution.RunRequest) *genai.Content {
 		resolutions = append(resolutions, map[string]any{
 			"interrupt_id": resume.InterruptID,
 			"tool_call_id": resume.ToolCallID,
-			"status":       map[bool]string{true: "resolved", false: "cancelled"}[resume.Resolved],
+			"status":       string(resume.Status),
 		})
 	}
 	var prompt strings.Builder

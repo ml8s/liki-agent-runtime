@@ -211,10 +211,10 @@ func TestToolAuditorFailsPendingWhenRunEnds(t *testing.T) {
 		t.Fatalf("BeforeTool() error = %v", err)
 	}
 
-	if err := auditor.FailPending(ctx, newTestScope()); err != nil {
+	if err := auditor.FailPending(ctx, newTestScope(), false); err != nil {
 		t.Fatalf("FailPending() error = %v", err)
 	}
-	if err := auditor.FailPending(ctx, newTestScope()); err != nil {
+	if err := auditor.FailPending(ctx, newTestScope(), false); err != nil {
 		t.Fatalf("second FailPending() error = %v", err)
 	}
 
@@ -265,13 +265,13 @@ func TestToolAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 	if _, err := auditor.AfterTool(ctx, fakeTool("test_test_tool"), nil, map[string]any{"ok": true}, nil); err == nil {
 		t.Fatal("AfterTool() unexpectedly survived terminal audit failure")
 	}
-	if err := auditor.FailPending(context.Background(), scope); err != nil {
+	if err := auditor.FailPending(context.Background(), scope, false); err != nil {
 		t.Fatalf("FailPending() reconciliation error = %v", err)
 	}
 	if got := len(events.eventsOfType(audit.EventToolCallFailed)); got != 1 {
 		t.Fatalf("terminal failed events = %d, want 1", got)
 	}
-	if err := auditor.FailPending(context.Background(), scope); err != nil {
+	if err := auditor.FailPending(context.Background(), scope, false); err != nil {
 		t.Fatalf("second FailPending() error = %v", err)
 	}
 	if got := len(events.eventsOfType(audit.EventToolCallFailed)); got != 1 {
@@ -301,14 +301,14 @@ func TestToolAuditorFailPendingRetainsRecordForRetry(t *testing.T) {
 	}
 	// First reconciliation hits a transient write failure; the record must stay
 	// pending instead of being dequeued into the void.
-	if err := auditor.FailPending(context.Background(), newTestScope()); err == nil {
+	if err := auditor.FailPending(context.Background(), newTestScope(), false); err == nil {
 		t.Fatal("FailPending() unexpectedly survived a terminal append failure")
 	}
 	if got := len(recorder.eventsOfType(audit.EventToolCallFailed)); got != 0 {
 		t.Fatalf("failed events after failed attempt = %d, want 0", got)
 	}
 	// A retry (cleanup callback) now emits the terminal evidence.
-	if err := auditor.FailPending(context.Background(), newTestScope()); err != nil {
+	if err := auditor.FailPending(context.Background(), newTestScope(), false); err != nil {
 		t.Fatalf("retry FailPending() error = %v", err)
 	}
 	if got := len(recorder.eventsOfType(audit.EventToolCallFailed)); got != 1 {

@@ -154,11 +154,35 @@ func resumeRunProjection(
 		if toolCallID == "" {
 			return nil, nil, nil, fmt.Errorf("resume entry %q requires toolCallId correlation metadata", entry.InterruptID)
 		}
+		toolName := ""
+		for _, message := range messages {
+			for _, call := range message.ToolCalls {
+				if call.ID != toolCallID {
+					continue
+				}
+				toolName = call.Function.Name
+				break
+			}
+			if toolName != "" {
+				break
+			}
+		}
 		resolutions = append(resolutions, execution.ClientToolResolution{
 			InterruptID: entry.InterruptID,
 			ToolCallID:  toolCallID,
-			Resolved:    entry.Status == aguitypes.ResumeStatusResolved,
+			ToolName:    toolName,
+			Status:      execution.ClientToolResolutionStatus(entry.Status),
 		})
+		switch resolutions[len(resolutions)-1].Status {
+		case execution.ClientToolResolutionResolved,
+			execution.ClientToolResolutionCancelled:
+		default:
+			return nil, nil, nil, fmt.Errorf(
+				"resume entry %q has unsupported status %q",
+				entry.InterruptID,
+				entry.Status,
+			)
+		}
 	}
 
 	for _, message := range messages {
@@ -191,10 +215,10 @@ func resumeRunProjection(
 	}
 
 	for index, resolution := range resolutions {
-		if !resolution.Resolved {
+		if !resolution.Status.Resolved() {
 			continue
 		}
-		name := toolNameFromHistory(history, resolution.ToolCallID)
+		name := resolution.ToolName
 		if name == "" {
 			return nil, nil, nil, fmt.Errorf("resume %q references unknown tool call %q", resolution.InterruptID, resolution.ToolCallID)
 		}
@@ -334,17 +358,6 @@ func rawJSON(value any) (json.RawMessage, error) {
 		}
 		return encoded, nil
 	}
-}
-
-func toolNameFromHistory(history []execution.Message, toolCallID string) string {
-	for _, message := range history {
-		for _, call := range message.ToolCalls {
-			if call.ID == toolCallID {
-				return call.Name
-			}
-		}
-	}
-	return ""
 }
 
 func hasToolResult(messages []aguitypes.Message, toolCallID string) bool {

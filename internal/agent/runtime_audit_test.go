@@ -190,8 +190,7 @@ func TestExternalAuditRunAllowsMultipleTasksInOneSession(t *testing.T) {
 	for _, event := range terminal {
 		if event.AgentDefinitionDigest == "" ||
 			event.DefinitionDigest == "" ||
-			event.Model == "" ||
-			event.Provider == "" {
+			event.Protocol == "" {
 			t.Fatalf("terminal audit lacks provenance: %#v", event)
 		}
 	}

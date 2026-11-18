@@ -77,6 +77,18 @@ func (s *MCPServerDefinition) validate() error {
 	if strings.TrimSpace(s.EndpointEnv) == "" || s.EndpointEnv != strings.TrimSpace(s.EndpointEnv) {
 		return validationError(CodeDeploymentMCPServerInvalid, "endpointEnv is required")
 	}
+	if len(s.Name) > 64 {
+		return validationError(CodeDeploymentMCPServerInvalid, "name exceeds maximum length of 64")
+	}
+	for _, char := range s.Name {
+		if char >= 'a' && char <= 'z' ||
+			char >= 'A' && char <= 'Z' ||
+			char >= '0' && char <= '9' ||
+			char == '_' || char == '-' || char == '.' {
+			continue
+		}
+		return validationError(CodeDeploymentMCPServerInvalid, "name %q contains a character invalid for MCP server names", s.Name)
+	}
 	return nil
 }
 

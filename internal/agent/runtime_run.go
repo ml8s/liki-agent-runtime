@@ -100,6 +100,22 @@ func (r *Runtime) Run(
 		runErr = startErr
 		return execution.RunResult{}, runErr
 	}
+	if auditErr := r.toolAuditor.RecordClientToolResolutions(
+		ctx,
+		scope,
+		r.entrypoint.Name,
+		request.Resume,
+		request.History,
+	); auditErr != nil {
+		_ = r.ephemeralSessions.Delete(context.WithoutCancel(ctx), &session.DeleteRequest{
+			AppName:   r.config.AppName,
+			UserID:    request.UserID,
+			SessionID: sessionID,
+		})
+		r.runs.abort(request.RunID)
+		runErr = auditErr
+		return execution.RunResult{}, runErr
+	}
 	defer func() {
 		auditCtx := context.WithoutCancel(ctx)
 		// Terminal evidence transaction (single implementation in
@@ -172,6 +188,7 @@ func (r *Runtime) Run(
 	if pending := state.PendingClientTools(); len(pending) != 0 {
 		result.Definition = r.definition.DeploymentRef()
 		result.PendingClientTools = pending
+		scope.pauseWithClientTools(pending)
 		runSpan.SetStatus(codes.Ok, "paused on client tool")
 		r.config.Logger.InfoContext(ctx, "agent_run_paused_on_client_tool",
 			append(traceLogFields(ctx),
@@ -383,8 +400,12 @@ func (r *Runtime) recordRunAudit(
 	eventType audit.EventType,
 	status audit.Status,
 	cause error,
+	payload map[string]any,
 ) error {
 	event := r.runEvent(ctx, scope, eventType, status, cause)
+	if len(payload) != 0 {
+		event.Payload = payload
+	}
 	event, err := audit.ValidateEvent(event)
 	if err != nil {
 		return err
