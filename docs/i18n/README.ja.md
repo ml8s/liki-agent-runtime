@@ -5,10 +5,12 @@
 
 `agentgo` は `AgentDeployment` アーティファクトを、セルフホスト型でプロトコルネイティブなエージェントサービスに変換します。アーティファクトはルートエージェント、委譲されたサブエージェント、モデル設定、許可された MCP ツールからなるマルチエージェントグラフを記述します。ランタイムがその実行をオーケストレーションし、AG-UI、A2A、Agent Card 経由で提供します。
 
+ルートエージェントからサブエージェントへの委譲はローカルな ADK グラフで実行され、A2A を使用しません。A2A は外部マシンクライアントとリモートエージェントに使用します。
+
 ## ポイント
 
 - **Deployment-first**: 呼び出し側がユーザー、業務データ、セッション、UI を保持します。
-- **Protocol-native**: ブラウザには AG-UI、マシンクライアントには A2A と Agent Card、ツールには MCP を使用します。
+- **Protocol-native**: ブラウザには AG-UI、マシンクライアントとリモートエージェントには A2A と Agent Card、ツールには MCP を使用します。
 - **Operations-ready**: Bearer / OIDC / mTLS 認証、監査証跡、Prometheus / OpenTelemetry、ヘルスプローブを内蔵します。
 - **Self-contained examples**: 最小構成のブラウザチャットと、クリックで解説するアシスタント。
 

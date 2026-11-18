@@ -5,10 +5,12 @@
 
 `agentgo` verwandelt ein `AgentDeployment`-Artefakt in einen selbst gehosteten, protokollnativen Agent-Service. Das Artifact beschreibt Multi-Agent-Graphen mit einem Root-Agent, delegierten Sub-Agents, Modelleinstellungen und allowlisted MCP-Tools; die Runtime orchestriert ihre Ausführung und stellt das Ergebnis über AG-UI, A2A und Agent Card bereit.
 
+Die Delegation vom Root-Agent zu Sub-Agents läuft als lokaler ADK-Graph und nicht über A2A. A2A ist für externe Maschinenclients und Remote-Agents vorgesehen.
+
 ## Kernpunkte
 
 - **Deployment-first**: Aufrufer behalten Nutzer, Geschäftsdaten, Konversationen und UX.
-- **Protocol-native**: AG-UI für Browser, A2A und Agent Card für Maschinenclients, MCP für Tools.
+- **Protocol-native**: AG-UI für Browser; A2A und Agent Card für Maschinenclients und Remote-Agents; MCP für Tools.
 - **Operations-ready**: Bearer / OIDC / mTLS-Identität, Audit-Nachweise, Prometheus / OpenTelemetry und Health Probes.
 - **Self-contained examples**: minimaler Browser-Chat und Klick-Erklär-Assistent.
 

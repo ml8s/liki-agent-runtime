@@ -36,50 +36,52 @@
   <a href="./docs/i18n/README.de.md"><img alt="Deutsch" src="https://img.shields.io/badge/docs-Deutsch-334155?style=flat-square"></a>
 </p>
 
-Agentgo is a standalone deployment runtime for **multi-agent graphs**. An
+Agentgo is a standalone deployment runtime for **local multi-agent graphs**. An
 `AgentDeployment` artifact declares the root agent, delegated sub-agents, model
-settings, and allowlisted MCP tools; the runtime orchestrates their execution
-and serves the result over AG-UI, A2A, and Agent Card.
+settings, and allowlisted MCP tools. The runtime executes root-to-subagent
+delegation as a local ADK graph and serves the result over AG-UI and A2A + Agent
+Card.
 
 Your product code never touches Go, agents, or protocol plumbing. Callers keep
 ownership of users, business context, durable conversations, and user experience.
 
 ```mermaid
 flowchart TB
-    browser["Browser"]
-    remote["Remote agent / service"]
+    browser["Browser / caller gateway"]
+    machine["Machine client / remote agent"]
 
-    subgraph runtime["Runtime"]
+    subgraph runtime["agentgo runtime"]
         direction TB
         agui["AG-UI"]
-        a2a["A2A"]
+        a2a["A2A server"]
         card["Agent Card"]
 
-        subgraph agentGraph["Multi-agent graph"]
+        subgraph agentGraph["Local ADK multi-agent graph"]
             root["Root agent"]
             subagents["Subagents"]
-            root -->|delegate| subagents
+            root -->|"local delegation"| subagents
         end
 
-        agui --> agentGraph
-        a2a --> agentGraph
-        remote -. "Agent Card" .-> card
-        agentGraph -->|LLM API| provider
-        agentGraph -->|MCP| tools
+        agui -->|"run"| agentGraph
+        a2a -->|"run"| agentGraph
+        card --- a2a
+        agentGraph -->|"LLM API"| provider
+        agentGraph -->|"MCP"| tools
     end
 
     provider["LLM provider"]
     tools["MCP tools"]
 
-    browser --> agui
-    remote --> a2a
+    browser -->|"AG-UI SSE"| agui
+    machine -->|"A2A JSON-RPC"| a2a
+    machine -.->|"discover"| card
 
     classDef client fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#7c2d12
     classDef protocol fill:#eef2ff,stroke:#4f46e5,stroke-width:2px,color:#312e81
     classDef core fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#164e63
     classDef dependency fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#14532d
 
-    class browser,remote client
+    class browser,machine client
     class agui,a2a,card protocol
     class agentGraph core
     class provider,tools dependency
@@ -244,6 +246,14 @@ the environment defaults. Priority: per-agent artifact > env default > provider 
 | Browser / gateway | AG-UI SSE | `POST /ag-ui` | chat, tool events, sub-agent lifecycle |
 | Machine discovery | A2A Agent Card | `GET /.well-known/agent-card.json` | standard capability metadata |
 | Tool server | MCP Streamable HTTP | outbound | externally owned tools |
+
+Internal root-to-subagent delegation is local ADK graph execution, not A2A.
+A2A is reserved for external machine clients and remote agents across a runtime
+or trust boundary.
+
+Official specifications: [A2A](https://a2a-protocol.org/v1.0.0/specification/),
+[AG-UI](https://docs.ag-ui.com/introduction), and
+[MCP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).
 
 Operational endpoints: `/livez`, `/readyz`, `/metrics`, `/debug/pprof`
 (opt-in via `AGENTGO_PPROF_ENABLED=1`).

@@ -2,19 +2,27 @@
 
 ## System boundary
 
-`agentgo` is a generic multi-agent runtime. `caller` owns users,
+`agentgo` is a generic runtime for local multi-agent graphs. `caller` owns users,
 authentication, products, payments, entitlements, quota, and durable product
 conversations. The domain content repository owns prompts, skills, domain policy, and
 tool semantics. External MCP servers expose deterministic and judgment tools.
 
 ```text
-Server / machine client
-  ↓ A2A JSON-RPC
-┌──────────────┐   MCP Streamable HTTP
-│ agentgo │──────────────────→ external MCP tools
-└──────────────┘
-  ↑ AG-UI SSE
-caller gateway
+Browser / caller gateway
+  ↓ AG-UI SSE
+
+Machine client / remote agent
+  ↓ A2A JSON-RPC and Agent Card discovery
+┌────────────────────────────┐   LLM provider API
+│ agentgo runtime            │──────────────→ model provider
+│ ┌────────────────────────┐ │
+│ │ local ADK agent graph  │ │
+│ │ root → subagents       │ │
+│ └────────────────────────┘ │
+└────────────────────────────┘
+            │ MCP Streamable HTTP
+            ↓
+      external MCP tools
 ```
 
 There is one execution path and no private `/v1` application API.
@@ -59,7 +67,8 @@ instructions, schemas, and skills roll out and roll back as one unit.
 ## Principles
 
 1. A2A and AG-UI are standard protocol adapters over one shared runtime.
-2. Google ADK Go v2 owns the model/tool execution graph.
+2. Google ADK Go v2 owns the model/tool execution graph and local agent
+   delegation.
 3. MCP is the only boundary to external deterministic tools.
 4. Every tool call is constrained by the Agent's explicit allowlist.
 5. Audit is append-only execution evidence.
@@ -208,6 +217,9 @@ product webhooks.
 A2A is a standard wire protocol, not an agent or persistence API. The runtime
 exposes an A2A protocol server and stores only protocol-owned task/push-config
 state. A2A uses the official A2A Go SDK JSON-RPC binding and ADK A2A executor.
+Root-to-subagent delegation remains local ADK graph execution and does not
+become an A2A task. A2A is reserved for external machine clients and remote
+agents across a runtime or trust boundary.
 The runtime uses the executor's standard ContextID-to-ADK-session mapping. Task
 aggregates, client-registered push callbacks, and official ADK sessions live in
 separate SQLite databases from append-only audit evidence; push is enabled only through its two official dependencies and sends
