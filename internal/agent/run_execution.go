@@ -29,10 +29,14 @@ type runExecution struct {
 	nextCall          int
 	activeCalls       map[string]llmCallRuntime
 
-	llmCalls         int
-	promptTokens     int
-	completionTokens int
-	thoughtTokens    int
+	llmCalls          int
+	promptTokens      int
+	completionTokens  int
+	thoughtTokens     int
+	totalTokens       int64
+	cachedInputTokens int64
+	modelUsage        []execution.ModelTokenUsage
+	modelUsageIndexes map[string]int
 }
 
 // runExecutionParams is the immutable construction contract shared by the
@@ -63,6 +67,7 @@ func newRunExecution(params runExecutionParams) *runExecution {
 		definitionDigest:  params.definitionDigest,
 		startedAt:         params.startedAt,
 		activeCalls:       make(map[string]llmCallRuntime),
+		modelUsageIndexes: make(map[string]int),
 	}
 }
 
@@ -71,11 +76,54 @@ func (s *runExecution) usage() execution.RunUsage {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return execution.RunUsage{
-		LLMCalls:         s.llmCalls,
-		PromptTokens:     s.promptTokens,
-		CompletionTokens: s.completionTokens,
-		ThoughtTokens:    s.thoughtTokens,
+		LLMCalls:          s.llmCalls,
+		PromptTokens:      s.promptTokens,
+		CompletionTokens:  s.completionTokens,
+		ThoughtTokens:     s.thoughtTokens,
+		TotalTokens:       int(s.totalTokens),
+		CachedInputTokens: int(s.cachedInputTokens),
+		Models:            s.modelUsageSnapshot(),
 	}
+}
+
+// addModelUsage records usage as provider/model domain facts. The run-level
+// counters remain totals; AG-UI must not label every token with the
+// entrypoint model.
+func (s *runExecution) addModelUsage(provider, model string, usage execution.LLMTokenUsage) {
+	if s.modelUsageIndexes == nil {
+		s.modelUsageIndexes = make(map[string]int)
+	}
+	key := provider + "\x00" + model
+	index, exists := s.modelUsageIndexes[key]
+	if !exists {
+		s.modelUsage = append(s.modelUsage, execution.ModelTokenUsage{
+			Provider: provider,
+			Model:    model,
+		})
+		index = len(s.modelUsage) - 1
+		s.modelUsageIndexes[key] = index
+	}
+
+	entry := &s.modelUsage[index]
+	entry.LLMCalls++
+	s.llmCalls++
+	s.promptTokens += int(usage.PromptTokens)
+	s.completionTokens += int(usage.CompletionTokens)
+	s.thoughtTokens += int(usage.ThoughtTokens)
+	s.totalTokens += usage.TotalTokens
+	s.cachedInputTokens += usage.CachedInputTokens
+	entry.PromptTokens += int(usage.PromptTokens)
+	entry.CompletionTokens += int(usage.CompletionTokens)
+	entry.ThoughtTokens += int(usage.ThoughtTokens)
+	entry.TotalTokens += int(usage.TotalTokens)
+	entry.CachedInputTokens += int(usage.CachedInputTokens)
+}
+
+func (s *runExecution) modelUsageSnapshot() []execution.ModelTokenUsage {
+	if len(s.modelUsage) == 0 {
+		return nil
+	}
+	return append([]execution.ModelTokenUsage(nil), s.modelUsage...)
 }
 
 type llmCallRuntime struct {

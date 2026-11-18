@@ -1,6 +1,6 @@
 /bin/
 /build/release/
-/node_modules/
+node_modules/
 /data/
 /coverage.out
 /coverage.html

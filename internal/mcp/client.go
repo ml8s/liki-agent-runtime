@@ -95,7 +95,10 @@ func NewToolsets(config ClientConfig, definitions []deployment.MCPServerDefiniti
 		if override, ok := config.TransportOverrides[definition.Name]; ok {
 			transport = override
 		}
-		toolset, err := mcptoolset.New(mcptoolset.Config{Transport: transport})
+		toolset, err := mcptoolset.New(mcptoolset.Config{
+			Transport:      transport,
+			ToolNamePrefix: definition.Name,
+		})
 		if err != nil {
 			return nil, domain.NewError(domain.CodeMCPToolsUnavailable, fmt.Sprintf("create MCP toolset %q", definition.Name), err)
 		}

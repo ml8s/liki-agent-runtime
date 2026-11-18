@@ -58,7 +58,7 @@ func (l *definitionLoader) loadAgents(deployment *AgentDeployment) error {
 		if err != nil {
 			return artifactErrorWrap(CodeDeploymentIdentityInvalid, fmt.Sprintf("agent %q digest", agent.Name), err)
 		}
-		agent.buildToolIndex()
+		agent.buildExposedToolIndex()
 	}
 	return nil
 }

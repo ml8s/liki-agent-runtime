@@ -115,6 +115,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeProtocolError(w, http.StatusUnprocessableEntity, CodeInvalidAGUIRequest, err.Error())
 		return
 	}
+	clientToolNames := make(map[string]struct{}, len(clientTools))
+	for _, clientTool := range clientTools {
+		clientToolNames[clientTool.Name] = struct{}{}
+	}
 	var content string
 	var history []execution.Message
 	var resolutions []execution.ClientToolResolution
@@ -171,8 +175,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	streamer := newStream(streamConfig{
-		runID:      runID,
-		entrypoint: h.entrypoint,
+		runID:           runID,
+		entrypoint:      h.entrypoint,
+		clientToolNames: clientToolNames,
 	})
 	spec := execution.RunRequest{
 		RunID:       runID,
@@ -232,6 +237,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			runID,
 			aguievents.WithSuccessOutcome(),
 		)
+		finished.Outcome.PendingToolCallIDs = streamer.pendingToolCallIDs()
+		finished.Usage = tokenUsage(result.Usage)
 		finished.Result = map[string]any{
 			"definition": result.Definition,
 			"output":     json.RawMessage(result.Output),
@@ -263,6 +270,27 @@ func publicError(err error) (message, code string) {
 		return "agent run exceeded its deadline", domain.CodeRuntimeTimeout
 	}
 	return "agent run failed", domain.CodeRuntimeFailed
+}
+
+// tokenUsage projects aggregated runtime counters into the official AG-UI
+// TokenUsage event type. Pointers preserve meaningful zero counters.
+func tokenUsage(usage execution.RunUsage) []aguievents.TokenUsage {
+	if usage.LLMCalls == 0 {
+		return nil
+	}
+	usages := make([]aguievents.TokenUsage, 0, len(usage.Models))
+	for _, modelUsage := range usage.Models {
+		usages = append(usages, aguievents.TokenUsage{
+			Provider:          modelUsage.Provider,
+			Model:             modelUsage.Model,
+			InputTokens:       aguievents.TokenCount(int64(modelUsage.PromptTokens)),
+			OutputTokens:      aguievents.TokenCount(int64(modelUsage.CompletionTokens)),
+			TotalTokens:       aguievents.TokenCount(int64(modelUsage.TotalTokens)),
+			ReasoningTokens:   aguievents.TokenCount(int64(modelUsage.ThoughtTokens)),
+			CachedInputTokens: aguievents.TokenCount(int64(modelUsage.CachedInputTokens)),
+		})
+	}
+	return usages
 }
 
 func writeProtocolError(w http.ResponseWriter, status int, code, message string) {

@@ -85,9 +85,13 @@ func (b *agentGraphBuilder) build(definition *agentdeployment.ResolvedAgentDefin
 		if len(allowed) == 0 {
 			continue
 		}
+		exposed := make([]string, 0, len(allowed))
+		for _, name := range allowed {
+			exposed = append(exposed, agentdeployment.ExposedToolName(server.Name, name))
+		}
 		toolsets = append(toolsets, tool.FilterToolset(
 			b.deps.mcpToolsets[index],
-			tool.AllowedToolsPredicate(allowed),
+			tool.AllowedToolsPredicate(exposed),
 		))
 	}
 	if binding := skillBinding(declaration); binding != nil {

@@ -121,10 +121,13 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 	}
 	call = execution.NormalizeLLMCall(call)
 	scope.mu.Lock()
-	scope.llmCalls++
-	scope.promptTokens += int(call.PromptTokens)
-	scope.completionTokens += int(call.CompletionTokens)
-	scope.thoughtTokens += int(call.ThoughtTokens)
+	scope.addModelUsage(l.provider, call.Model, execution.LLMTokenUsage{
+		PromptTokens:      call.PromptTokens,
+		CompletionTokens:  call.CompletionTokens,
+		ThoughtTokens:     call.ThoughtTokens,
+		TotalTokens:       call.TotalTokens,
+		CachedInputTokens: call.CachedInputTokens,
+	})
 	scope.mu.Unlock()
 	call = l.withAgent(call, call.AgentName)
 	if err := execution.ValidateLLMCall(call); err != nil {
@@ -144,10 +147,11 @@ func (l *llmCallAuditor) afterModel(ctx agent.Context, response *model.LLMRespon
 	scope.mu.Unlock()
 	if l.metrics != nil {
 		l.metrics.ObserveLLMCall(call.Model, string(call.Status), execution.LLMTokenUsage{
-			PromptTokens:     call.PromptTokens,
-			CompletionTokens: call.CompletionTokens,
-			ThoughtTokens:    call.ThoughtTokens,
-			TotalTokens:      call.TotalTokens,
+			PromptTokens:      call.PromptTokens,
+			CompletionTokens:  call.CompletionTokens,
+			ThoughtTokens:     call.ThoughtTokens,
+			TotalTokens:       call.TotalTokens,
+			CachedInputTokens: call.CachedInputTokens,
 		})
 		l.metrics.ObserveLLMCallLatency(
 			call.Model,
@@ -245,10 +249,11 @@ func llmUsageFromResponse(usage *genai.GenerateContentResponseUsageMetadata) exe
 		return execution.LLMTokenUsage{}
 	}
 	return execution.LLMTokenUsage{
-		PromptTokens:     int64(usage.PromptTokenCount),
-		CompletionTokens: int64(usage.CandidatesTokenCount),
-		ThoughtTokens:    int64(usage.ThoughtsTokenCount),
-		TotalTokens:      int64(usage.TotalTokenCount),
+		PromptTokens:      int64(usage.PromptTokenCount),
+		CompletionTokens:  int64(usage.CandidatesTokenCount),
+		ThoughtTokens:     int64(usage.ThoughtsTokenCount),
+		TotalTokens:       int64(usage.TotalTokenCount),
+		CachedInputTokens: int64(usage.CachedContentTokenCount),
 	}
 }
 

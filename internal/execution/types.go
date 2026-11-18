@@ -127,10 +127,26 @@ type RunResult struct {
 // RunUsage aggregates model usage for one run (counters summed across every
 // finished model call).
 type RunUsage struct {
-	LLMCalls         int `json:"llm_calls"`
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	ThoughtTokens    int `json:"thought_tokens"`
+	LLMCalls          int               `json:"llm_calls"`
+	PromptTokens      int               `json:"prompt_tokens"`
+	CompletionTokens  int               `json:"completion_tokens"`
+	ThoughtTokens     int               `json:"thought_tokens"`
+	TotalTokens       int               `json:"total_tokens"`
+	CachedInputTokens int               `json:"cached_input_tokens"`
+	Models            []ModelTokenUsage `json:"models"`
+}
+
+// ModelTokenUsage is the usage domain fact for one provider/model pair. A
+// multi-agent run must not collapse token evidence into the entrypoint model.
+type ModelTokenUsage struct {
+	Provider          string `json:"provider"`
+	Model             string `json:"model"`
+	LLMCalls          int    `json:"llm_calls"`
+	PromptTokens      int    `json:"prompt_tokens"`
+	CompletionTokens  int    `json:"completion_tokens"`
+	ThoughtTokens     int    `json:"thought_tokens"`
+	TotalTokens       int    `json:"total_tokens"`
+	CachedInputTokens int    `json:"cached_input_tokens"`
 }
 
 // StructuredOutputStateKey returns the ADK session-state key that holds an

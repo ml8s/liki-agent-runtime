@@ -88,7 +88,7 @@ func TestExposesModelText(t *testing.T) {
 	}
 }
 
-func TestToolReferenceFor(t *testing.T) {
+func TestToolReferenceForExposedName(t *testing.T) {
 	definition := &AgentDefinition{
 		Tools: ToolAllowlist{Allow: map[string][]string{
 			"zeta":   {"tool_z"},
@@ -96,16 +96,16 @@ func TestToolReferenceFor(t *testing.T) {
 			"middle": {"tool_m"},
 		}},
 	}
-	definition.buildToolIndex()
-	ref, found := definition.ToolReferenceFor("tool_a")
+	definition.buildExposedToolIndex()
+	ref, found := definition.ToolReferenceForExposedName("alpha_tool_a")
 	if !found || ref.Server != "alpha" || ref.Name != "tool_a" {
 		t.Fatalf("ToolReferenceFor(tool_a) = %#v/%v", ref, found)
 	}
-	ref, found = definition.ToolReferenceFor("shared_tool")
+	ref, found = definition.ToolReferenceForExposedName("alpha_shared_tool")
 	if !found || ref.Server != "alpha" {
 		t.Fatalf("ToolReferenceFor(shared_tool) = %#v/%v", ref, found)
 	}
-	if _, found := definition.ToolReferenceFor("missing"); found {
+	if _, found := definition.ToolReferenceForExposedName("missing"); found {
 		t.Fatal("ToolReferenceFor(missing) found, want false")
 	}
 }
@@ -117,7 +117,7 @@ func TestToolReferenceForConcurrentReadsAfterIndexing(_ *testing.T) {
 			"skills": {"skill_a"},
 		}},
 	}
-	definition.buildToolIndex()
+	definition.buildExposedToolIndex()
 
 	const workers = 8
 	const iterations = 200
@@ -127,8 +127,8 @@ func TestToolReferenceForConcurrentReadsAfterIndexing(_ *testing.T) {
 		go func() {
 			defer wg.Done()
 			for range iterations {
-				for _, toolName := range []string{"tool_a", "tool_b", "skill_a", "missing"} {
-					definition.ToolReferenceFor(toolName)
+				for _, toolName := range []string{"engine_tool_a", "engine_tool_b", "skill_a", "missing"} {
+					definition.ToolReferenceForExposedName(toolName)
 				}
 			}
 		}()
@@ -148,6 +148,8 @@ func TestMCPServerDefinitionValidation(t *testing.T) {
 	}{
 		{name: "", endpoint: "URL"},
 		{name: " padded ", endpoint: "URL"},
+		{name: "mcp/a", endpoint: "URL"},
+		{name: strings.Repeat("a", 65), endpoint: "URL"},
 		{name: "mcp-a", endpoint: ""},
 		{name: "mcp-a", endpoint: " padded "},
 	}

@@ -187,21 +187,33 @@ type DeploymentSource interface {
 
 var _ DeploymentSource = (*AgentDeployment)(nil)
 
-// ToolReferenceFor returns the unique server-scoped reference for an
-// allowlisted tool.
-func (a *AgentDefinition) ToolReferenceFor(toolName string) (ToolReference, bool) {
+// ToolReferenceForExposedName returns the server-scoped logical reference for
+// a model-facing exposed tool name.
+func (a *AgentDefinition) ToolReferenceForExposedName(toolName string) (ToolReference, bool) {
 	reference, ok := a.toolRefs[toolName]
 	return reference, ok
 }
 
-func (a *AgentDefinition) buildToolIndex() {
+// ExposedToolName returns the model-facing tool name for a server-scoped
+// allowlisted MCP tool. ADK's official MCP ToolNamePrefix uses
+// "<server>_<name>", which prevents two servers that expose the same tool name
+// from colliding.
+func ExposedToolName(server, name string) string {
+	return server + "_" + name
+}
+
+func (a *AgentDefinition) buildExposedToolIndex() {
 	if a.toolRefs == nil {
 		a.toolRefs = make(map[string]ToolReference, len(a.Tools.Allow))
 	}
 	clear(a.toolRefs)
 	for server, tools := range a.Tools.Allow {
 		for _, name := range tools {
-			a.toolRefs[name] = ToolReference{Server: server, Name: name}
+			toolName := name
+			if server != SkillToolsetServer {
+				toolName = ExposedToolName(server, name)
+			}
+			a.toolRefs[toolName] = ToolReference{Server: server, Name: name}
 		}
 	}
 }

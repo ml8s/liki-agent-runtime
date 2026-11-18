@@ -85,7 +85,7 @@ run:
 	./scripts/dev.sh
 
 conformance: ## Run official-client protocol conformance checks
-	$(GO) test -race -count=1 ./internal/protocol/... ./cmd/mcp-fixture
+	$(GO) test -race -count=1 ./internal/protocol/... ./internal/transport ./cmd/mcp-fixture
 
 security-go: ## Run Go vulnerability scan
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...

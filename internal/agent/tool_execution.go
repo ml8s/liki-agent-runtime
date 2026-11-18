@@ -245,7 +245,7 @@ func (a *ToolExecutionAuditor) startedRecord(
 	if !ok {
 		return evidence.ToolCallRecord{}, domain.NewError(domain.CodeAgentDefinitionInvalid, fmt.Sprintf("tool execution agent %q is not deployed", ctx.AgentName()), nil)
 	}
-	reference, allowed := definition.ToolReferenceFor(tool.Name())
+	reference, allowed := definition.ToolReferenceForExposedName(tool.Name())
 	if !allowed {
 		declared, isClientTool := clientToolFromContext(ctx, tool.Name())
 		if !isClientTool || declared.Name != tool.Name() {

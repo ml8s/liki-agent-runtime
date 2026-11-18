@@ -342,6 +342,10 @@ func TestNewMCPToolsetsMemoizeDiscovery(t *testing.T) {
 	}
 	// Mirror agent graph construction: allowlist filtering after the cache.
 	filtered := tool.FilterToolset(toolsets[0], tool.AllowedToolsPredicate([]string{"test_tool"}))
+	if filteredTools, err := filtered.Tools(systemReadonlyContext{Context: context.Background()}); err != nil || len(filteredTools) != 0 {
+		t.Fatalf("original-name filter after official prefix = %v/%v, want empty", filteredTools, err)
+	}
+	filtered = tool.FilterToolset(toolsets[0], tool.AllowedToolsPredicate([]string{"test_test_tool"}))
 
 	ctx := systemReadonlyContext{Context: context.Background()}
 	for flow := 0; flow < 3; flow++ {
@@ -349,8 +353,8 @@ func TestNewMCPToolsetsMemoizeDiscovery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("flow %d Tools() error = %v", flow, err)
 		}
-		if len(tools) != 1 || tools[0].Name() != "test_tool" {
-			t.Fatalf("flow %d tools = %v, want test_tool", flow, tools)
+		if len(tools) != 1 || tools[0].Name() != "test_test_tool" {
+			t.Fatalf("flow %d tools = %v, want test_test_tool", flow, tools)
 		}
 	}
 	if got := listCalls.Load(); got != 1 {

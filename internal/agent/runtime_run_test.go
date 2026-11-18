@@ -274,7 +274,7 @@ func TestRuntimeRunExecutesMCPToolBeforeAuditCompletion(t *testing.T) {
 	events := &recordingAudit{}
 	runtime := newTestRuntime(t, plainTestDeployment(t), events, &turnBasedLLM{turns: []*model.LLMResponse{
 		{Content: &genai.Content{Role: "model", Parts: []*genai.Part{
-			{FunctionCall: &genai.FunctionCall{ID: "call_tool", Name: "test_tool"}},
+			{FunctionCall: &genai.FunctionCall{ID: "call_tool", Name: "test_test_tool"}},
 		}}},
 		{Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: "final answer"}}}},
 	}})

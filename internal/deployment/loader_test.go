@@ -144,19 +144,19 @@ func TestLoadAgentDeploymentRejectsInvalidManifests(t *testing.T) {
 			wantErr: `duplicate MCP server "test"`,
 		},
 		{
-			name: "duplicate tool name across servers",
+			name: "exposed MCP tool name collision",
 			manifest: strings.Replace(
 				strings.Replace(
 					validManifest(),
 					`"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}]`,
-					`"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}, {"name": "other", "endpointEnv": "OTHER_MCP_ENDPOINT"}]`,
+					`"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}, {"name": "test_test", "endpointEnv": "OTHER_MCP_ENDPOINT"}]`,
 					1,
 				),
 				`"allow": {"test": ["test_tool"], "skilltoolset"`,
-				`"allow": {"test": ["test_tool"], "other": ["test_tool"], "skilltoolset"`,
+				`"allow": {"test": ["test_tool"], "test_test": ["tool"], "skilltoolset"`,
 				1,
 			),
-			wantErr: `allowlisted by multiple MCP servers`,
+			wantErr: `exposed tool name "test_test_tool" collides between MCP servers`,
 		},
 		{
 			name: "skills root must match absolute path pattern",
@@ -199,6 +199,34 @@ func TestLoadAgentDeploymentRejectsInvalidManifests(t *testing.T) {
 				t.Fatalf("LoadAgentDeployment() error = %v, want %q", err, testCase.wantErr)
 			}
 		})
+	}
+}
+
+func TestLoadAgentDeploymentAllowsSameLogicalToolAcrossServers(t *testing.T) {
+	manifest := strings.Replace(
+		strings.Replace(
+			validManifest(),
+			`"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}]`,
+			`"mcpServers": [{"name": "test", "endpointEnv": "TEST_MCP_ENDPOINT"}, {"name": "other", "endpointEnv": "OTHER_MCP_ENDPOINT"}]`,
+			1,
+		),
+		`"allow": {"test": ["test_tool"], "skilltoolset"`,
+		`"allow": {"test": ["test_tool"], "other": ["test_tool"], "skilltoolset"`,
+		1,
+	)
+	root := t.TempDir()
+	deployment := writeDeployment(t, root, manifest)
+	entrypoint, err := deployment.EntrypointDefinition()
+	if err != nil {
+		t.Fatalf("EntrypointDefinition() error = %v", err)
+	}
+	ref, found := entrypoint.ToolReferenceForExposedName("test_test_tool")
+	if !found || ref.Server != "test" || ref.Name != "test_tool" {
+		t.Fatalf("ToolReferenceFor(test_test_tool) = %#v/%v, want test/test_tool", ref, found)
+	}
+	ref, found = entrypoint.ToolReferenceForExposedName("other_test_tool")
+	if !found || ref.Server != "other" || ref.Name != "test_tool" {
+		t.Fatalf("ToolReferenceFor(other_test_tool) = %#v/%v, want other/test_tool", ref, found)
 	}
 }
 

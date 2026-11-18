@@ -20,10 +20,11 @@ const (
 
 // LLMTokenUsage is the token accounting for one model call.
 type LLMTokenUsage struct {
-	PromptTokens     int64
-	CompletionTokens int64
-	ThoughtTokens    int64
-	TotalTokens      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	ThoughtTokens     int64
+	TotalTokens       int64
+	CachedInputTokens int64
 }
 
 // LLMCall is one auditable model invocation inside a run.
@@ -42,6 +43,7 @@ type LLMCall struct {
 	CompletionTokens      int64
 	ThoughtTokens         int64
 	TotalTokens           int64
+	CachedInputTokens     int64
 	DurationMS            int64
 	ErrorCode             string
 	ErrorMessage          string
@@ -96,6 +98,7 @@ func CompleteLLMCall(
 	next.CompletionTokens = usage.CompletionTokens
 	next.ThoughtTokens = usage.ThoughtTokens
 	next.TotalTokens = usage.TotalTokens
+	next.CachedInputTokens = usage.CachedInputTokens
 	next.FinishedAt = finishedAt
 	next.DurationMS = finishedAt.Sub(call.StartedAt).Milliseconds()
 	return next

@@ -219,11 +219,12 @@ func (l *llmCallAuditor) recordCall(ctx context.Context, scope *runExecution, ca
 		event.SpanID = scope.provenance.SpanID
 	}
 	event.Payload = map[string]any{
-		"prompt_version":    call.PromptVersion,
-		"prompt_tokens":     call.PromptTokens,
-		"completion_tokens": call.CompletionTokens,
-		"thought_tokens":    call.ThoughtTokens,
-		"total_tokens":      call.TotalTokens,
+		"prompt_version":      call.PromptVersion,
+		"prompt_tokens":       call.PromptTokens,
+		"completion_tokens":   call.CompletionTokens,
+		"thought_tokens":      call.ThoughtTokens,
+		"total_tokens":        call.TotalTokens,
+		"cached_input_tokens": call.CachedInputTokens,
 	}
 	if eventType == audit.EventLLMCallStarted {
 		event.OccurredAt = call.StartedAt

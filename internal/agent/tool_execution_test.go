@@ -88,11 +88,11 @@ func newToolAuditor(t *testing.T) (*ToolExecutionAuditor, *recordingAudit, *stub
 func TestToolAuditorRecordsSuccessfulCall(t *testing.T) {
 	auditor, events, metrics, ctx := newToolAuditor(t)
 	args := map[string]any{"question": "career"}
-	replacement, err := auditor.BeforeTool(ctx, fakeTool("test_tool"), args)
+	replacement, err := auditor.BeforeTool(ctx, fakeTool("test_test_tool"), args)
 	if replacement != nil || err != nil {
 		t.Fatalf("BeforeTool() = %#v, %v, want nil replacement", replacement, err)
 	}
-	if _, err := auditor.AfterTool(ctx, fakeTool("test_tool"), args, map[string]any{"answer": "ok"}, nil); err != nil {
+	if _, err := auditor.AfterTool(ctx, fakeTool("test_test_tool"), args, map[string]any{"answer": "ok"}, nil); err != nil {
 		t.Fatalf("AfterTool() error = %v", err)
 	}
 	started := events.eventsOfType(audit.EventToolCallStarted)
@@ -118,8 +118,30 @@ func TestToolAuditorRecordsSuccessfulCall(t *testing.T) {
 	if completed[0].Payload["mcp_server"] != "test" {
 		t.Fatalf("MCP server provenance = %#v, want test", completed[0].Payload["mcp_server"])
 	}
-	if len(metrics.calls) != 1 || metrics.calls[0] != "main/test_tool/succeeded" {
+	if len(metrics.calls) != 1 || metrics.calls[0] != "main/test_test_tool/succeeded" {
 		t.Fatalf("tool metrics = %v", metrics.calls)
+	}
+}
+
+func TestToolAuditorMapsPrefixedMCPToolToLogicalAllowlist(t *testing.T) {
+	auditor, events, metrics, ctx := newToolAuditor(t)
+	args := map[string]any{"question": "career"}
+	replacement, err := auditor.BeforeTool(ctx, fakeTool("test_test_tool"), args)
+	if replacement != nil || err != nil {
+		t.Fatalf("BeforeTool() = %#v, %v, want nil replacement", replacement, err)
+	}
+	if _, err := auditor.AfterTool(ctx, fakeTool("test_test_tool"), args, map[string]any{"answer": "ok"}, nil); err != nil {
+		t.Fatalf("AfterTool() error = %v", err)
+	}
+	started := events.eventsOfType(audit.EventToolCallStarted)
+	if len(started) != 1 || started[0].ToolName != "test_test_tool" {
+		t.Fatalf("started event = %#v, want exposed tool name", started[0])
+	}
+	if started[0].Payload["mcp_server"] != "test" {
+		t.Fatalf("started MCP server provenance = %#v, want test", started[0].Payload["mcp_server"])
+	}
+	if len(metrics.calls) != 1 || metrics.calls[0] != "main/test_test_tool/succeeded" {
+		t.Fatalf("tool metrics = %#v, want exposed model-facing tool name", metrics.calls)
 	}
 }
 
@@ -157,11 +179,11 @@ func TestToolAuditorSkipsBuiltInADKTransferTool(t *testing.T) {
 
 func TestToolAuditorRecordsFailedCall(t *testing.T) {
 	auditor, events, metrics, ctx := newToolAuditor(t)
-	if _, err := auditor.BeforeTool(ctx, fakeTool("test_tool"), nil); err != nil {
+	if _, err := auditor.BeforeTool(ctx, fakeTool("test_test_tool"), nil); err != nil {
 		t.Fatalf("BeforeTool() error = %v", err)
 	}
 	toolErr := errors.New("tool failed: secret domain payload")
-	result, auditErr := auditor.AfterTool(ctx, fakeTool("test_tool"), nil, nil, toolErr)
+	result, auditErr := auditor.AfterTool(ctx, fakeTool("test_test_tool"), nil, nil, toolErr)
 	if !errors.Is(auditErr, toolErr) || result != nil {
 		t.Fatalf("AfterTool() = %#v, %v, want original error", result, auditErr)
 	}
@@ -185,7 +207,7 @@ func TestToolAuditorRecordsFailedCall(t *testing.T) {
 
 func TestToolAuditorFailsPendingWhenRunEnds(t *testing.T) {
 	auditor, events, metrics, ctx := newToolAuditor(t)
-	if _, err := auditor.BeforeTool(ctx, fakeTool("test_tool"), map[string]any{"input": "value"}); err != nil {
+	if _, err := auditor.BeforeTool(ctx, fakeTool("test_test_tool"), map[string]any{"input": "value"}); err != nil {
 		t.Fatalf("BeforeTool() error = %v", err)
 	}
 
@@ -237,10 +259,10 @@ func TestToolAuditorRetainsPendingWhenTerminalAuditWriteFails(t *testing.T) {
 		agentName:      "main",
 		functionCallID: "call_1",
 	}
-	if _, err := auditor.BeforeTool(ctx, fakeTool("test_tool"), nil); err != nil {
+	if _, err := auditor.BeforeTool(ctx, fakeTool("test_test_tool"), nil); err != nil {
 		t.Fatalf("BeforeTool() error = %v", err)
 	}
-	if _, err := auditor.AfterTool(ctx, fakeTool("test_tool"), nil, map[string]any{"ok": true}, nil); err == nil {
+	if _, err := auditor.AfterTool(ctx, fakeTool("test_test_tool"), nil, map[string]any{"ok": true}, nil); err == nil {
 		t.Fatal("AfterTool() unexpectedly survived terminal audit failure")
 	}
 	if err := auditor.FailPending(context.Background(), scope); err != nil {
@@ -274,7 +296,7 @@ func TestToolAuditorFailPendingRetainsRecordForRetry(t *testing.T) {
 		agentName:      "main",
 		functionCallID: "call_retry",
 	}
-	if _, err := auditor.BeforeTool(ctx, fakeTool("test_tool"), map[string]any{"input": "x"}); err != nil {
+	if _, err := auditor.BeforeTool(ctx, fakeTool("test_test_tool"), map[string]any{"input": "x"}); err != nil {
 		t.Fatalf("BeforeTool() error = %v", err)
 	}
 	// First reconciliation hits a transient write failure; the record must stay

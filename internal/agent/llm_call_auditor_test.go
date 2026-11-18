@@ -204,9 +204,11 @@ func TestLedgerAggregatesRunUsage(t *testing.T) {
 	responses := []*model.LLMResponse{
 		{ModelVersion: "test-model", UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
 			PromptTokenCount: 10, CandidatesTokenCount: 20, ThoughtsTokenCount: 1,
+			TotalTokenCount: 31, CachedContentTokenCount: 4,
 		}},
 		{ModelVersion: "test-model", UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
 			PromptTokenCount: 5, CandidatesTokenCount: 7, ThoughtsTokenCount: 2,
+			TotalTokenCount: 14,
 		}},
 	}
 	for _, response := range responses {
@@ -219,8 +221,13 @@ func TestLedgerAggregatesRunUsage(t *testing.T) {
 	}
 	usage := scope.usage()
 	if usage.LLMCalls != 2 || usage.PromptTokens != 15 ||
-		usage.CompletionTokens != 27 || usage.ThoughtTokens != 3 {
+		usage.CompletionTokens != 27 || usage.ThoughtTokens != 3 ||
+		usage.TotalTokens != 45 || usage.CachedInputTokens != 4 {
 		t.Fatalf("aggregated usage = %+v", usage)
+	}
+	if len(usage.Models) != 1 || usage.Models[0].Provider != "test" ||
+		usage.Models[0].Model != "test-model" || usage.Models[0].LLMCalls != 2 {
+		t.Fatalf("model usage = %#v, want one test-provider/test-model entry", usage.Models)
 	}
 }
 
@@ -491,12 +498,16 @@ func TestLLMUsageFromResponse(t *testing.T) {
 		t.Fatalf("llmUsageFromResponse(nil) = %+v, want zero", got)
 	}
 	got := llmUsageFromResponse(&genai.GenerateContentResponseUsageMetadata{
-		PromptTokenCount:     10,
-		CandidatesTokenCount: 2,
-		ThoughtsTokenCount:   1,
-		TotalTokenCount:      13,
+		PromptTokenCount:        10,
+		CandidatesTokenCount:    2,
+		ThoughtsTokenCount:      1,
+		TotalTokenCount:         13,
+		CachedContentTokenCount: 6,
 	})
-	want := execution.LLMTokenUsage{PromptTokens: 10, CompletionTokens: 2, ThoughtTokens: 1, TotalTokens: 13}
+	want := execution.LLMTokenUsage{
+		PromptTokens: 10, CompletionTokens: 2, ThoughtTokens: 1, TotalTokens: 13,
+		CachedInputTokens: 6,
+	}
 	if got != want {
 		t.Fatalf("llmUsageFromResponse() = %+v, want %+v", got, want)
 	}

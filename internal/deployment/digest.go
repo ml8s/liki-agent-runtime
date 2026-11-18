@@ -114,7 +114,7 @@ func (d *AgentDeployment) Clone() (*AgentDeployment, error) {
 			agent.Temperature = &temperature
 		}
 		agent.toolRefs = nil
-		agent.buildToolIndex()
+		agent.buildExposedToolIndex()
 		if agent.RawOutputSchema != nil {
 			rawSchema, err := deepCopyJSONValue(agent.RawOutputSchema)
 			if err != nil {

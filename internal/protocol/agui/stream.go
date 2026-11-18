@@ -21,8 +21,9 @@ func (s stream) finishRun(event *aguievents.RunFinishedEvent) (stream, []aguieve
 
 // streamConfig is immutable protocol identity for one AG-UI run.
 type streamConfig struct {
-	runID      string
-	entrypoint string
+	runID           string
+	entrypoint      string
+	clientToolNames map[string]struct{}
 }
 
 // streamState is explicit transition state owned by one AG-UI run. consume
@@ -38,6 +39,7 @@ type streamState struct {
 	textActive       bool
 	rootStreamedText bool
 	runFinished      bool
+	openToolCalls    []openToolCall
 }
 
 // stream pairs immutable protocol identity with explicit transition state.
@@ -85,6 +87,7 @@ func (s stream) consume(event *session.Event) (stream, []aguievents.Event) {
 		call := part.FunctionCall
 		var callID string
 		next.state, callID = nextToolCallID(next.state, next.config.runID, call.Name, call.ID)
+		next.state = appendOpenToolCallID(next.state, callID, call.Name)
 		start := aguievents.NewToolCallStartEvent(callID, call.Name)
 		start.SubagentRunID = subagentID
 		args, err := json.Marshal(call.Args)
@@ -121,6 +124,7 @@ func (s stream) consume(event *session.Event) (stream, []aguievents.Event) {
 		resultEvent.SubagentRunID = subagentID
 		outgoing = append(outgoing, resultEvent)
 		next = next.releaseToolCallID(response.Name)
+		next.state = releaseOpenToolCallID(next.state, responseID)
 	}
 	return next, outgoing
 }
@@ -164,5 +168,25 @@ func (s streamState) clone() streamState {
 			next.toolIDs[toolName] = id
 		}
 	}
+	if s.openToolCalls != nil {
+		next.openToolCalls = append([]openToolCall(nil), s.openToolCalls...)
+	}
 	return next
+}
+
+// pendingToolCallIDs returns deterministic IDs for tool calls opened by the
+// model but never closed by a FunctionResponse. These are the frontend calls
+// that a successful run leaves for the application to answer later.
+func (s stream) pendingToolCallIDs() []string {
+	if len(s.state.openToolCalls) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(s.state.openToolCalls))
+	for _, openCall := range s.state.openToolCalls {
+		if _, isClientTool := s.config.clientToolNames[openCall.ToolName]; !isClientTool {
+			continue
+		}
+		ids = append(ids, openCall.ID)
+	}
+	return ids
 }

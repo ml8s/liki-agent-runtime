@@ -113,6 +113,10 @@ Copy `dev/agent-deployment/` as a starting point. The artifact declares:
 - logical MCP servers bound to environment variables;
 - delegation edges (`sub_agents`) for multi-agent trees.
 
+MCP allowlists use logical tool names. At runtime, ADK namespaces exposed tools
+as `<server>_<name>` so two servers can safely expose the same name; audit
+records map those model-facing names back to their logical server.
+
 The unique root agent is the entrypoint. Prompts are external files; plain
 text is the default. Typed output declares a JSON Schema plus a JSON Pointer
 to the user-facing string.

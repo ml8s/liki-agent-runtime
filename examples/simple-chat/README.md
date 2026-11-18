@@ -37,6 +37,7 @@ The defaults use DeepSeek through its OpenAI-compatible endpoint.
 | [`chat-ui/index.html`](./chat-ui/index.html) | Minimal browser UI using the AG-UI client |
 | [`chat-ui/app.js`](./chat-ui/app.js) | Browser-side AG-UI event handling |
 | [`chat-ui/vendor/ag-ui-client.js`](./chat-ui/vendor/ag-ui-client.js) | Locally vendored AG-UI client and dependencies |
+| [`chat-ui/package.json`](./chat-ui/package.json) | Pins and rebuilds the vendored AG-UI bundle |
 | [`chat-ui/Caddyfile`](./chat-ui/Caddyfile) | Serves the UI and proxies `/ag-ui` |
 
 ## Quick start
@@ -58,6 +59,15 @@ Open:
 
 agentgo is not published to the host. The browser talks only to `chat-ui`, and
 `chat-ui` forwards `/ag-ui` to the runtime.
+
+The checked-in AG-UI bundle is built from `chat-ui/package.json`. To regenerate
+it after changing or upgrading the dependency:
+
+```bash
+cd examples/simple-chat/chat-ui
+npm ci
+npm run build:vendor
+```
 
 ## Make targets
 

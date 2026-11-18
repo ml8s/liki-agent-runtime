@@ -49,7 +49,7 @@ func (d *AgentDeployment) validate() error {
 			return validationError(CodeDeploymentAgentDuplicate, "duplicate agent name %q", agent.Name)
 		}
 		names[agent.Name] = struct{}{}
-		agent.buildToolIndex()
+		agent.buildExposedToolIndex()
 	}
 	if err := d.validateAgentGraph(names); err != nil {
 		return err
@@ -61,6 +61,18 @@ func (d *AgentDeployment) validate() error {
 func (s *MCPServerDefinition) validate() error {
 	if strings.TrimSpace(s.Name) == "" || s.Name != strings.TrimSpace(s.Name) {
 		return validationError(CodeDeploymentMCPServerInvalid, "name is required")
+	}
+	if len(s.Name) > 64 {
+		return validationError(CodeDeploymentMCPServerInvalid, "name exceeds maximum length of 64")
+	}
+	for _, char := range s.Name {
+		if char >= 'a' && char <= 'z' ||
+			char >= 'A' && char <= 'Z' ||
+			char >= '0' && char <= '9' ||
+			char == '_' || char == '-' || char == '.' {
+			continue
+		}
+		return validationError(CodeDeploymentMCPServerInvalid, "name %q contains a character invalid for MCP server names", s.Name)
 	}
 	if strings.TrimSpace(s.EndpointEnv) == "" || s.EndpointEnv != strings.TrimSpace(s.EndpointEnv) {
 		return validationError(CodeDeploymentMCPServerInvalid, "endpointEnv is required")
@@ -215,7 +227,7 @@ func (a *AgentDefinition) validate(mcpServers map[string]struct{}) error {
 		return validationError(CodeDeploymentAgentInvalid, "name %q contains characters incompatible with ADK branch paths", a.Name)
 	}
 	seen := make(map[ToolReference]struct{})
-	seenNames := make(map[string]string)
+	exposedNames := make(map[string]ToolReference)
 	for server, tools := range a.Tools.Allow {
 		if server == SkillToolsetServer {
 			if err := ValidateSkillToolsetAllow(tools); err != nil {
@@ -244,11 +256,28 @@ func (a *AgentDefinition) validate(mcpServers map[string]struct{}) error {
 			if _, exists := seen[reference]; exists {
 				return validationError(CodeDeploymentToolAllowlistInvalid, "duplicate tool %q for MCP server %q", tool, server)
 			}
-			if previous, exists := seenNames[tool]; exists {
-				return validationError(CodeDeploymentToolAllowlistInvalid, "tool %q is allowlisted by multiple MCP servers (%q and %q)", tool, previous, server)
-			}
 			seen[reference] = struct{}{}
-			seenNames[tool] = server
+			if server == SkillToolsetServer {
+				continue
+			}
+			exposed := ExposedToolName(server, tool)
+			if previous, exists := exposedNames[exposed]; exists {
+				return validationError(
+					CodeDeploymentToolAllowlistInvalid,
+					"exposed tool name %q collides between MCP servers %q and %q",
+					exposed,
+					previous.Server,
+					server,
+				)
+			}
+			exposedNames[exposed] = reference
+			if len(exposed) > 128 {
+				return validationError(
+					CodeDeploymentToolAllowlistInvalid,
+					"exposed tool name %q exceeds maximum length of 128",
+					exposed,
+				)
+			}
 		}
 	}
 	return nil
