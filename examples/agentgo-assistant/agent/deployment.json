@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "name": "agentgo-assistant",
+    "version": "1.0.0"
+  },
+  "spec": {
+    "mcpServers": [],
+    "agents": [
+      {
+        "name": "agentgo-assistant",
+        "version": "1.0.0",
+        "description": "Embedded assistant that explains elements on the agentgo introduction page",
+        "mode": "chat",
+        "instruction": {
+          "path": "instruction.md"
+        },
+        "tools": {
+          "allow": {}
+        }
+      }
+    ]
+  }
+}

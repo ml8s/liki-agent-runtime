@@ -10,10 +10,10 @@ deployment artifact and provider credentials to a browser conversation.
 browser ──HTTP──> chat-ui ──POST /ag-ui──> agentgo ──LLM──> provider
 ```
 
+![agentgo simple chat animated demo](./assets/simple-chat-demo.gif)
+
 `chat-ui` is a separate example consumer. It serves one static page and proxies
 the standard AG-UI endpoint to agentgo.
-
-![agentgo simple chat demo](./assets/simple-chat.png)
 
 ## Requirements
 
@@ -33,7 +33,6 @@ The defaults use DeepSeek through its OpenAI-compatible endpoint.
 | [`.env.example`](./.env.example) | Template for local, non-secret defaults |
 | [`agent/deployment.json`](./agent/deployment.json) | Declares one chat agent and no tools |
 | [`agent/instruction.md`](./agent/instruction.md) | The agent's identity and prompt |
-| [`assets/simple-chat.png`](./assets/simple-chat.png) | Small screenshot of the example UI |
 | [`chat-ui/index.html`](./chat-ui/index.html) | Minimal browser UI using the AG-UI client |
 | [`chat-ui/app.js`](./chat-ui/app.js) | Browser-side AG-UI event handling |
 | [`chat-ui/vendor/ag-ui-client.js`](./chat-ui/vendor/ag-ui-client.js) | Locally vendored AG-UI client and dependencies |
@@ -83,8 +82,8 @@ Run these commands from `examples/simple-chat/`.
 | `make clean` | Stops, removes containers, and deletes the local data volume |
 | `make help` | Shows the available targets |
 
-`make clean` deletes local demo state. It is intended for a fresh example run,
-not for a workload containing information you need to keep.
+`make clean` deletes the runtime data volume. It is intended for a fresh example
+run, not for a workload containing information you need to keep.
 
 To override the Compose command, use:
 
@@ -156,21 +155,25 @@ auditable; the example intentionally does not implement hot reload.
 To change the agent name, description, artifact version, or future tool policy,
 edit `agent/deployment.json` and restart agentgo.
 
-## Browser behavior
+## Demo behavior
 
-On first load, `index.html` creates random user and thread IDs and stores them,
-along with visible messages, under this localStorage key:
+The UI is a small conversation demo. Messages stay in page memory only, and the
+status pill exposes the current AG-UI task phase:
 
-```text
-agentgo-simple-chat
-```
+| Status | Meaning |
+|---|---|
+| Ready | No run is active |
+| Connecting | The browser is opening `/ag-ui` |
+| Agent running | `RunStarted` arrived |
+| Streaming | Assistant text is streaming |
+| Complete | `RunFinished` arrived |
+| Stopped | The browser aborted the run |
+| Failed | The runtime or provider returned an error |
 
-Reloading the page restores the conversation. To simulate a new browser user:
-
-```js
-localStorage.removeItem("agentgo-simple-chat");
-location.reload();
-```
+The browser creates ephemeral user and thread IDs with `crypto.randomUUID()`.
+They exist only for AG-UI correlation. Reloading the page starts an empty demo
+conversation; this example intentionally has no localStorage, session restore,
+conversation list, or server-side user model.
 
 The browser never receives the provider API key. It only sends AG-UI requests
 to same-origin `/ag-ui`; Caddy forwards that endpoint to internal agentgo.
@@ -288,8 +291,7 @@ make clean
 make setup
 ```
 
-Then edit `.env` and run `make run`. Also clear browser localStorage if you want
-a new user and thread ID.
+Then edit `.env` and run `make run`.
 
 ## Security boundary
 

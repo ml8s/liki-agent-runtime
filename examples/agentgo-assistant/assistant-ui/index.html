@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>agentgo introduction</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f4f7fb;
+      --surface: #ffffff;
+      --ink: #111827;
+      --muted: #4b5563;
+      --line: #d8e0ea;
+      --brand: #4f46e5;
+      --assistant-panel: #101828;
+      --assistant-well: #172033;
+      --assistant-ink: #f8fafc;
+      --assistant-muted: #a5b4fc;
+      --assistant-line: #334155;
+      --state-ready: #4ade80;
+      --state-active: #a5b4fc;
+      --state-neutral: #94a3b8;
+      --state-error: #fca5a5;
+      font-family: system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      background: var(--page);
+      color: var(--ink);
+      margin: 0 auto;
+      max-width: 820px;
+      padding: clamp(1rem, 4vw, 2.5rem);
+    }
+
+    header p, section p, section li { color: var(--muted); }
+
+    section {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: .7rem;
+      margin-top: 1.25rem;
+      box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+      padding: 1rem 1.25rem;
+    }
+
+    h1, h2, h3, p, li { overflow-wrap: anywhere; }
+
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: .4rem;
+      overflow: auto;
+      padding: .75rem;
+    }
+
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .92em; }
+
+    .selected-page-element {
+      outline: 3px solid #2563eb;
+      outline-offset: 3px;
+    }
+
+    #assistant-launcher {
+      align-items: center;
+      appearance: none;
+      background: var(--brand);
+      border: 0;
+      border-radius: 999px;
+      bottom: 1.25rem;
+      box-shadow: 0 .7rem 1.5rem color-mix(in srgb, #4f46e5 30%, transparent);
+      color: white;
+      cursor: pointer;
+      display: flex;
+      font: inherit;
+      font-weight: 650;
+      gap: .5rem;
+      padding: .75rem 1rem;
+      position: fixed;
+      right: 1.25rem;
+      transition: transform .15s ease;
+      white-space: nowrap;
+    }
+
+    #assistant-launcher:hover { transform: translateY(-.1rem); }
+
+    #assistant-dialog {
+      background: var(--assistant-panel);
+      color: var(--assistant-ink);
+      border: 1px solid var(--brand);
+      border-radius: .7rem;
+      bottom: 4.75rem;
+      box-shadow: 0 1rem 2rem rgb(15 23 42 / 22%);
+      display: grid;
+      gap: .6rem;
+      grid-template-rows: auto minmax(0, 1fr) auto auto;
+      height: min(36rem, calc(100dvh - 5.5rem));
+      width: min(24rem, calc(100vw - 2.5rem));
+      padding: .8rem;
+      position: fixed;
+      right: 1.25rem;
+      z-index: 10;
+    }
+
+    #assistant-dialog[hidden] { display: none; }
+
+    #assistant-dialog header {
+      align-items: flex-start;
+      display: flex;
+      gap: .5rem;
+      justify-content: space-between;
+    }
+
+    #assistant-dialog header h2 {
+      font-size: 1rem;
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .assistant-dialog-title { flex: 1; min-width: 0; }
+
+    .assistant-header-controls {
+      align-items: flex-end;
+      display: flex;
+      flex: none;
+      flex-direction: column;
+      gap: .35rem;
+    }
+
+    #agent-run-phase {
+      align-items: center;
+      background: #1d293d;
+      border: 1px solid var(--assistant-line);
+      border-radius: 999px;
+      color: var(--state-neutral);
+      display: inline-flex;
+      font-size: .72rem;
+      gap: .35rem;
+      margin-top: .4rem;
+      max-width: 100%;
+      padding: .2rem .5rem;
+      white-space: nowrap;
+    }
+
+    #agent-run-phase .dot {
+      background: var(--state-neutral);
+      border-radius: 50%;
+      flex: none;
+      height: .4rem;
+      width: .4rem;
+    }
+
+    #agent-run-phase:is(
+      [data-phase="connecting"],
+      [data-phase="running"],
+      [data-phase="streaming"]
+    ) {
+      color: var(--state-active);
+    }
+
+    #agent-run-phase:is(
+      [data-phase="connecting"],
+      [data-phase="running"],
+      [data-phase="streaming"]
+    ) .dot {
+      background: var(--state-active);
+    }
+
+    #agent-run-phase:is([data-phase="idle"], [data-phase="complete"]) {
+      color: var(--state-ready);
+    }
+
+    #agent-run-phase:is([data-phase="idle"], [data-phase="complete"]) .dot {
+      background: var(--state-ready);
+    }
+
+    #agent-run-phase[data-phase="stopped"] {
+      color: var(--state-neutral);
+    }
+
+    #agent-run-phase[data-phase="stopped"] .dot {
+      background: var(--state-neutral);
+    }
+
+    #agent-run-phase[data-phase="error"] {
+      color: var(--state-error);
+    }
+
+    #agent-run-phase[data-phase="error"] .dot {
+      background: var(--state-error);
+    }
+
+    .response-language {
+      color: var(--assistant-muted);
+      font-size: .75rem;
+      margin: .15rem 0 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .page-selection-toggle {
+      align-items: center;
+      color: var(--assistant-muted);
+      cursor: pointer;
+      display: inline-flex;
+      flex: none;
+      font-size: .75rem;
+      gap: .45rem;
+      white-space: nowrap;
+    }
+
+    .page-selection-toggle-input {
+      appearance: none;
+      height: 1px;
+      left: 0;
+      margin: 0;
+      opacity: 0;
+      position: absolute;
+      top: 0;
+      width: 1px;
+    }
+
+    .page-selection-toggle-track {
+      background: #1d293d;
+      border: 1px solid var(--assistant-line);
+      border-radius: 999px;
+      flex: none;
+      height: 1.15rem;
+      position: relative;
+      transition: background .15s ease, border-color .15s ease;
+      width: 2.15rem;
+    }
+
+    .page-selection-toggle-thumb {
+      background: var(--assistant-muted);
+      border-radius: 50%;
+      height: .75rem;
+      left: .15rem;
+      position: absolute;
+      top: .13rem;
+      transition: background .15s ease, transform .15s ease;
+      width: .75rem;
+    }
+
+    .page-selection-toggle-input:checked + .page-selection-toggle-track {
+      background: color-mix(in srgb, var(--brand) 28%, transparent);
+      border-color: var(--brand);
+    }
+
+    .page-selection-toggle-input:checked + .page-selection-toggle-track .page-selection-toggle-thumb {
+      background: var(--brand);
+      transform: translateX(.9rem);
+    }
+
+    .page-selection-toggle-input:focus-visible + .page-selection-toggle-track {
+      outline: 2px solid var(--brand);
+      outline-offset: 2px;
+    }
+
+    #conversation {
+      background: var(--assistant-well);
+      border: 1px solid var(--assistant-line);
+      display: grid;
+      gap: .6rem;
+      overflow: auto;
+      border-radius: .5rem;
+      padding: .7rem;
+      min-height: 0;
+      scrollbar-gutter: stable;
+    }
+
+    .conversation-message {
+      border: 1px solid transparent;
+      border-radius: .45rem;
+      font-size: .9rem;
+      overflow-wrap: anywhere;
+      padding: .6rem;
+      white-space: pre-wrap;
+    }
+
+    #conversation[data-phase="streaming"] .conversation-message.assistant:last-child::after {
+      color: var(--state-active);
+      content: "▍";
+      margin-left: .15rem;
+    }
+
+    .conversation-message.user {
+      background: var(--brand);
+      color: white;
+    }
+
+    .conversation-message.assistant {
+      background: var(--surface);
+      color: var(--ink);
+    }
+
+    #agent-run-detail {
+      font-size: .8rem;
+      margin: 0;
+      min-height: 1.1em;
+      color: var(--assistant-muted);
+    }
+
+    #agent-run-detail.error { color: var(--state-error); font-weight: 650; }
+
+    #assistant-dialog form {
+      display: grid;
+      gap: .5rem;
+    }
+
+    #assistant-dialog form textarea,
+    #assistant-dialog form button {
+      font: inherit;
+    }
+
+    #assistant-dialog form textarea {
+      background: var(--assistant-well);
+      color: var(--assistant-ink);
+      border: 1px solid var(--assistant-line);
+      border-radius: .35rem;
+      padding: .45rem;
+      resize: none;
+    }
+
+    #assistant-dialog form button {
+      background: #1d293d;
+      color: var(--assistant-ink);
+      border: 1px solid var(--assistant-line);
+      border-radius: .35rem;
+      cursor: pointer;
+      padding: .4rem .7rem;
+    }
+
+    #assistant-dialog form button:disabled { opacity: .55; }
+
+    @media (prefers-reduced-motion: no-preference) {
+      #assistant-dialog:not([hidden]) {
+        animation: panel-in .18s cubic-bezier(.2, .8, .2, 1) both;
+      }
+
+      .conversation-message {
+        animation: message-in .18s cubic-bezier(.2, .8, .2, 1) both;
+      }
+
+      #conversation[data-phase="streaming"] .conversation-message.assistant:last-child::after {
+        animation: caret-blink 1s steps(2) infinite;
+      }
+
+      #agent-run-phase:is(
+        [data-phase="connecting"],
+        [data-phase="running"],
+        [data-phase="streaming"]
+      ) .dot {
+        animation: status-pulse 1s ease-in-out infinite;
+      }
+    }
+
+    @keyframes caret-blink {
+      50% { opacity: 0; }
+    }
+
+    @keyframes status-pulse {
+      50% {
+        opacity: .4;
+        transform: scale(1.25);
+      }
+    }
+
+    @keyframes message-in {
+      from {
+        opacity: 0;
+        transform: translateY(.35rem);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes panel-in {
+      from {
+        opacity: 0;
+        transform: translateY(.4rem) scale(.98);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>agentgo</h1>
+    <p>Turn an AgentDeployment artifact into a production-ready agent service.</p>
+  </header>
+
+  <main>
+    <section id="overview">
+      <h2>What agentgo does</h2>
+      <p>agentgo is a standalone runtime for agent graphs. You declare an <code>AgentDeployment</code> artifact; agentgo runs the agent tree, orchestrates model calls and MCP tools, and serves them through standard protocols.</p>
+      <p>Your product does not import agent infrastructure. It consumes a deployed service.</p>
+    </section>
+
+    <section id="workflow">
+      <h2>How it works</h2>
+      <ol>
+        <li>Write a deployment artifact with agents, prompts, and tool allowlists.</li>
+        <li>Point agentgo at your model provider and MCP servers.</li>
+        <li>Call AG-UI or A2A from your product.</li>
+      </ol>
+    </section>
+
+    <section id="quick-start">
+      <h2>Quick start</h2>
+      <pre><code>cd examples/simple-chat
+make setup
+# Edit .env and set AGENTGO_LLM_API_KEY
+make run</code></pre>
+      <p>Open <code>http://localhost:8080/</code> after the stack is healthy.</p>
+    </section>
+
+    <section id="protocols">
+      <h2>Served interfaces</h2>
+      <ul>
+        <li><strong>AG-UI over SSE</strong> for streaming browser sessions.</li>
+        <li><strong>A2A JSON-RPC</strong> for machine clients.</li>
+        <li><strong>Agent Card discovery</strong> for capability lookup.</li>
+      </ul>
+    </section>
+
+    <section id="assistant-demo">
+      <h2>Try the embedded assistant</h2>
+      <p>Select the agentgo assistant in the lower-right corner. Keep <label for="page-selection-mode"><strong>Page selection mode</strong></label> enabled, then click selectable content on this page. The assistant receives that selected content and answers in the dialog.</p>
+    </section>
+  </main>
+
+      <button id="assistant-launcher" type="button" aria-controls="assistant-dialog" aria-expanded="false">
+        <span aria-hidden="true">🧚</span>
+        agentgo assistant
+      </button>
+
+  <aside id="assistant-dialog" hidden aria-label="agentgo assistant">
+    <header>
+      <div class="assistant-dialog-title">
+        <h2>agentgo assistant</h2>
+        <p id="response-language"></p>
+      </div>
+      <div class="assistant-header-controls">
+        <div id="agent-run-phase" data-phase="idle">
+          <span class="dot"></span>
+          <span id="agent-run-phase-label">Ready</span>
+        </div>
+        <label class="page-selection-toggle" for="page-selection-mode">
+          <input class="page-selection-toggle-input" id="page-selection-mode" type="checkbox" checked>
+          <span class="page-selection-toggle-track" aria-hidden="true">
+            <span class="page-selection-toggle-thumb"></span>
+          </span>
+          Explain
+        </label>
+      </div>
+    </header>
+    <div id="conversation" aria-live="polite"></div>
+    <p id="agent-run-detail"></p>
+    <form>
+      <textarea id="conversation-input" rows="3" placeholder="Ask about agentgo" aria-label="Message agentgo assistant"></textarea>
+      <div>
+        <button id="conversation-send" type="submit">Send</button>
+        <button id="conversation-stop" type="button" disabled>Stop</button>
+      </div>
+    </form>
+  </aside>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,150 +1,141 @@
-    import { HttpAgent } from "./vendor/ag-ui-client.js";
+import { HttpAgent } from "./vendor/ag-ui-client.js";
 
-    const conversation = document.querySelector("#conversation");
-    const prompt = document.querySelector("#prompt");
-    const send = document.querySelector("#send");
-    const stop = document.querySelector("#stop");
-    const status = document.querySelector("#status");
-    const storageKey = "agentgo-simple-chat";
-    let currentAgent;
-    let history = [];
+const conversationElement = document.querySelector("#conversation");
+const emptyNotice = document.querySelector("#conversation-empty");
+const promptElement = document.querySelector("#conversation-input");
+const sendButton = document.querySelector("#conversation-send");
+const stopButton = document.querySelector("#conversation-stop");
+const runPhaseElement = document.querySelector("#agent-run-phase");
+const runPhaseLabel = document.querySelector("#agent-run-phase-label");
+const runDetailElement = document.querySelector("#agent-run-detail");
 
-    function loadState() {
-      try {
-        const state = JSON.parse(localStorage.getItem(storageKey) ?? "null");
-        if (
-          state &&
-          typeof state.threadId === "string" &&
-          typeof state.userId === "string" &&
-          Array.isArray(state.messages)
-        ) {
-          return state;
-        }
-      } catch {
-        // A malformed local snapshot is treated like a new conversation.
-      }
-      return {
-        threadId: crypto.randomUUID(),
-        userId: crypto.randomUUID(),
-        messages: [],
-      };
-    }
+// AG-UI requires IDs to correlate one conversation stream. The demo owns no
+// durable session; reloading intentionally starts an empty conversation.
+const runtimeCorrelation = {
+  threadId: crypto.randomUUID(),
+  userId: crypto.randomUUID(),
+};
 
-    const state = loadState();
-    history = state.messages;
+const RUN_PHASE_LABELS = {
+  idle: "Ready",
+  connecting: "Connecting",
+  running: "Agent running",
+  streaming: "Streaming",
+  complete: "Complete",
+  stopped: "Stopped",
+  error: "Failed",
+};
 
-    function persistState() {
-      localStorage.setItem(storageKey, JSON.stringify(state));
-    }
+let activeAgentRun;
+let conversationMessages = [];
 
-    function setStatus(message, isError = false) {
-      status.textContent = message;
-      status.classList.toggle("error", isError);
-    }
+function setAgentRunPhase(phase, detail = "") {
+  runPhaseElement.dataset.phase = phase;
+  conversationElement.dataset.phase = phase;
+  runPhaseLabel.textContent = RUN_PHASE_LABELS[phase];
+  runDetailElement.textContent = detail;
+}
 
-    function appendMessage(role, content, id = crypto.randomUUID()) {
-      const message = { id, role, content };
-      history.push(message);
-      state.messages = history;
-      const element = document.createElement("article");
-      element.className = `message ${role}`;
-      element.dataset.id = id;
-      element.textContent = content;
-      conversation.append(element);
-      element.scrollIntoView({ block: "end" });
-      return message;
-    }
+function scrollConversation() {
+  conversationElement.scrollTop = conversationElement.scrollHeight;
+}
 
-    function renderMessage(message) {
-      const element = conversation.querySelector(
-        `[data-id="${CSS.escape(message.id)}"]`,
-      );
-      if (element) element.textContent = message.content;
-    }
+function appendConversationMessage({ role, content, id = crypto.randomUUID() }) {
+  const message = { id, role, content };
+  conversationMessages.push(message);
+  emptyNotice.textContent = "";
 
-    function setRunning(value) {
-      send.disabled = value;
-      stop.disabled = !value;
-    }
+  const element = document.createElement("article");
+  element.className = `conversation-message ${role}`;
+  element.dataset.id = id;
+  element.textContent = content;
+  conversationElement.append(element);
+  scrollConversation();
+  return message;
+}
 
-    function restoreMessages() {
-      for (const message of history) {
-        const element = document.createElement("article");
-        element.className = `message ${message.role}`;
-        element.dataset.id = message.id;
-        element.textContent = message.content;
-        conversation.append(element);
-      }
-    }
+function renderConversationMessage(message) {
+  const element = conversationElement.querySelector(`[data-id="${CSS.escape(message.id)}"]`);
+  if (element) {
+    element.textContent = message.content;
+    scrollConversation();
+  }
+}
 
-    async function sendMessage() {
-      const content = prompt.value.trim();
-      if (!content || currentAgent) return;
+function setRunControlsEnabled(enabled) {
+  sendButton.disabled = !enabled;
+  stopButton.disabled = enabled;
+}
 
-      prompt.value = "";
-      appendMessage("user", content);
-      persistState();
-      setRunning(true);
-      setStatus("connecting");
+function toProtocolMessages() {
+  return conversationMessages.map(({ id, role, content }) => ({ id, role, content }));
+}
 
-      let assistant;
-      const agent = new HttpAgent({
-        headers: { "X-Agent-User-ID": state.userId },
-        initialMessages: structuredClone(history),
-        threadId: state.threadId,
-        url: "/ag-ui",
-      });
-      currentAgent = agent;
+async function sendConversationMessage() {
+  const content = promptElement.value.trim();
+  if (!content || activeAgentRun) return;
 
-      try {
-        const result = await agent.runAgent({ runId: crypto.randomUUID() }, {
-          onRunStartedEvent() { setStatus("running"); },
-          onTextMessageStartEvent({ event }) {
-            assistant = appendMessage("assistant", "", event.messageId);
-          },
-          onTextMessageContentEvent({ event }) {
-            assistant ??= appendMessage("assistant", "", event.messageId);
-            assistant.content += event.delta;
-            renderMessage(assistant);
-            persistState();
-          },
-          onToolCallStartEvent({ event }) {
-            setStatus(`tool: ${event.toolCallName}`);
-          },
-          onRunFinishedEvent() { setStatus("complete"); },
-          onRunErrorEvent({ event }) {
-            setStatus(event.message || "agent run failed", true);
-          },
-          onRunFailed({ error }) { setStatus(error.message, true); },
-        });
+  promptElement.value = "";
+  appendConversationMessage({ role: "user", content });
+  setRunControlsEnabled(false);
+  setAgentRunPhase("connecting");
 
-        if (!assistant) {
-          const answer = result.newMessages
-            .filter((message) => message.role === "assistant")
-            .at(-1)?.content;
-          if (typeof answer === "string" && answer.length > 0) {
-            appendMessage("assistant", answer);
-          } else {
-            setStatus("agent returned no text", true);
-          }
-        }
-        persistState();
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          setStatus("stopped");
-        } else {
-          setStatus(error instanceof Error ? error.message : String(error), true);
-        }
-      } finally {
-        currentAgent = undefined;
-        setRunning(false);
-      }
-    }
+  let assistantReply;
+  const agentRun = new HttpAgent({
+    headers: { "X-Agent-User-ID": runtimeCorrelation.userId },
+    initialMessages: toProtocolMessages(),
+    threadId: runtimeCorrelation.threadId,
+    url: "/ag-ui",
+  });
+  activeAgentRun = agentRun;
 
-    document.querySelector("form").addEventListener("submit", (event) => {
-      event.preventDefault();
-      void sendMessage();
+  try {
+    const result = await agentRun.runAgent({ runId: crypto.randomUUID() }, {
+      onRunStartedEvent() { setAgentRunPhase("running", "AG-UI run started"); },
+      onTextMessageStartEvent() { setAgentRunPhase("streaming", "assistant reply started"); },
+      onTextMessageContentEvent({ event }) {
+        assistantReply ??= appendConversationMessage({ role: "assistant", content: "", id: event.messageId });
+        assistantReply.content += event.delta;
+        renderConversationMessage(assistantReply);
+      },
+      onRunFinishedEvent() { setAgentRunPhase("complete", "AG-UI run finished"); },
+      onRunErrorEvent({ event }) {
+        setAgentRunPhase("error", event.message || "AG-UI run error");
+      },
+      onRunFailed({ error }) { setAgentRunPhase("error", error.message); },
     });
-    stop.addEventListener("click", () => currentAgent?.abortRun());
 
-    restoreMessages();
+    if (!assistantReply) {
+      const reply = result.newMessages
+        .filter((message) => message.role === "assistant")
+        .at(-1)?.content;
+      if (typeof reply === "string" && reply.length > 0) {
+        appendConversationMessage({ role: "assistant", content: reply });
+      } else {
+        setAgentRunPhase("error", "agent returned no reply");
+      }
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      setAgentRunPhase("stopped", "run aborted");
+    } else {
+      setAgentRunPhase("error", error instanceof Error ? error.message : String(error));
+    }
+  } finally {
+    activeAgentRun = undefined;
+    setRunControlsEnabled(true);
+  }
+}
+
+document.querySelector("form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  void sendConversationMessage();
+});
+
+promptElement.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  void sendConversationMessage();
+});
+
+stopButton.addEventListener("click", () => activeAgentRun?.abortRun());

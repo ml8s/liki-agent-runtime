@@ -1,13 +1,15 @@
 # agentgo
 
-**Turn an `AgentDeployment` artifact into a production-ready agent service — no agent infrastructure to build.**
+**Turn an `AgentDeployment` artifact into a self-hosted, protocol-native agent service — no agent infrastructure to build.**
 
-agentgo is a standalone runtime for agent graphs. You write an
+agentgo is a standalone deployment runtime for agent graphs. You write an
 `AgentDeployment` artifact (JSON + prompt files); agentgo runs the agent tree,
-orchestrates LLM calls and MCP tools, and serves them over standard protocols.
-Your product code never touches Go, agents, or protocol plumbing.
+orchestrates LLM calls and MCP tools, and serves the result over AG-UI, A2A,
+and Agent Card protocols. Your product code never touches Go, agents, or
+protocol plumbing.
 
-![agentgo simple chat demo](examples/simple-chat/assets/simple-chat.png)
+agentgo is deployment-first, not a chat workspace: callers own users, business
+context, durable conversations, and the user experience.
 
 ```mermaid
 %%{init: {
@@ -76,24 +78,87 @@ and maintaining all of this yourself:
 agentgo is not a framework you import into your code. It is a runtime you
 deploy: write the artifact, point it at your LLM and MCP tools, and it serves.
 
-## Quick start
+## Runtime positioning
 
-Run the minimal browser chat example:
+agentgo is a self-hosted runtime for deploying agent services. It is not a
+mini chat platform or an alternative to user-facing AI workspaces such as Open
+WebUI. The comparison below is an explicit boundary, not a feature backlog:
 
-Requires Docker Compose and GNU Make. No local Go or Node.js setup is needed.
+| Concern | Chat UI platform | agentgo |
+|---|---|---|
+| Primary input | An application workspace and UI | An `AgentDeployment` artifact |
+| Users and groups | Product-level user management and access control | Caller-owned identity, mapped at runtime boundaries |
+| Conversations | Durable product state | Caller-owned; bundled examples are in-memory demos |
+| Knowledge and RAG | Often built into the product | Caller-owned content and MCP-provided tools |
+| Tools | Platform extensions and plugins | External MCP services under explicit allowlists |
+| UI | The product | Examples only; production callers own their UX |
+
+Use agentgo when your application needs a self-hosted runtime for protocol
+serving, agent orchestration, tool authorization, audit evidence, and
+observability. Use your own product—or a platform like Open WebUI—when you need
+a full user-facing workspace.
+
+## Quick start and examples
+
+The examples are self-contained agentgo consumers. They demonstrate the public
+runtime surface without adding product capabilities to agentgo.
+
+| Example | Purpose | Port |
+|---|---|---|
+| [`simple-chat`](examples/simple-chat/README.md) | Smallest browser-to-agent AG-UI path | `8080` |
+| [`agentgo-assistant`](examples/agentgo-assistant/README.md) | Caller-owned embedded page-aware assistant | `8081` |
+
+Both examples require Docker Compose and GNU Make; no local Go or Node.js setup
+is needed. Provider credentials stay inside agentgo; the browser consumes only
+public protocols.
 
 ```bash
 git clone https://github.com/ml8s/agentgo.git
-cd agentgo/examples/simple-chat
+cd agentgo
+```
+
+### `simple-chat` — AG-UI conversation and task state
+
+![agentgo simple chat animated demo](examples/simple-chat/assets/simple-chat-demo.gif)
+
+This is the smallest browser-to-agent path. Use it to see:
+
+- one `AgentDeployment` served over AG-UI;
+- streaming assistant text through SSE;
+- runtime task state mapped to `RunStarted`, streaming, `RunFinished`, and errors;
+- an in-memory browser conversation with no localStorage or session management.
+
+```bash
+cd examples/simple-chat
 make setup
 # Edit .env: set AGENTGO_LLM_API_KEY.
 make run
 ```
 
-Open <http://localhost:8080/>. The example starts one agentgo runtime and a
-small UI container that consumes the standard AG-UI endpoint.
-See [`examples/simple-chat/README.md`](examples/simple-chat/README.md) for
-configuration, lifecycle commands, tests, and troubleshooting.
+Open <http://localhost:8080/>.
+
+### `agentgo-assistant` — click-to-explain page context
+
+![agentgo assistant animated demo](examples/agentgo-assistant/assets/assistant-demo.gif)
+
+This demonstrates a caller-owned embedded assistant. Use it to see:
+
+- a floating assistant opening beside normal page content;
+- click-to-explain interaction without activating links or buttons;
+- only the visible selected page content and explicit browser response language;
+- explicit `responseLanguage` from the browser, shown as **Browser language**;
+- follow-up conversation through the same AG-UI endpoint.
+
+```bash
+cd examples/agentgo-assistant
+make setup
+# Edit .env: set AGENTGO_LLM_API_KEY.
+make run
+```
+
+Open <http://localhost:8081/>.
+
+### Local runtime development
 
 For local runtime development with MCP fixtures, run:
 
@@ -105,7 +170,7 @@ make dev
 curl -sS http://127.0.0.1:8085/readyz | jq
 ```
 
-### Your first deployment
+## Deployment model
 
 Copy `dev/agent-deployment/` as a starting point. The artifact declares:
 
@@ -215,7 +280,8 @@ editing history.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | runtime architecture and protocol mapping |
 | [`docs/DOMAIN.md`](docs/DOMAIN.md) | stable runtime domain invariants |
 | [`docs/STANDARDS.md`](docs/STANDARDS.md) | protocol and infrastructure review standards |
-| [`examples/simple-chat`](examples/simple-chat/README.md) | minimal browser chat example |
+| [`examples/simple-chat`](examples/simple-chat/README.md) | minimal in-memory browser chat with AG-UI task state |
+| [`examples/agentgo-assistant`](examples/agentgo-assistant/README.md) | minimal click-to-explain assistant example |
 | [`dev/agent-deployment/deployment.json`](dev/agent-deployment/deployment.json) | runtime validation fixture |
 | [`SECURITY.md`](SECURITY.md) | security policy and required controls |
 
@@ -245,6 +311,10 @@ before submitting a change.
 agentgo is not an Agent management control plane. It does not provide Agent
 CRUD APIs, deployment registries, tenant management, quota enforcement,
 approval workflows, or a management console.
+
+It is also not a chat platform or mini AI workspace. It does not own product
+users, durable conversations, chat history, document libraries, RAG pipelines,
+model catalogs, plugins, calendars, notes, or a user-facing workspace.
 
 `caller` owns users, products, entitlements, quotas, and durable product
 conversations. A domain content repository owns prompts, skills, workflow

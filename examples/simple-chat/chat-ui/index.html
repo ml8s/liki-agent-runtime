@@ -6,56 +6,271 @@
   <title>agentgo simple chat</title>
   <style>
     :root {
-      color-scheme: light dark;
+      color-scheme: light;
+      --page: #f4f7fb;
+      --surface: #ffffff;
+      --ink: #111827;
+      --muted: #4b5563;
+      --line: #d8e0ea;
+      --brand: #4f46e5;
+      --user: #eef2ff;
+      --assistant: #f8fafc;
+      --state-ready: #15803d;
+      --state-active: #4f46e5;
+      --state-neutral: #64748b;
+      --state-error: #b91c1c;
       font-family: system-ui, sans-serif;
     }
 
+    * { box-sizing: border-box; }
+
     body {
-      margin: 0 auto;
-      max-width: 760px;
+      background: var(--page);
+      color: var(--ink);
+      display: grid;
+      margin: 0;
+      min-height: 100dvh;
       padding: 1rem;
+      place-items: center;
     }
 
-    h1 { font-size: 1.15rem; margin: 0 0 1rem; }
-    form { display: grid; gap: .5rem; }
-    textarea, button {
-      border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-      border-radius: .4rem;
-      font: inherit;
-      padding: .5rem;
+    .chat {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: .7rem;
+      box-shadow: 0 1rem 2rem rgb(15 23 42 / 7%);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 1rem;
+      height: min(44rem, calc(100dvh - 2rem));
+      padding: 1rem;
+      width: min(52rem, 100%);
     }
-    textarea { resize: vertical; }
-    button { cursor: pointer; }
-    button:disabled { opacity: .6; }
-    #conversation { display: grid; gap: .75rem; margin: 1rem 0; }
-    .message {
-      border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-      border-radius: .5rem;
+
+    header {
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 1rem;
+      justify-content: space-between;
+      padding-bottom: .85rem;
+    }
+
+    h1 { font-size: 1.1rem; margin: 0; }
+    header p { color: var(--muted); font-size: .85rem; margin: .2rem 0 0; }
+
+    #agent-run-phase {
+      align-items: center;
+      background: var(--assistant);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      display: flex;
+      flex: none;
+      font-size: .8rem;
+      gap: .45rem;
+      padding: .35rem .7rem;
+    }
+
+    .dot {
+      background: var(--state-neutral);
+      border-radius: 50%;
+      flex: none;
+      height: .5rem;
+      width: .5rem;
+    }
+
+    #agent-run-phase:is(
+      [data-state="connecting"],
+      [data-state="running"],
+      [data-state="streaming"]
+    ) {
+      color: var(--state-active);
+    }
+
+    #agent-run-phase:is(
+      [data-state="connecting"],
+      [data-state="running"],
+      [data-state="streaming"]
+    ) .dot {
+      background: var(--state-active);
+    }
+
+    #agent-run-phase:is([data-state="idle"], [data-state="complete"]) {
+      color: var(--state-ready);
+    }
+
+    #agent-run-phase:is([data-state="idle"], [data-state="complete"]) .dot {
+      background: var(--state-ready);
+    }
+
+    #agent-run-phase[data-state="stopped"] {
+      color: var(--state-neutral);
+    }
+
+    #agent-run-phase[data-state="stopped"] .dot {
+      background: var(--state-neutral);
+    }
+
+    #agent-run-phase[data-state="error"] { color: var(--state-error); }
+    #agent-run-phase[data-state="error"] .dot { background: var(--state-error); }
+
+    #agent-run-detail {
+      color: var(--muted);
+      display: none;
+    }
+    #agent-run-detail:not(:empty) { display: inline; }
+
+    #conversation {
+      display: grid;
+      gap: .8rem;
+      align-content: start;
+      min-height: 0;
+      overflow: auto;
+      padding-right: .2rem;
+      scrollbar-gutter: stable;
+    }
+
+    .conversation-message {
+      border-radius: .55rem;
+      max-width: min(46rem, 86%);
       overflow-wrap: anywhere;
-      padding: .75rem;
+      padding: .65rem .8rem;
       white-space: pre-wrap;
     }
-    .user { background: color-mix(in srgb, royalblue 10%, transparent); }
-    .assistant { background: color-mix(in srgb, currentColor 5%, transparent); }
-    #status {
-      font-size: .85rem;
-      min-height: 1.2em;
-      opacity: .75;
+
+    .conversation-message.user {
+      background: var(--user);
+      justify-self: end;
     }
-    #status.error { color: #c62828; font-weight: 600; opacity: 1; }
+
+    .conversation-message.assistant {
+      background: var(--assistant);
+      border: 1px solid var(--line);
+      justify-self: start;
+    }
+
+    #conversation-empty {
+      color: var(--muted);
+      font-size: .9rem;
+      place-self: center;
+    }
+    #conversation-empty:not(:empty) { display: block; }
+
+    form {
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: .6rem;
+      padding-top: .85rem;
+    }
+
+    textarea,
+    button {
+      border: 1px solid var(--line);
+      border-radius: .45rem;
+      font: inherit;
+    }
+
+    textarea {
+      color: var(--ink);
+      padding: .6rem .7rem;
+      resize: none;
+    }
+
+    .actions {
+      display: flex;
+      gap: .5rem;
+      justify-content: end;
+    }
+
+    button {
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      padding: .45rem .8rem;
+    }
+
+    #conversation-send {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: white;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .conversation-message {
+        animation: message-in .18s cubic-bezier(.2, .8, .2, 1) both;
+      }
+
+      #agent-run-phase:is(
+        [data-state="connecting"],
+        [data-state="running"],
+        [data-state="streaming"]
+      ) .dot {
+        animation: status-pulse 1s ease-in-out infinite;
+      }
+
+      #conversation[data-phase="streaming"] .conversation-message.assistant:last-child::after {
+        animation: caret-blink 1s steps(2) infinite;
+        color: var(--state-active);
+        content: "▍";
+        margin-left: .15rem;
+      }
+    }
+
+    @keyframes caret-blink {
+      50% { opacity: 0; }
+    }
+
+    @keyframes message-in {
+      from {
+        opacity: 0;
+        transform: translateY(.35rem);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes status-pulse {
+      50% {
+        opacity: .4;
+        transform: scale(1.25);
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>agentgo simple chat</h1>
-  <main id="conversation"></main>
-  <p id="status" aria-live="polite"></p>
-  <form>
-    <textarea id="prompt" rows="4" placeholder="Message" required></textarea>
-    <div>
-      <button id="send" type="submit">Send</button>
-      <button id="stop" type="button" disabled>Stop</button>
-    </div>
-  </form>
+  <main class="chat">
+    <header>
+      <div>
+        <h1>agentgo simple chat</h1>
+        <p>AG-UI browser conversation demo</p>
+      </div>
+      <div id="agent-run-phase" data-phase="idle" aria-live="polite">
+        <span class="dot"></span>
+        <span id="agent-run-phase-label">Ready</span>
+        <span id="agent-run-detail"></span>
+      </div>
+    </header>
+
+    <section id="conversation" aria-label="Chat conversation">
+      <p id="conversation-empty">Send a message to run the agent.</p>
+    </section>
+
+    <form>
+      <textarea id="conversation-input" rows="3" placeholder="Message the agent" aria-label="Message the agent"></textarea>
+      <div class="actions">
+        <button id="conversation-stop" type="button" disabled>Stop</button>
+        <button id="conversation-send" type="submit">Send</button>
+      </div>
+    </form>
+  </main>
 
   <script type="module" src="./app.js"></script>
 </body>
