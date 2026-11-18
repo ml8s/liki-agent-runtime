@@ -3,7 +3,7 @@
 > **英文 README 是权威文档。**
 > 本页是中文概览，不是完整翻译。
 
-`agentgo` 将 `AgentDeployment` 工件转换为自托管、协议原生的 Agent 服务。它会运行 Agent 图，编排 LLM 调用与 allowlist 中的 MCP 工具，并通过 AG-UI、A2A 和 Agent Card 对外提供服务。
+`agentgo` 将 `AgentDeployment` 工件转换为自托管、协议原生的 Agent 服务。工件声明多 Agent 图，包括根 Agent、被委派的子 Agent、模型设置和 allowlist 中的 MCP 工具；runtime 编排它们的执行，并通过 AG-UI、A2A 和 Agent Card 对外提供服务。
 
 ## 要点
 

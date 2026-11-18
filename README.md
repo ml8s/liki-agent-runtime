@@ -1,32 +1,23 @@
-<p align="center">
-  <img src="assets/logo.svg" alt="agentgo logo" width="160">
-</p>
-
-# agentgo
-
-**Turn an `AgentDeployment` artifact into a self-hosted, protocol-native agent service — no agent infrastructure to build.**
-
-agentgo is a standalone deployment runtime for agent graphs. You write an
-`AgentDeployment` artifact (JSON + prompt files); agentgo runs the agent tree,
-orchestrates LLM calls and MCP tools, and serves the result over AG-UI, A2A,
-and Agent Card protocols. Your product code never touches Go, agents, or
-protocol plumbing.
-
-agentgo is deployment-first, not a chat workspace: callers own users, business
-context, durable conversations, and the user experience.
+<h1 align="center">
+  <img src="assets/logo.svg" alt="" width="72" align="absmiddle">
+  agentgo
+</h1>
 
 <p align="center">
-  [![CI](https://github.com/ml8s/agentgo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ml8s/agentgo/actions/workflows/ci.yml)
-  [![Security scans](https://github.com/ml8s/agentgo/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/ml8s/agentgo/actions/workflows/security.yml)
-  [![Release](https://img.shields.io/github/v/release/ml8s/agentgo?style=flat-square)](https://github.com/ml8s/agentgo/releases)
-  [![Go version](https://img.shields.io/github/go-mod/go-version/ml8s/agentgo?style=flat-square)](https://github.com/ml8s/agentgo/blob/main/go.mod)
-  [![License](https://img.shields.io/github/license/ml8s/agentgo?style=flat-square)](./LICENSE)
-  [![Go reference](https://pkg.go.dev/badge/github.com/ml8s/agentgo.svg)](https://pkg.go.dev/github.com/ml8s/agentgo)
+  <strong>Turn an AgentDeployment artifact into a self-hosted, protocol-native agent service — no agent infrastructure to build.</strong>
 </p>
 
 <p align="center">
-  <img alt="No Node.js runtime" src="https://img.shields.io/badge/runtime-no_Node.js-16A34A?style=flat-square">
-  <img alt="CI Python" src="https://img.shields.io/badge/CI_Python-3.12.14-3776AB?style=flat-square&logo=python&logoColor=white">
+  <a href="https://github.com/ml8s/agentgo/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ml8s/agentgo/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/ml8s/agentgo/actions/workflows/security.yml"><img alt="Security scans" src="https://github.com/ml8s/agentgo/actions/workflows/security.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/ml8s/agentgo/releases"><img alt="Release" src="https://img.shields.io/github/v/release/ml8s/agentgo?style=flat-square"></a>
+  <a href="https://github.com/ml8s/agentgo/blob/main/go.mod"><img alt="Go version" src="https://img.shields.io/github/go-mod/go-version/ml8s/agentgo?style=flat-square"></a>
+  <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/ml8s/agentgo?style=flat-square"></a>
+  <a href="https://pkg.go.dev/github.com/ml8s/agentgo"><img alt="Go reference" src="https://pkg.go.dev/badge/github.com/ml8s/agentgo.svg"></a>
+</p>
+
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12.14-3776AB?style=flat-square&logo=python&logoColor=white">
   <img alt="Docker Compose" src="https://img.shields.io/badge/Docker_Compose-ready-2496ED?style=flat-square&logo=docker&logoColor=white">
   <img alt="A2A SDK" src="https://img.shields.io/badge/A2A_SDK-v2.9.0-4F46E5?style=flat-square">
   <img alt="AG-UI SDK" src="https://img.shields.io/badge/AG--UI_SDK-compatible-FF4D00?style=flat-square">
@@ -37,65 +28,60 @@ context, durable conversations, and the user experience.
 </p>
 
 <p align="center">
-  <a href="./README.md"><strong>English</strong></a> ·
-  <a href="./docs/i18n/README.zh-CN.md">简体中文</a> ·
-  <a href="./docs/i18n/README.zh-TW.md">繁體中文</a> ·
-  <a href="./docs/i18n/README.ja.md">日本語</a> ·
-  <a href="./docs/i18n/README.ko.md">한국어</a> ·
-  <a href="./docs/i18n/README.es.md">Español</a> ·
-  <a href="./docs/i18n/README.pt-BR.md">Português (BR)</a> ·
-  <a href="./docs/i18n/README.fr.md">Français</a> ·
-  <a href="./docs/i18n/README.de.md">Deutsch</a> ·
-  <a href="./docs/i18n/README.ru.md">Русский</a> ·
-  <a href="./docs/i18n/README.id.md">Bahasa Indonesia</a>
+  <a href="./README.md"><img alt="English" src="https://img.shields.io/badge/docs-English-2563EB?style=flat-square"></a>
+  <a href="./docs/i18n/README.zh-CN.md"><img alt="简体中文" src="https://img.shields.io/badge/docs-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-DC2626?style=flat-square"></a>
+  <a href="./docs/i18n/README.ja.md"><img alt="日本語" src="https://img.shields.io/badge/docs-%E6%97%A5%E6%9C%AC%E8%AA%9E-059669?style=flat-square"></a>
+  <a href="./docs/i18n/README.es.md"><img alt="Español" src="https://img.shields.io/badge/docs-Espa%C3%B1ol-C2410C?style=flat-square"></a>
+  <a href="./docs/i18n/README.pt-BR.md"><img alt="Português (BR)" src="https://img.shields.io/badge/docs-Portugu%C3%AAs%20%28BR%29-0891B2?style=flat-square"></a>
+  <a href="./docs/i18n/README.de.md"><img alt="Deutsch" src="https://img.shields.io/badge/docs-Deutsch-334155?style=flat-square"></a>
 </p>
 
+Agentgo is a standalone deployment runtime for **multi-agent graphs**. An
+`AgentDeployment` artifact declares the root agent, delegated sub-agents, model
+settings, and allowlisted MCP tools; the runtime orchestrates their execution
+and serves the result over AG-UI, A2A, and Agent Card.
+
+Your product code never touches Go, agents, or protocol plumbing. Callers keep
+ownership of users, business context, durable conversations, and user experience.
+
 ```mermaid
-%%{init: {
-  "theme": "base",
-  "themeVariables": {
-    "fontFamily": "ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif",
-    "fontSize": "16px",
-    "primaryColor": "#eef2ff",
-    "primaryBorderColor": "#4f46e5",
-    "lineColor": "#64748b",
-    "clusterBkg": "#f8fafc",
-    "clusterBorder": "#94a3b8"
-  }
-}}%%
 flowchart TB
-    browser["Browser / gateway"]
-    machine["Machine client"]
+    browser["Browser"]
+    remote["Remote agent / service"]
 
-    subgraph runtime["agentgo runtime"]
+    subgraph runtime["Runtime"]
         direction TB
-        agui["AG-UI adapter<br/>SSE"]
-        a2a["A2A adapter<br/>JSON-RPC"]
-        card["Agent Card<br/>discovery"]
-        agents["Agent graph<br/>orchestration"]
+        agui["AG-UI"]
+        a2a["A2A"]
+        card["Agent Card"]
 
-        agui --> agents
-        a2a --> agents
-        card -.-> agents
+        subgraph agentGraph["Multi-agent graph"]
+            root["Root agent"]
+            subagents["Subagents"]
+            root -->|delegate| subagents
+        end
+
+        agui --> agentGraph
+        a2a --> agentGraph
+        remote -. "Agent Card" .-> card
+        agentGraph -->|LLM API| provider
+        agentGraph -->|MCP| tools
     end
 
-    provider["LLM provider<br/>OpenAI-compatible /<br/>Anthropic / Gemini"]
-    tools["External MCP tools<br/>allowlisted"]
+    provider["LLM provider"]
+    tools["MCP tools"]
 
-    browser -- "POST /ag-ui" --> agui
-    machine -- "POST /a2a" --> a2a
-    machine -. "GET /.well-known/<br/>agent-card.json" .-> card
-    agents -- "model API" --> provider
-    agents -- "MCP Streamable HTTP" --> tools
+    browser --> agui
+    remote --> a2a
 
     classDef client fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#7c2d12
     classDef protocol fill:#eef2ff,stroke:#4f46e5,stroke-width:2px,color:#312e81
     classDef core fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#164e63
     classDef dependency fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#14532d
 
-    class browser,machine client
+    class browser,remote client
     class agui,a2a,card protocol
-    class agents core
+    class agentGraph core
     class provider,tools dependency
 ```
 

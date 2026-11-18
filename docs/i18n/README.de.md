@@ -3,7 +3,7 @@
 > **Das englische README ist die kanonische Dokumentation.**
 > Diese Seite ist eine lokalisierte Übersicht und keine vollständige Übersetzung.
 
-`agentgo` verwandelt ein `AgentDeployment`-Artefakt in einen selbst gehosteten, protokollnativen Agent-Service. Es führt Agent-Graphen aus, orchestriert LLM-Aufrufe und MCP-Tools und stellt das Ergebnis über AG-UI, A2A und Agent Card bereit.
+`agentgo` verwandelt ein `AgentDeployment`-Artefakt in einen selbst gehosteten, protokollnativen Agent-Service. Das Artifact beschreibt Multi-Agent-Graphen mit einem Root-Agent, delegierten Sub-Agents, Modelleinstellungen und allowlisted MCP-Tools; die Runtime orchestriert ihre Ausführung und stellt das Ergebnis über AG-UI, A2A und Agent Card bereit.
 
 ## Kernpunkte
 

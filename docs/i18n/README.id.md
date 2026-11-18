@@ -3,7 +3,7 @@
 > **README bahasa Inggris adalah dokumentasi kanonik.**
 > Halaman ini adalah ringkasan lokal, bukan terjemahan lengkap.
 
-`agentgo` mengubah artefak `AgentDeployment` menjadi layanan agen self-hosted berbasis protokol standar. Runtime ini menjalankan graf agen, mengorkestrasi panggilan LLM dan alat MCP, lalu menyajikan hasilnya melalui AG-UI, A2A, serta Agent Card.
+`agentgo` mengubah artefak `AgentDeployment` menjadi layanan agen self-hosted berbasis protokol standar. Artefak ini mendefinisikan graf multi-agen dengan agen root, subagen yang didelegasikan, parameter model, dan alat MCP yang diizinkan; runtime mengorkestrasi eksekusinya dan menyajikan hasilnya melalui AG-UI, A2A, serta Agent Card.
 
 ## Poin utama
 

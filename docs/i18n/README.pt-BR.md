@@ -3,7 +3,7 @@
 > **O README em inglês é a documentação canônica.**
 > Esta página é um resumo localizado, não uma tradução completa.
 
-`agentgo` transforma um artefato `AgentDeployment` em um serviço de agentes self-hosted e baseado em protocolos padrão. Ele executa grafos de agentes, orquestra chamadas de LLM e ferramentas MCP e expõe o resultado via AG-UI, A2A e Agent Card.
+`agentgo` transforma um artefato `AgentDeployment` em um serviço de agentes self-hosted e baseado em protocolos padrão. O artefato descreve grafos multiagente com um agente raiz, subagentes delegados, parâmetros de modelo e ferramentas MCP autorizadas; o runtime orquestra a execução e expõe o resultado via AG-UI, A2A e Agent Card.
 
 ## Pontos principais
 
