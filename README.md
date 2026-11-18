@@ -9,7 +9,6 @@
 
 <p align="center">
   <a href="https://github.com/ml8s/agentgo/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ml8s/agentgo/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <a href="https://github.com/ml8s/agentgo/actions/workflows/security.yml"><img alt="Security scans" src="https://github.com/ml8s/agentgo/actions/workflows/security.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/ml8s/agentgo/releases"><img alt="Release" src="https://img.shields.io/github/v/release/ml8s/agentgo?style=flat-square"></a>
   <a href="https://github.com/ml8s/agentgo/blob/main/go.mod"><img alt="Go version" src="https://img.shields.io/github/go-mod/go-version/ml8s/agentgo?style=flat-square"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/ml8s/agentgo?style=flat-square"></a>
@@ -17,14 +16,10 @@
 </p>
 
 <p align="center">
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.12.14-3776AB?style=flat-square&logo=python&logoColor=white">
-  <img alt="Docker Compose" src="https://img.shields.io/badge/Docker_Compose-ready-2496ED?style=flat-square&logo=docker&logoColor=white">
   <img alt="A2A SDK" src="https://img.shields.io/badge/A2A_SDK-v2.9.0-4F46E5?style=flat-square">
   <img alt="AG-UI SDK" src="https://img.shields.io/badge/AG--UI_SDK-compatible-FF4D00?style=flat-square">
   <img alt="MCP SDK" src="https://img.shields.io/badge/MCP_SDK-v1.8.0-0891B2?style=flat-square">
   <img alt="Google ADK" src="https://img.shields.io/badge/Google_ADK-v2.8.0-4285F4?style=flat-square">
-  <img alt="OpenTelemetry" src="https://img.shields.io/badge/OpenTelemetry-v1.47.0-425CC7?style=flat-square">
-  <img alt="Prometheus" src="https://img.shields.io/badge/Prometheus-ready-E6522C?style=flat-square&logo=prometheus&logoColor=white">
 </p>
 
 <p align="center">
