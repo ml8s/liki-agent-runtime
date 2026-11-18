@@ -9,7 +9,7 @@
       "punctuation": ".,;:!。，；：！"
     },
     "MD033": {
-      "allowed_elements": []
+      "allowed_elements": ["p", "img", "a", "strong"]
     },
     "MD041": false,
     "MD036": false,

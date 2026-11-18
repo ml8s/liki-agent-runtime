@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="agentgo logo" width="160">
+</p>
+
 # agentgo
 
 **Turn an `AgentDeployment` artifact into a self-hosted, protocol-native agent service — no agent infrastructure to build.**
@@ -10,6 +14,41 @@ protocol plumbing.
 
 agentgo is deployment-first, not a chat workspace: callers own users, business
 context, durable conversations, and the user experience.
+
+<p align="center">
+  [![CI](https://github.com/ml8s/agentgo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ml8s/agentgo/actions/workflows/ci.yml)
+  [![Security scans](https://github.com/ml8s/agentgo/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/ml8s/agentgo/actions/workflows/security.yml)
+  [![Release](https://img.shields.io/github/v/release/ml8s/agentgo?style=flat-square)](https://github.com/ml8s/agentgo/releases)
+  [![Go version](https://img.shields.io/github/go-mod/go-version/ml8s/agentgo?style=flat-square)](https://github.com/ml8s/agentgo/blob/main/go.mod)
+  [![License](https://img.shields.io/github/license/ml8s/agentgo?style=flat-square)](./LICENSE)
+  [![Go reference](https://pkg.go.dev/badge/github.com/ml8s/agentgo.svg)](https://pkg.go.dev/github.com/ml8s/agentgo)
+</p>
+
+<p align="center">
+  <img alt="No Node.js runtime" src="https://img.shields.io/badge/runtime-no_Node.js-16A34A?style=flat-square">
+  <img alt="CI Python" src="https://img.shields.io/badge/CI_Python-3.12.14-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="Docker Compose" src="https://img.shields.io/badge/Docker_Compose-ready-2496ED?style=flat-square&logo=docker&logoColor=white">
+  <img alt="A2A SDK" src="https://img.shields.io/badge/A2A_SDK-v2.9.0-4F46E5?style=flat-square">
+  <img alt="AG-UI SDK" src="https://img.shields.io/badge/AG--UI_SDK-compatible-FF4D00?style=flat-square">
+  <img alt="MCP SDK" src="https://img.shields.io/badge/MCP_SDK-v1.8.0-0891B2?style=flat-square">
+  <img alt="Google ADK" src="https://img.shields.io/badge/Google_ADK-v2.8.0-4285F4?style=flat-square">
+  <img alt="OpenTelemetry" src="https://img.shields.io/badge/OpenTelemetry-v1.47.0-425CC7?style=flat-square">
+  <img alt="Prometheus" src="https://img.shields.io/badge/Prometheus-ready-E6522C?style=flat-square&logo=prometheus&logoColor=white">
+</p>
+
+<p align="center">
+  <a href="./README.md"><strong>English</strong></a> ·
+  <a href="./docs/i18n/README.zh-CN.md">简体中文</a> ·
+  <a href="./docs/i18n/README.zh-TW.md">繁體中文</a> ·
+  <a href="./docs/i18n/README.ja.md">日本語</a> ·
+  <a href="./docs/i18n/README.ko.md">한국어</a> ·
+  <a href="./docs/i18n/README.es.md">Español</a> ·
+  <a href="./docs/i18n/README.pt-BR.md">Português (BR)</a> ·
+  <a href="./docs/i18n/README.fr.md">Français</a> ·
+  <a href="./docs/i18n/README.de.md">Deutsch</a> ·
+  <a href="./docs/i18n/README.ru.md">Русский</a> ·
+  <a href="./docs/i18n/README.id.md">Bahasa Indonesia</a>
+</p>
 
 ```mermaid
 %%{init: {
