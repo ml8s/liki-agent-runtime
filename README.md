@@ -33,14 +33,15 @@
 
 ## Overview
 
-Agentgo is a standalone deployment runtime for **local multi-agent graphs**. An
+Agentgo is a generic deployment runtime for **local multi-agent graphs**. An
 `AgentDeployment` artifact declares the root agent, delegated sub-agents, model
 settings, and allowlisted MCP tools. The runtime executes root-to-subagent
 delegation as a local ADK graph and serves the result over AG-UI and A2A + Agent
 Card.
 
-Your product code never touches Go, agents, or protocol plumbing. Callers keep
-ownership of users, business context, durable conversations, and user experience.
+Applications integrate Agentgo as an external service, so they do not embed Go
+agent code or protocol plumbing. Calling applications keep ownership of users,
+business context, durable conversations, and user experience.
 
 ```mermaid
 flowchart TB
@@ -104,28 +105,28 @@ deploy: write the artifact, point it at your LLM and MCP tools, and it serves.
 
 ### Runtime positioning
 
-agentgo is a self-hosted runtime for deploying agent services. It is not a
-mini chat platform or an alternative to user-facing AI workspaces such as Open
-WebUI. The comparison below is an explicit boundary, not a feature backlog:
+Agentgo is a generic self-hosted runtime for deploying agent services. It is
+not a mini chat platform and does not try to replace user-facing AI workspaces.
+The comparison below is an explicit boundary, not a feature backlog:
 
 | Concern | Chat UI platform | agentgo |
 |---|---|---|
 | Primary input | An application workspace and UI | An `AgentDeployment` artifact |
-| Users and groups | Product-level user management and access control | Caller-owned identity, mapped at runtime boundaries |
-| Conversations | Durable product state | Caller-owned; bundled examples are in-memory demos |
-| Knowledge and RAG | Often built into the product | Caller-owned content and MCP-provided tools |
+| Users and groups | Application-level user management and access control | Caller-owned identity, mapped at runtime boundaries |
+| Conversations | Durable application state | Caller-owned; bundled examples are in-memory demos |
+| Knowledge and RAG | Often built into the workspace | Caller-owned content and MCP-provided tools |
 | Tools | Platform extensions and plugins | External MCP services under explicit allowlists |
-| UI | The product | Examples only; production callers own their UX |
+| UI | The application | Examples only; production callers own their UX |
 
 Use agentgo when your application needs a self-hosted runtime for protocol
 serving, agent orchestration, tool authorization, audit evidence, and
-observability. Use your own product—or a platform like Open WebUI—when you need
+observability. Use your own application—or a platform like Open WebUI—when you need
 a full user-facing workspace.
 
 ## Quick start and examples
 
 The examples are self-contained agentgo consumers. They demonstrate the public
-runtime surface without adding product capabilities to agentgo.
+runtime surface without adding application capabilities to Agentgo.
 
 | Example | Purpose | Port |
 |---|---|---|
