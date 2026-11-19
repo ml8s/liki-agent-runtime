@@ -31,6 +31,8 @@
   <a href="./docs/i18n/README.de.md"><img alt="Deutsch" src="https://img.shields.io/badge/docs-Deutsch-334155?style=flat-square"></a>
 </p>
 
+## Overview
+
 Agentgo is a standalone deployment runtime for **local multi-agent graphs**. An
 `AgentDeployment` artifact declares the root agent, delegated sub-agents, model
 settings, and allowlisted MCP tools. The runtime executes root-to-subagent
@@ -100,7 +102,7 @@ and maintaining all of this yourself:
 agentgo is not a framework you import into your code. It is a runtime you
 deploy: write the artifact, point it at your LLM and MCP tools, and it serves.
 
-## Runtime positioning
+### Runtime positioning
 
 agentgo is a self-hosted runtime for deploying agent services. It is not a
 mini chat platform or an alternative to user-facing AI workspaces such as Open
@@ -192,7 +194,9 @@ make dev
 curl -sS http://127.0.0.1:8085/readyz | jq
 ```
 
-## Deployment model
+## How it works
+
+### Deployment model
 
 Copy `dev/agent-deployment/` as a starting point. The artifact declares:
 
@@ -208,7 +212,7 @@ The unique root agent is the entrypoint. Prompts are external files; plain
 text is the default. Typed output declares a JSON Schema plus a JSON Pointer
 to the user-facing string.
 
-## LLM providers
+### LLM providers
 
 `AGENTGO_LLM_PROVIDER` selects the model implementation. The provider value
 determines both the SDK adapter and the structured-output wire mode:
@@ -233,7 +237,7 @@ agentgo does not send a structured-output request.
 Per-Agent artifact settings (`model`, `temperature`, `maxOutputTokens`) override
 the environment defaults. Priority: per-agent artifact > env default > provider default.
 
-## Protocols
+### Protocols
 
 | Consumer | Protocol | Endpoint | Purpose |
 |---|---|---|---|
@@ -253,7 +257,7 @@ Official specifications: [A2A](https://a2a-protocol.org/v1.0.0/specification/),
 Operational endpoints: `/livez`, `/readyz`, `/metrics`, `/debug/pprof`
 (opt-in via `AGENTGO_PPROF_ENABLED=1`).
 
-## Security
+## Security and boundaries
 
 - **Deny-by-default tool access** — a tool call succeeds only if the tool is
   listed in the Agent's server-scoped `tools.allow`.
@@ -268,6 +272,21 @@ Operational endpoints: `/livez`, `/readyz`, `/metrics`, `/debug/pprof`
 - **No direct public exposure** — the runtime sits behind your gateway.
 
 See [`SECURITY.md`](SECURITY.md) for the full security policy.
+
+### Product boundary
+
+agentgo is not an Agent management control plane. It does not provide Agent
+CRUD APIs, deployment registries, tenant management, quota enforcement,
+approval workflows, or a management console.
+
+It is also not a chat platform or mini AI workspace. It does not own product
+users, durable conversations, chat history, document libraries, RAG pipelines,
+model catalogs, plugins, calendars, notes, or a user-facing workspace.
+
+`caller` owns users, products, entitlements, quotas, and durable product
+conversations. A domain content repository owns prompts, skills, workflow
+policy, and tool semantics; external MCP tool services own MCP tool
+implementations.
 
 ## Configuration
 
@@ -331,26 +350,11 @@ checks, race tests, and the coverage floor.
 go run ./cmd/agentgo validate -deployment ./path/to/deployment.json
 ```
 
-### Contributing
+## Contributing
 
 Follow [`CONTRIBUTING.md`](CONTRIBUTING.md) and run `make check`/`make gate`
 before submitting a change.
 
-## Project boundary
-
-agentgo is not an Agent management control plane. It does not provide Agent
-CRUD APIs, deployment registries, tenant management, quota enforcement,
-approval workflows, or a management console.
-
-It is also not a chat platform or mini AI workspace. It does not own product
-users, durable conversations, chat history, document libraries, RAG pipelines,
-model catalogs, plugins, calendars, notes, or a user-facing workspace.
-
-`caller` owns users, products, entitlements, quotas, and durable product
-conversations. A domain content repository owns prompts, skills, workflow
-policy, and tool semantics; external MCP tool services own MCP tool
-implementations.
-
-### License
+## License
 
 Released under the [MIT License](LICENSE).
