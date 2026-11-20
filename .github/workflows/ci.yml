@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   check:
-    name: Static checks and tests
+    name: Static checks
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -37,24 +37,5 @@ jobs:
           cache-dependency-path: go.sum
       - name: Install Node dependencies
         run: npm ci
-      - name: Run the local gate
-        run: make gate
-      - name: Upload Go coverage profile
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: go-coverage
-          path: coverage.out
-          if-no-files-found: error
-
-  image:
-    name: Build and smoke image
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs:
-      - check
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - name: Build and smoke local runtime image
-        run: make smoke
+      - name: Run static checks
+        run: make check

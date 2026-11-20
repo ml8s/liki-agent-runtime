@@ -1,7 +1,8 @@
 # 统一语义：
 #   make check  静态检查（docs、format、lint、vet、artifact、action pinning）
 #   make test   本仓全部测试（unit/integration，race + coverage floor）
-#   make gate   check + test
+#   make gate   CI 静态检查 + 全量测试 + Go 漏洞扫描 + 本地镜像冒烟
+#   make test-local  local image build + runtime smoke
 
 GO ?= go
 PYTHON ?= python3
@@ -29,13 +30,14 @@ COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
-.PHONY: help check test conformance gate security-go setup-hooks bench build run dev dev-down image smoke
+.PHONY: help check test conformance gate test-local security-go setup-hooks bench build run dev dev-down image smoke
 help:
 	@echo "make check    - static checks: docs, Go lint/formatters, vet, artifact, and action pinning"
 	@echo "make test     - run tests with race detection and the coverage floor"
+	@echo "make test-local - build the local image, start it, and smoke it"
 	@echo "make conformance - run official-client protocol conformance checks"
 	@echo "make bench    - run focused performance benchmarks"
-	@echo "make gate     - run the full pre-push source gate"
+	@echo "make gate     - run the full pre-push gate: CI checks, tests, security scan, and local smoke"
 	@echo "make setup-hooks - install the repository pre-push gate"
 	@echo "make smoke    - smoke the local agentgo image"
 	@echo "make build    - build ./bin/agentgo"
@@ -90,7 +92,9 @@ conformance: ## Run official-client protocol conformance checks
 security-go: ## Run Go vulnerability scan
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
-gate: check test
+gate: check security-go test test-local
+
+test-local: smoke ## Build the local runtime image, start it, and smoke it
 
 setup-hooks: ## Configure Git to run the repository gate before push
 	git config core.hooksPath .githooks

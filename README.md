@@ -342,8 +342,14 @@ Install Node.js from `.nvmrc`; Go resolves its toolchain from `go.mod`. Run
 Run `make setup-hooks` once so every push runs the local gate. Then use `make
 check`, `make test`, `make gate`, and `make build`.
 
+Use `make test-local` for local integration and smoke testing. It builds the
+local runtime image, starts the runtime, and verifies that it becomes live. CI
+runs static checks only; keep image integration workloads local. Run
+`make gate` before pushing to cover both CI and the scheduled security scan.
+
 `make gate` is the pre-push gate. It runs documentation linting, Go static
-checks, race tests, and the coverage floor.
+checks, race tests with the coverage floor, the Go vulnerability scan, and the
+local image smoke.
 
 ### Validate a deployment artifact
 
