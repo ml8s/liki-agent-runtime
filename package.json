@@ -9,6 +9,6 @@
     "lint:docs": "markdownlint-cli2"
   },
   "devDependencies": {
-    "markdownlint-cli2": "0.24.0"
+    "markdownlint-cli2": "0.24.1"
   }
 }
