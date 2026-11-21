@@ -16,7 +16,7 @@
 
 ## サンプル
 
-- [simple-chat](../../examples/simple-chat): 最小構成の AG-UI ブラウザチャット。
+- [chat](../../examples/chat): 最小構成の AG-UI ブラウザチャット。
 - [agentgo-assistant](../../examples/agentgo-assistant): クリックで解説するアシスタント。
 
 ## 主要ドキュメント

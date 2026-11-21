@@ -16,7 +16,7 @@
 
 ## Примеры
 
-- [simple-chat](../../examples/simple-chat): минимальный браузерный чат AG-UI.
+- [chat](../../examples/chat): минимальный браузерный чат AG-UI.
 - [agentgo-assistant](../../examples/agentgo-assistant): ассистент для пояснений по клику.
 
 ## Основная документация

@@ -539,6 +539,39 @@ func TestAGUIProjectsStandardResumeRun(t *testing.T) {
 	}
 }
 
+func TestAGUIAcceptsResumeSnapshotWithNilAssistantText(t *testing.T) {
+	var captured execution.RunRequest
+	runtime := &capturingRuntime{
+		capture: &captured,
+		result:  execution.RunResult{Text: "continued"},
+	}
+	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := authenticatedRequest(t, `{
+		"threadId":"t","runId":"r_nil_content",
+		"messages":[
+			{"id":"m1","role":"user","content":"准备申请"},
+			{"id":"m2","role":"assistant","toolCalls":[{"id":"call_form","type":"function","function":{"name":"tax_refund_form_patch","arguments":"{}"}}]},
+			{"id":"m3","role":"tool","toolCallId":"call_form","content":"{\"status\":\"applied\"}"}
+		],
+		"resume":[{"interruptId":"int_1","status":"resolved","metadata":{"tool_call_id":"call_form"}}]
+	}`)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if len(captured.History) != 3 {
+		t.Fatalf("history length = %d, want 3", len(captured.History))
+	}
+	if len(captured.History[1].ToolCalls) != 1 {
+		t.Fatalf("assistant tool calls = %#v, want one client tool call", captured.History[1].ToolCalls)
+	}
+}
+
 func TestAGUIRejectsUnsupportedResumeStatus(t *testing.T) {
 	var captured execution.RunRequest
 	runtime := &capturingRuntime{capture: &captured}
@@ -566,6 +599,42 @@ func TestAGUIRejectsUnsupportedResumeStatus(t *testing.T) {
 	}
 	if len(captured.Resume) != 0 {
 		t.Fatalf("runtime received rejected resume = %#v", captured.Resume)
+	}
+}
+
+func TestAGUIAcceptsResumeWithClientToolSnapshotWithoutText(t *testing.T) {
+	var captured execution.RunRequest
+	runtime := &capturingRuntime{
+		capture: &captured,
+		result:  execution.RunResult{Text: "表单已更新"},
+	}
+	handler, err := agui.New(runtime, agui.Config{RunTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := authenticatedRequest(t, `{
+		"threadId":"t","runId":"r_client_tool_resume",
+		"messages":[
+			{"id":"m1","role":"user","content":"准备退税申请"},
+			{"id":"m2","role":"assistant","toolCalls":[{"id":"call_form","type":"function","function":{"name":"tax_refund_form_patch","arguments":"{\"patch\":[{\"op\":\"set\",\"path\":\"/claim/claimant_name\",\"value\":\"Dana\"}]}"}}]},
+			{"id":"m3","role":"tool","toolCallId":"call_form","content":"{\"status\":\"applied\"}"}
+		],
+		"resume":[{"interruptId":"int_1","status":"resolved","metadata":{"tool_call_id":"call_form"}}]
+	}`)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if len(captured.History) != 3 {
+		t.Fatalf("history length = %d, want 3", len(captured.History))
+	}
+	if captured.History[1].Content != "" || len(captured.History[1].ToolCalls) != 1 {
+		t.Fatalf("assistant client-tool history = %#v", captured.History[1])
+	}
+	if len(captured.Resume) != 1 || captured.Resume[0].ToolCallID != "call_form" {
+		t.Fatalf("Resume = %#v, want resolved call_form", captured.Resume)
 	}
 }
 

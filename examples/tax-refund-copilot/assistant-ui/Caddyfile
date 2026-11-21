@@ -1,0 +1,31 @@
+{
+	admin off
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+:8080 {
+	encode zstd gzip
+
+	header {
+		Cache-Control "no-store"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-eval'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'"
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+	}
+
+	handle /ag-ui {
+		reverse_proxy agentgo:8083 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

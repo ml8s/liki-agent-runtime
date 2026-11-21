@@ -1,0 +1,38 @@
+name: agentgo-chat
+
+services:
+  agentgo:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      AGENTGO_DEPLOYMENT_FILE: /conf/deployment.json
+      AGENTGO_ENV: development
+      AGENTGO_PROTOCOL_TOKEN: ""
+      AGENTGO_LLM_BASE_URL: ${AGENTGO_LLM_BASE_URL:?Set AGENTGO_LLM_BASE_URL in .env}
+      AGENTGO_LLM_MODEL: ${AGENTGO_LLM_MODEL:?Set AGENTGO_LLM_MODEL in .env}
+      AGENTGO_LLM_PROVIDER: ${AGENTGO_LLM_PROVIDER:?Set AGENTGO_LLM_PROVIDER in .env}
+      AGENTGO_PUBLIC_URL: http://localhost:8080
+    expose:
+      - "8083"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 35s
+    volumes:
+      - ./agent:/conf:ro
+      - agentgo-chat-data:/data
+
+  chat-ui:
+    build:
+      context: ./ui
+    depends_on:
+      agentgo:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+volumes:
+  agentgo-chat-data:

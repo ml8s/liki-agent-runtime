@@ -187,10 +187,18 @@ func resumeRunProjection(
 
 	for _, message := range messages {
 		projected := execution.Message{Role: execution.Role(message.Role), ToolCallID: message.ToolCallID}
-		if text, err := conversationText(message.Content); err == nil && text != "" {
+		text, textErr := conversationText(message.Content)
+		if textErr == nil && text != "" {
 			projected.Content = text
-		} else if message.Role != aguitypes.RoleTool && err != nil {
-			return nil, nil, nil, err
+		} else {
+			// Assistant client-tool snapshots can omit text content: their
+			// meaningful payload is carried by `toolCalls`, and the browser's
+			// result follows in the next role=tool message.
+			isClientToolCall := message.Role == aguitypes.RoleAssistant &&
+				len(message.ToolCalls) != 0
+			if !isClientToolCall && message.Role != aguitypes.RoleTool && textErr != nil {
+				return nil, nil, nil, textErr
+			}
 		}
 		for _, call := range message.ToolCalls {
 			args := json.RawMessage(call.Function.Arguments)

@@ -16,7 +16,7 @@
 
 ## 예제
 
-- [simple-chat](../../examples/simple-chat): 최소 AG-UI 브라우저 채팅.
+- [chat](../../examples/chat): 최소 AG-UI 브라우저 채팅.
 - [agentgo-assistant](../../examples/agentgo-assistant): 클릭 시 설명하는 어시스턴트.
 
 ## 주요 문서

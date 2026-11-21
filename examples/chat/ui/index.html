@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>agentgo chat</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f4f7fb;
+      --surface: #ffffff;
+      --ink: #111827;
+      --muted: #64748b;
+      --line: #d8e0ea;
+      --brand: #0f766e;
+      --brand-soft: #ecfdf5;
+      --user: #ecfdf5;
+      --agent: #f8fafc;
+      --recording: #b91c1c;
+      --cancel: #475569;
+      font-family: Inter, system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      background: var(--page);
+      color: var(--ink);
+      display: grid;
+      margin: 0;
+      min-height: 100dvh;
+      padding: 1rem;
+      place-items: center;
+    }
+
+    .chat {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: .7rem;
+      box-shadow: 0 1rem 2rem rgb(15 23 42 / 7%);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 1rem;
+      height: min(48rem, calc(100dvh - 2rem));
+      padding: 1rem;
+      position: relative;
+      width: min(48rem, 100%);
+    }
+
+    header {
+      align-items: start;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: .5rem;
+      grid-template-columns: minmax(0, 1fr) auto;
+      padding-bottom: .7rem;
+    }
+
+    h1 { font-size: 1.1rem; margin: 0; }
+    header p { color: var(--muted); font-size: .8rem; margin: .15rem 0 0; }
+
+    .header-controls {
+      align-items: center;
+      display: flex;
+      gap: .5rem;
+    }
+
+    .toggle {
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      font-size: .75rem;
+      gap: .35rem;
+      padding: .25rem .5rem;
+      user-select: none;
+    }
+
+    .toggle input { accent-color: var(--brand); margin: 0; }
+
+    #stop-button {
+      background: var(--surface);
+      border-color: var(--line);
+      color: var(--ink);
+      font-size: .75rem;
+      padding: .25rem .5rem;
+    }
+
+    #stop-button[hidden] { display: none; }
+
+    #agent-run-phase {
+      color: var(--brand);
+      font-size: .75rem;
+      grid-column: 1;
+      margin: 0;
+      min-height: 1.1rem;
+    }
+
+    #agent-run-detail {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    #conversation {
+      align-content: start;
+      align-items: start;
+      display: grid;
+      gap: .7rem;
+      min-height: 0;
+      overflow: auto;
+      padding-right: .2rem;
+      scrollbar-gutter: stable;
+    }
+
+    .conversation-message {
+      align-self: start;
+      border-radius: .55rem;
+      max-width: min(42rem, min(88%, 72ch));
+      overflow-wrap: anywhere;
+      padding: .55rem .7rem;
+      white-space: pre-wrap;
+    }
+
+    .conversation-message.user {
+      background: var(--user);
+      justify-self: end;
+    }
+
+    .conversation-message.agent {
+      background: var(--agent);
+      border: 1px solid var(--line);
+      justify-self: start;
+    }
+
+    #conversation-empty {
+      color: var(--muted);
+      font-size: .9rem;
+      place-self: center;
+    }
+
+    #cancel-zone {
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      border: 2px dashed var(--cancel);
+      border-radius: .65rem;
+      color: var(--cancel);
+      display: none;
+      font-weight: 700;
+      left: 50%;
+      padding: .7rem;
+      position: absolute;
+      text-align: center;
+      top: 34%;
+      transform: translateX(-50%);
+      width: min(24rem, calc(100% - 2rem));
+      z-index: 3;
+    }
+
+    #cancel-zone.visible {
+      animation: cancel-pulse 900ms ease-in-out infinite;
+      display: block;
+    }
+
+    #cancel-zone.armed {
+      background: var(--cancel);
+      color: white;
+    }
+
+    #composer { margin: 0; }
+
+    #input-shell {
+      align-items: end;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: .65rem;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      padding: .35rem .35rem .35rem .7rem;
+      transition: border-color .15s ease;
+    }
+
+    #input-shell:focus-within {
+      border-color: var(--brand);
+    }
+
+    #input-shell.recording {
+      border-color: var(--recording);
+    }
+
+    #draft-input {
+      background: transparent;
+      border: 0;
+      color: var(--ink);
+      font: inherit;
+      max-height: 7.5rem;
+      min-height: 2.6rem;
+      outline: none;
+      overflow-y: auto;
+      padding: .45rem 0;
+      resize: none;
+      user-select: text;
+      width: 100%;
+    }
+
+    #draft-input.recording {
+      color: var(--recording);
+    }
+
+    #send-button {
+      align-self: end;
+      background: var(--brand);
+      border: 0;
+      border-radius: 50%;
+      color: white;
+      display: none;
+      height: 2.2rem;
+      place-items: center;
+      width: 2.2rem;
+    }
+
+    #send-button.visible { display: grid; }
+    #send-button:disabled { opacity: .45; }
+
+    #input-help {
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      font-size: .75rem;
+      gap: .35rem 1rem;
+      justify-content: space-between;
+      margin-top: .4rem;
+      min-height: 1.2rem;
+    }
+
+    #cancel-help {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 520px) {
+      body { padding: .5rem; }
+      .chat { height: calc(100dvh - 1rem); padding: .7rem; }
+      header { grid-template-columns: 1fr; }
+      .header-controls { justify-content: start; }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      @keyframes cancel-pulse {
+        50% { opacity: .75; transform: translateX(-50%) scale(1.01); }
+      }
+
+      #agent-run-phase[data-phase="streaming"]::after {
+        animation: caret 1s steps(2) infinite;
+        color: var(--brand);
+        content: " ▍";
+      }
+
+      @keyframes caret { 50% { opacity: 0; } }
+    }
+  </style>
+</head>
+<body>
+  <main class="chat">
+    <header>
+      <div>
+        <h1>agentgo chat</h1>
+        <p>Type, or press &amp; hold the message box to talk.</p>
+        <p id="agent-run-phase" data-phase="idle" aria-live="polite">
+          <span id="agent-run-phase-label">Ready</span>
+          <span id="agent-run-detail"></span>
+        </p>
+      </div>
+      <div class="header-controls">
+        <label class="toggle" for="speak-replies">
+          <input id="speak-replies" type="checkbox">
+          Speak
+        </label>
+        <button id="stop-button" type="button" hidden>Stop run</button>
+      </div>
+    </header>
+
+    <section id="conversation" aria-label="Chat conversation">
+      <p id="conversation-empty">Type a message, or press &amp; hold to talk.</p>
+    </section>
+
+    <div id="cancel-zone" aria-hidden="true">
+      Release outside to cancel
+    </div>
+
+    <form id="composer">
+      <div id="input-shell">
+        <label class="hidden" for="draft-input">Message agentgo</label>
+        <textarea
+          id="draft-input"
+          rows="1"
+          placeholder="Tap to type · press &amp; hold to talk"
+          aria-label="Message agentgo"
+        ></textarea>
+        <button id="send-button" type="submit" aria-label="Send message">➤</button>
+      </div>
+      <div id="input-help">
+        <span>Tap to type · press &amp; hold to talk · slide up to cancel</span>
+        <span id="cancel-help" aria-live="polite"></span>
+      </div>
+    </form>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

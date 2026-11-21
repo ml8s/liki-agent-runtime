@@ -130,58 +130,43 @@ runtime surface without adding application capabilities to Agentgo.
 
 | Example | Purpose | Port |
 |---|---|---|
-| [`simple-chat`](examples/simple-chat/README.md) | Smallest browser-to-agent AG-UI path | `8080` |
+| [`chat`](examples/chat/README.md) | Browser chat with typed and hold-to-talk voice input | `8080` |
 | [`agentgo-assistant`](examples/agentgo-assistant/README.md) | Caller-owned embedded page-aware assistant | `8081` |
+| [`tax-refund-copilot`](examples/tax-refund-copilot/README.md) | Embedded generic tax-refund claim copilot using client tools | `8082` |
 
-Both examples require Docker Compose and GNU Make; no local Go or Node.js setup
-is needed. Provider credentials stay inside agentgo; the browser consumes only
-public protocols.
+Running an example requires Docker Compose and GNU Make; provider credentials
+stay inside agentgo, and the browser consumes only public protocols. Local
+example tests additionally use the Node.js version pinned by `.nvmrc`.
 
 ```bash
 git clone https://github.com/ml8s/agentgo.git
 cd agentgo
 ```
 
-### `simple-chat` — AG-UI conversation and task state
+### `chat` — typed or spoken AG-UI conversation
 
-![agentgo simple chat animated demo](examples/simple-chat/assets/simple-chat-demo.gif)
+![agentgo chat screenshot](examples/chat/assets/chat.png)
 
-This is the smallest browser-to-agent path. Use it to see:
+This is the smallest browser-to-agent path, with optional press-and-hold voice
+capture in the same message box. Use it to see:
 
 - one `AgentDeployment` served over AG-UI;
-- streaming assistant text through SSE;
-- runtime task state mapped to `RunStarted`, streaming, `RunFinished`, and errors;
-- an in-memory browser conversation with no localStorage or session management.
+- streamed assistant text through SSE;
+- tap-to-type input with Enter-to-send;
+- press-and-hold browser speech recognition to create an editable transcript;
+- release-to-send and slide-up-to-cancel interaction;
+- optional browser speech synthesis controlled by **Speak**;
+- an in-memory conversation with no localStorage or session management.
 
 ```bash
-cd examples/simple-chat
+cd examples/chat
 make setup
 # Edit .env: set AGENTGO_LLM_API_KEY.
+make test
 make run
 ```
 
 Open <http://localhost:8080/>.
-
-### `agentgo-assistant` — click-to-explain page context
-
-![agentgo assistant animated demo](examples/agentgo-assistant/assets/assistant-demo.gif)
-
-This demonstrates a caller-owned embedded assistant. Use it to see:
-
-- a floating assistant opening beside normal page content;
-- click-to-explain interaction without activating links or buttons;
-- only the visible selected page content and explicit browser response language;
-- explicit `responseLanguage` from the browser, shown as **Browser language**;
-- follow-up conversation through the same AG-UI endpoint.
-
-```bash
-cd examples/agentgo-assistant
-make setup
-# Edit .env: set AGENTGO_LLM_API_KEY.
-make run
-```
-
-Open <http://localhost:8081/>.
 
 ### Local runtime development
 
@@ -330,8 +315,9 @@ editing history.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | runtime architecture and protocol mapping |
 | [`docs/DOMAIN.md`](docs/DOMAIN.md) | stable runtime domain invariants |
 | [`docs/STANDARDS.md`](docs/STANDARDS.md) | protocol and infrastructure review standards |
-| [`examples/simple-chat`](examples/simple-chat/README.md) | minimal in-memory browser chat with AG-UI task state |
+| [`examples/chat`](examples/chat/README.md) | minimal chat with typed and hold-to-talk voice input |
 | [`examples/agentgo-assistant`](examples/agentgo-assistant/README.md) | minimal click-to-explain assistant example |
+| [`examples/tax-refund-copilot`](examples/tax-refund-copilot/README.md) | embedded generic tax-refund claim copilot |
 | [`dev/agent-deployment/deployment.json`](dev/agent-deployment/deployment.json) | runtime validation fixture |
 | [`SECURITY.md`](SECURITY.md) | security policy and required controls |
 

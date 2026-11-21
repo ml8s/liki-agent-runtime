@@ -239,6 +239,11 @@ func (r *Runtime) seedAndStreamEvents(
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, runtimeError(err).Error())
+			r.config.Logger.DebugContext(ctx, "adk_event_stream_failed",
+				append(traceLogFields(ctx),
+					"run_id", request.RunID,
+					"error", err.Error(),
+				)...)
 			r.config.Logger.WarnContext(ctx, "agent_run_failed",
 				append(traceLogFields(ctx),
 					"run_id", request.RunID, "error", runtimeError(err).Error(),

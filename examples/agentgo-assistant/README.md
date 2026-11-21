@@ -27,6 +27,7 @@ click page element ──> build selection prompt ──> POST /ag-ui ──> ag
 cd examples/agentgo-assistant
 make setup
 # Edit .env and set AGENTGO_LLM_API_KEY
+make test
 make run
 ```
 
@@ -68,6 +69,7 @@ Run from this directory:
 | Target | Behavior |
 |---|---|
 | `make setup` | Creates `.env` without overwriting an existing file |
+| `make test` | Checks the UI contract and local Node tests |
 | `make run` | Builds and runs both services in the foreground |
 | `make start` | Builds and runs both services in the background |
 | `make logs` | Follows logs from both services |

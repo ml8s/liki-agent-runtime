@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "name": "agentgo-chat",
+    "version": "1.0.0"
+  },
+  "spec": {
+    "mcpServers": [],
+    "agents": [
+      {
+        "name": "agentgo-chat",
+        "version": "1.0.0",
+        "description": "Minimal conversational assistant for typed or browser-transcribed input",
+        "mode": "chat",
+        "instruction": {
+          "path": "instruction.md"
+        },
+        "tools": {
+          "allow": {}
+        }
+      }
+    ]
+  }
+}

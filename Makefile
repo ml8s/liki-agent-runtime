@@ -29,6 +29,8 @@ BENCH_PACKAGES ?= ./internal/audit/sqlite/... ./internal/agent/...
 COVER_PROFILE ?= $(CURDIR)/coverage.out
 COVER_MIN ?= 75
 COMPOSE_ENV_FILE := $(if $(wildcard .env),--env-file .env)
+EXAMPLE ?= tax-refund-copilot
+EXAMPLE_DIR ?= examples/$(EXAMPLE)
 
 .PHONY: help check test conformance gate test-local security-go setup-hooks bench build run dev dev-down image smoke
 help:
@@ -44,6 +46,8 @@ help:
 	@echo "make image    - build a local image (tag from git)"
 	@echo "make dev      - run the development Agent and MCP containers in the foreground"
 	@echo "make dev-down - remove the development Agent workload"
+	@echo "make run      - run the default embedded example ($(EXAMPLE))"
+	@echo "make start-example - run the default embedded example in the background"
 
 test: ## Run tests and enforce the coverage floor
 	$(GO) test -race -count=1 -coverprofile=$(COVER_PROFILE) $(TEST_PACKAGES)
@@ -84,7 +88,10 @@ smoke: image ## Smoke the local runtime image with the development deployment
 	IMAGE_TAG=$(IMAGE_TAG) scripts/smoke-image.sh
 
 run:
-	./scripts/dev.sh
+	$(MAKE) -C $(EXAMPLE_DIR) run
+
+start-example:
+	$(MAKE) -C $(EXAMPLE_DIR) start
 
 conformance: ## Run official-client protocol conformance checks
 	$(GO) test -race -count=1 ./internal/protocol/... ./internal/transport ./cmd/mcp-fixture

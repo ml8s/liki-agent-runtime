@@ -16,7 +16,7 @@ Die Delegation vom Root-Agent zu Sub-Agents läuft als lokaler ADK-Graph und nic
 
 ## Beispiele
 
-- [simple-chat](../../examples/simple-chat): minimaler AG-UI-Browser-Chat.
+- [chat](../../examples/chat): minimaler AG-UI-Browser-Chat.
 - [agentgo-assistant](../../examples/agentgo-assistant): Klick-Erklär-Assistent.
 
 ## Wichtige Dokumentation

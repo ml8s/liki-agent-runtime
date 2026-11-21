@@ -16,7 +16,7 @@ La délegation de l’agent racine vers les sous-agents s’exécute comme un gr
 
 ## Exemples
 
-- [simple-chat](../../examples/simple-chat): chat minimal AG-UI dans le navigateur.
+- [chat](../../examples/chat): chat minimal AG-UI dans le navigateur.
 - [agentgo-assistant](../../examples/agentgo-assistant): assistant d’explication au clic.
 
 ## Documentation principale

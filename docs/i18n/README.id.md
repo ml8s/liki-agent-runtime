@@ -16,7 +16,7 @@ Delegasi dari agen root ke subagen dijalankan sebagai graf ADK lokal, bukan seba
 
 ## Contoh
 
-- [simple-chat](../../examples/simple-chat): chat browser AG-UI minimal.
+- [chat](../../examples/chat): chat browser AG-UI minimal.
 - [agentgo-assistant](../../examples/agentgo-assistant): asisten penjelasan berbasis klik.
 
 ## Dokumentasi utama

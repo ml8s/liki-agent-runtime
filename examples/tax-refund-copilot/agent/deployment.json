@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "name": "tax-refund-copilot",
+    "version": "1.0.0"
+  },
+  "spec": {
+    "mcpServers": [],
+    "agents": [
+      {
+        "name": "tax-refund-copilot",
+        "version": "1.0.0",
+        "description": "Embedded assistant that prepares a generic tax refund claim from user-provided facts and source notes",
+        "mode": "chat",
+        "instruction": {
+          "path": "instruction.md"
+        },
+        "tools": {
+          "allow": {}
+        }
+      }
+    ]
+  }
+}

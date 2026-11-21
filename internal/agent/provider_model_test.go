@@ -23,6 +23,26 @@ func TestModelFactoryDispatchesByProvider(t *testing.T) {
 	}
 }
 
+func TestOpenAIProtocolSelectionIsExplicit(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		provider string
+		want     bool
+	}{
+		{ProviderOpenAI, false},
+		{ProviderOpenAICompatible, true},
+		{ProviderDeepSeek, true},
+		{ProviderZhipu, true},
+		{"test-provider", false},
+		{"", false},
+	}
+	for _, testCase := range tests {
+		if got := usesChatCompletions(testCase.provider); got != testCase.want {
+			t.Fatalf("usesChatCompletions(%q) = %v, want %v", testCase.provider, got, testCase.want)
+		}
+	}
+}
+
 func TestModelFactoryUsesOverride(t *testing.T) {
 	t.Parallel()
 	override := &fakeLLM{}

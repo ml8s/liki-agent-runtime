@@ -210,6 +210,40 @@ func TestRunStateConsumeTracksMultipleToolsInOneEvent(t *testing.T) {
 	}
 }
 
+func clientCallPart(name, callID string, args map[string]any) *genai.Part {
+	return &genai.Part{FunctionCall: &genai.FunctionCall{
+		Name: name,
+		ID:   callID,
+		Args: args,
+	}}
+}
+
+func TestRunStateConsumeDeduplicatesPendingClientTools(t *testing.T) {
+	state := NewRunState(structuredAll)
+	event := &session.Event{
+		LongRunningToolIDs: []string{"call_form"},
+		LLMResponse: model.LLMResponse{
+			Content: &genai.Content{Parts: []*genai.Part{
+				clientCallPart("tax_refund_form_patch", "call_form", map[string]any{
+					"contractVersion": "1.0",
+				}),
+				clientCallPart("tax_refund_form_patch", "call_form", map[string]any{
+					"contractVersion": "1.0",
+				}),
+			}},
+		},
+	}
+
+	next := state.Consume(event)
+	pending := next.PendingClientTools()
+	if len(pending) != 1 {
+		t.Fatalf("pending client tools = %#v, want exactly one deduplicated call", pending)
+	}
+	if pending[0].ToolCallID != "call_form" {
+		t.Fatalf("pending call ID = %q, want call_form", pending[0].ToolCallID)
+	}
+}
+
 // TestRunStateConsumeCapturesDelegatedAuthorText verifies that the plain-text
 // capture does not require the entrypoint author; any agent's terminal final
 // response is user-facing.

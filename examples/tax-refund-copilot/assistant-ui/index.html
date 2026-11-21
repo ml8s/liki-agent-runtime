@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tax Refund Claim Copilot</title>
+  <link rel="icon" href="./assets/agentgo-mark.svg" type="image/svg+xml">
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f3f6fa;
+      --surface: #ffffff;
+      --subtle: #f8fafc;
+      --ink: #172033;
+      --muted: #64748b;
+      --line: #dbe2ea;
+      --brand: #2563eb;
+      --brand-soft: #e8f0fe;
+      --success: #15803d;
+      --success-soft: #ecfdf5;
+      --warning: #b45309;
+      --warning-bg: #fff7ed;
+      --danger: #b91c1c;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body { margin: 0; background: var(--page); color: var(--ink); }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: minmax(340px, 390px) minmax(0, 1fr);
+      gap: .9rem;
+      min-height: 100dvh;
+      padding: .9rem;
+    }
+
+    header.site {
+      grid-column: 1 / -1;
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: .7rem;
+      box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+      display: flex;
+      gap: .8rem;
+      padding: .75rem 1rem;
+    }
+
+    header.site img { height: 42px; width: 42px; }
+    header.site h1 { font-size: 1.08rem; line-height: 1.2; margin: 0; }
+    header.site p { color: var(--muted); font-size: .78rem; margin: .15rem 0 0; }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: .7rem;
+      box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .assistant-panel { max-height: calc(100dvh - 1.8rem); }
+
+    .panel-heading {
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: .6rem;
+      padding: .75rem .85rem;
+    }
+
+    .panel-heading img { height: 28px; width: 28px; }
+    .panel-heading h2 { font-size: .95rem; margin: 0; }
+    .panel-heading p { color: var(--muted); font-size: .72rem; margin: .1rem 0 0; }
+
+    .conversation {
+      background: var(--subtle);
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: .75rem;
+    }
+
+    .message {
+      border-radius: .5rem;
+      font-size: .8rem;
+      line-height: 1.45;
+      margin-bottom: .55rem;
+      max-width: 92%;
+      overflow-wrap: anywhere;
+      padding: .5rem .65rem;
+      white-space: pre-wrap;
+    }
+
+    .message.user {
+      background: var(--brand);
+      color: white;
+      margin-left: auto;
+    }
+
+    .message.assistant {
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+
+    .message.system {
+      background: var(--success-soft);
+      border-left: 3px solid var(--success);
+      color: var(--success);
+      font-size: .72rem;
+      margin-inline: auto;
+    }
+
+    .message.error { background: #fee2e2; color: var(--danger); }
+
+    .assistant-input {
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: .45rem;
+      padding: .65rem;
+    }
+
+    textarea, input, select {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: .4rem;
+      color: var(--ink);
+      font: inherit;
+      padding: .42rem .5rem;
+      width: 100%;
+    }
+
+    textarea { min-height: 72px; resize: vertical; }
+
+    .conversation textarea {
+      background: #fff;
+      border-color: var(--line);
+      color: var(--ink);
+    }
+
+    .source-details {
+      border: 1px solid var(--line);
+      border-radius: .45rem;
+      overflow: hidden;
+    }
+
+    .source-details summary {
+      background: var(--subtle);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .72rem;
+      list-style: none;
+      padding: .4rem .5rem;
+      user-select: none;
+    }
+
+    .source-details summary::before { content: "▸ "; }
+    .source-details[open] summary::before { content: "▾ "; }
+    .source-details textarea {
+      border: 0;
+      border-top: 1px solid var(--line);
+      border-radius: 0;
+      font-size: .7rem;
+      max-height: 9rem;
+      min-height: 6rem;
+    }
+
+    .run-status-row {
+      align-items: center;
+      display: flex;
+      gap: .5rem;
+    }
+
+    #agent-run-phase {
+      align-items: center;
+      background: var(--subtle);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      display: inline-flex;
+      flex: 0 0 auto;
+      font-size: .68rem;
+      gap: .3rem;
+      padding: .18rem .45rem;
+      white-space: nowrap;
+    }
+
+    #agent-run-phase .dot {
+      background: #94a3b8;
+      border-radius: 50%;
+      height: .35rem;
+      width: .35rem;
+    }
+
+    #agent-run-phase:is([data-phase="connecting"], [data-phase="running"], [data-phase="streaming"], [data-phase="resuming"]) {
+      color: var(--brand);
+    }
+
+    #agent-run-phase:is([data-phase="connecting"], [data-phase="running"], [data-phase="streaming"], [data-phase="resuming"]) .dot {
+      background: var(--brand);
+    }
+
+    #agent-run-phase[data-phase="error"] {
+      color: var(--danger);
+    }
+
+    #agent-run-phase[data-phase="error"] .dot {
+      background: var(--danger);
+    }
+
+    #agent-run-detail {
+      color: var(--muted);
+      flex: 1;
+      font-size: .7rem;
+      margin: 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #agent-run-detail.error { color: var(--danger); }
+    .input-row { display: flex; gap: .4rem; }
+
+    button {
+      align-items: center;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: .4rem;
+      cursor: pointer;
+      display: inline-flex;
+      font: inherit;
+      gap: .3rem;
+      justify-content: center;
+      padding: .4rem .6rem;
+    }
+
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    .primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .send { flex: 1; }
+    .mic-button { background: var(--brand-soft); border-color: #bfdbfe; color: #1d4ed8; }
+    .mic-button.recording { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
+
+    .form-scroll { flex: 1; min-height: 0; overflow: auto; padding: .9rem; }
+
+    .status-card {
+      background: var(--subtle);
+      border: 1px solid var(--line);
+      border-radius: .55rem;
+      margin-bottom: .8rem;
+      padding: .7rem .8rem;
+    }
+
+    .progress {
+      align-items: center;
+      display: flex;
+      font-size: .72rem;
+      gap: .6rem;
+      margin-bottom: .55rem;
+    }
+
+    .meter { background: #e2e8f0; border-radius: 999px; flex: 1; height: .4rem; overflow: hidden; }
+    .meter-bar { background: var(--brand); height: 100%; transition: width .2s ease; }
+
+    .warning {
+      background: var(--warning-bg);
+      border-left: 3px solid #fb923c;
+      color: var(--warning);
+      font-size: .72rem;
+      margin-top: .5rem;
+      padding: .45rem .55rem;
+      white-space: pre-wrap;
+    }
+
+    .warning-item { margin: .2rem 0; }
+    .hidden { display: none !important; }
+
+    .form-tabs {
+      display: flex;
+      gap: .3rem;
+      margin-bottom: .75rem;
+      overflow: auto;
+      padding-bottom: .2rem;
+    }
+
+    .form-tab {
+      background: var(--surface);
+      border-color: var(--line);
+      color: var(--muted);
+      flex: 0 0 auto;
+      font-size: .75rem;
+      font-weight: 650;
+      padding: .38rem .65rem;
+    }
+
+    .form-tab[aria-selected="true"] {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+
+    .form-body { display: grid; gap: .8rem; }
+    .fields { display: grid; gap: .65rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+
+    .field label {
+      color: var(--muted);
+      display: block;
+      font-size: .7rem;
+      font-weight: 650;
+      margin-bottom: .2rem;
+    }
+
+    .field-meta { display: none; }
+
+    .field-meta:not(:empty) {
+      color: #64748b;
+      display: block;
+      font-size: .66rem;
+      margin-top: .18rem;
+    }
+
+    .field-meta.review { color: var(--warning); }
+    .field-wrapper.locked input, .field-wrapper.locked select { background: #f1f5f9; }
+    .needs-review-input { border-color: #fdba74; background: #fff7ed; }
+
+    .field-checkbox {
+      align-items: flex-start;
+      border: 1px solid var(--line);
+      border-radius: .45rem;
+      display: flex;
+      gap: .5rem;
+      padding: .55rem .6rem;
+    }
+
+    .field-checkbox input { height: 1rem; margin-top: .1rem; width: 1rem; }
+    .field-checkbox span { font-size: .76rem; line-height: 1.4; }
+
+    .sr-only {
+      border: 0;
+      clip: rect(0, 0, 0, 0);
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      padding: 0;
+      position: absolute;
+      white-space: nowrap;
+      width: 1px;
+    }
+
+    table { border-collapse: collapse; font-size: .74rem; width: 100%; }
+    th, td {
+      border: 1px solid var(--line);
+      overflow-wrap: anywhere;
+      padding: .38rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--subtle); color: #334155; }
+    td input, td select { min-width: 5rem; }
+    .empty-row { color: var(--muted); text-align: center; }
+
+    .asset-note { color: var(--muted); font-size: .68rem; }
+    .form-actions { display: flex; justify-content: flex-end; }
+
+    @media (max-width: 900px) {
+      .app-shell { grid-template-columns: 1fr; padding: .7rem; }
+      .assistant-panel { max-height: 68dvh; min-height: 28rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="site">
+      <img src="./assets/agentgo-mark.svg" alt="AgentGo logo">
+      <div>
+        <h1>Tax Refund Claim</h1>
+        <p>Embedded draft copilot · Frontend claim state only · Not a filing submission</p>
+      </div>
+    </header>
+
+    <section class="panel assistant-panel" aria-labelledby="assistant-title">
+      <div class="panel-heading">
+        <div>
+          <h2 id="assistant-title">Refund Copilot</h2>
+          <p>Describe refund facts. The claim stays a draft.</p>
+        </div>
+      </div>
+
+      <div id="conversation" class="conversation" aria-live="polite"></div>
+
+      <form id="assistant-form" class="assistant-input">
+        <div class="run-status-row">
+          <div id="agent-run-phase" data-phase="idle">
+            <span class="dot"></span>
+            <span id="agent-run-phase-label">Ready</span>
+          </div>
+          <p id="agent-run-detail" aria-live="polite"></p>
+        </div>
+        <details class="source-details">
+          <summary>Source notes</summary>
+          <label class="hidden" for="source-notes">Source notes</label>
+          <textarea id="source-notes" class="source-notes" spellcheck="false"></textarea>
+        </details>
+
+        <textarea id="conversation-input" rows="3" aria-label="Message the refund copilot" placeholder="Example: There was an overpayment of 1,240 in period 2025-H1."></textarea>
+        <div class="input-row">
+          <button id="conversation-send" class="primary send" type="button">Add to claim</button>
+          <button id="conversation-stop" type="button" disabled>Stop</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel" aria-labelledby="form-title">
+      <div class="panel-heading">
+        <div>
+          <h2 id="form-title">Refund claim — draft</h2>
+          <p class="asset-note">Browser draft state only · Export JSON to preserve the claim</p>
+        </div>
+      </div>
+
+      <div class="form-scroll">
+        <div class="status-card">
+          <div class="progress">
+            <strong id="completeness">0%</strong>
+            <div class="meter"><div id="completeness-bar" class="meter-bar" style="width:0%"></div></div>
+            <span id="field-count">0 fields captured</span>
+          </div>
+          <div id="validation" class="warning hidden"></div>
+        </div>
+
+        <div class="form-tabs" role="tablist" aria-label="Claim sections">
+          <button class="form-tab" type="button" data-form-tab="claim" aria-selected="true">Claim</button>
+          <button class="form-tab" type="button" data-form-tab="contact" aria-selected="false">Contact</button>
+          <button class="form-tab" type="button" data-form-tab="payment" aria-selected="false">Payment</button>
+          <button class="form-tab" type="button" data-form-tab="items" aria-selected="false">Lines</button>
+          <button class="form-tab" type="button" data-form-tab="review" aria-selected="false">Review</button>
+        </div>
+
+        <div class="form-body">
+          <section class="form-section" data-form-panel="claim">
+            <h3>Claim details</h3>
+            <div class="form-body">
+              <div class="fields">
+                <div class="field field-wrapper">
+                  <label for="claim-claimant_name">Claimant name</label>
+                  <input data-path="/claim/claimant_name" autocomplete="off" id="claim-claimant_name" name="claim.claimant_name">
+                  <span class="field-meta" data-meta="/claim/claimant_name"></span>
+                </div>
+                <div class="field field-wrapper">
+                  <label for="claim-taxpayer_reference_last4">Taxpayer reference (last 4)</label>
+                  <input data-path="/claim/taxpayer_reference_last4" maxlength="4" autocomplete="off" id="claim-taxpayer_reference_last4" name="claim.taxpayer_reference_last4">
+                  <span class="field-meta" data-meta="/claim/taxpayer_reference_last4"></span>
+                </div>
+                <div class="field field-wrapper">
+                  <label for="claim-tax_period">Tax period</label>
+                  <input data-path="/claim/tax_period" placeholder="2025" id="claim-tax_period" name="claim.tax_period">
+                  <span class="field-meta" data-meta="/claim/tax_period"></span>
+                </div>
+                <div class="field field-wrapper">
+                  <label for="claim-refund_reason">Refund reason</label>
+                  <select data-path="/claim/refund_reason" id="claim-refund_reason" name="claim.refund_reason">
+                    <option value="">Select</option>
+                    <option value="overpayment">Overpayment</option>
+                    <option value="withholding_correction">Withholding correction</option>
+                    <option value="duplicate_payment">Duplicate payment</option>
+                    <option value="amended_return">Amended return adjustment</option>
+                    <option value="eligible_relief">Eligible relief</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <span class="field-meta" data-meta="/claim/refund_reason"></span>
+                </div>
+                <div class="field field-wrapper">
+                  <label for="claim-currency">Currency</label>
+                  <select data-path="/claim/currency" id="claim-currency" name="claim.currency">
+                    <option value="">Select</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="JPY">JPY</option>
+                    <option value="USD">USD</option>
+                    <option value="CAD">CAD</option>
+                    <option value="AUD">AUD</option>
+                    <option value="CHF">CHF</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <span class="field-meta" data-meta="/claim/currency"></span>
+                </div>
+                <div class="field field-wrapper">
+                  <label for="claim-requested_amount">Requested refund amount</label>
+                  <input data-path="/claim/requested_amount" type="number" step="0.01" id="claim-requested_amount" name="claim.requested_amount">
+                  <span class="field-meta" data-meta="/claim/requested_amount"></span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="claim-explanation">Explanation</label>
+                <textarea data-path="/claim/explanation" rows="4" id="claim-explanation" name="claim.explanation"></textarea>
+                <span class="field-meta" data-meta="/claim/explanation"></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="form-section" data-form-panel="contact" hidden>
+            <h3>Contact</h3>
+            <div class="form-body">
+              <div class="fields">
+                <div class="field field-wrapper">
+                  <label for="contact-email">Email</label>
+                  <input data-path="/contact/email" type="email" id="contact-email" name="contact.email">
+                  <span class="field-meta" data-meta="/contact/email"></span>
+                </div>
+                <div class="field field-wrapper">
+                  <label for="contact-phone">Phone</label>
+                  <input data-path="/contact/phone" id="contact-phone" name="contact.phone">
+                  <span class="field-meta" data-meta="/contact/phone"></span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="contact-mailing_address">Mailing address</label>
+                <textarea data-path="/contact/mailing_address" rows="3" id="contact-mailing_address" name="contact.mailing_address"></textarea>
+                <span class="field-meta" data-meta="/contact/mailing_address"></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="form-section" data-form-panel="payment" hidden>
+            <h3>Refund method</h3>
+            <div class="form-body">
+              <div class="fields">
+                <div class="field field-wrapper">
+                  <label for="payment-method">Method</label>
+                  <select data-path="/payment/method" id="payment-method" name="payment.method">
+                    <option value="">Select</option>
+                    <option value="bank_transfer">Bank transfer</option>
+                    <option value="original_payment_method">Original payment method</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="account_credit">Account credit</option>
+                  </select>
+                  <span class="field-meta" data-meta="/payment/method"></span>
+                </div>
+                <div class="field field-wrapper">
+                  <label for="payment-bank_name">Bank name</label>
+                  <input data-path="/payment/bank_name" id="payment-bank_name" name="payment.bank_name">
+                  <span class="field-meta" data-meta="/payment/bank_name"></span>
+                </div>
+                <div class="field field-wrapper">
+                  <label for="payment-account_holder">Account holder</label>
+                  <input data-path="/payment/account_holder" id="payment-account_holder" name="payment.account_holder">
+                  <span class="field-meta" data-meta="/payment/account_holder"></span>
+                </div>
+                <div class="field field-wrapper">
+                  <label for="payment-account_number_last4">Account number (last 4)</label>
+                  <input data-path="/payment/account_number_last4" maxlength="4" id="payment-account_number_last4" name="payment.account_number_last4">
+                  <span class="field-meta" data-meta="/payment/account_number_last4"></span>
+                </div>
+                <div class="field field-wrapper">
+                  <label for="payment-bank_reference">Bank reference</label>
+                  <input data-path="/payment/bank_reference" id="payment-bank_reference" name="payment.bank_reference">
+                  <span class="field-meta" data-meta="/payment/bank_reference"></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="form-section" data-form-panel="items" hidden>
+            <h3>Refund breakdown</h3>
+            <div class="form-body">
+              <div id="items-container"></div>
+              <button id="add-item" type="button">Add refund line</button>
+            </div>
+          </section>
+
+          <section class="form-section" data-form-panel="review" hidden>
+            <h3>Declarations &amp; review</h3>
+            <div class="form-body">
+              <div class="field field-checkbox">
+                <input id="certified" name="declarations.certified_accurate" type="checkbox" data-path="/declarations/certified_accurate">
+                <label for="certified">I confirm the entered facts are accurate to the best of my knowledge.</label>
+              </div>
+              <span class="field-meta" data-meta="/declarations/certified_accurate"></span>
+
+              <div class="field field-checkbox">
+                <input id="consent" name="declarations.consent_to_processing" type="checkbox" data-path="/declarations/consent_to_processing">
+                <label for="consent">I consent to the tax authority processing this draft claim.</label>
+              </div>
+              <span class="field-meta" data-meta="/declarations/consent_to_processing"></span>
+
+              <div class="field">
+                <label for="review-notes">Additional notes</label>
+                <textarea data-path="/review/notes" rows="3" id="review-notes" name="review.notes"></textarea>
+                <span class="field-meta" data-meta="/review/notes"></span>
+              </div>
+
+              <div class="fields">
+                <div class="field field-wrapper">
+                  <label>Lines total</label>
+                  <input id="derived-items-total" readonly>
+                </div>
+                <div class="field field-wrapper">
+                  <label>Entered claim amount</label>
+                  <input id="derived-requested" readonly>
+                </div>
+              </div>
+
+              <div id="totals-warning" class="warning hidden"></div>
+              <div id="review-warnings" class="warning hidden"></div>
+              <div class="form-actions">
+                <button id="export-json" type="button">Export claim JSON</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 1024 1024" role="img" aria-labelledby="agentgo-logo-title">
+  <title id="agentgo-logo-title">AgentGo brand mark</title>
+  <desc>Fifteen yin-yang fish in five traditional colors and three sizes, arranged as a compact circular collaboration school with consistent clockwise right-over-left overlaps.</desc>
+  <defs>
+    <g id="fish"><path d="M256 26 A230 230 0 0 1 256 486 A115 115 0 0 1 256 256 A115 115 0 0 0 256 26 Z"/><circle cx="256" cy="141" r="52"/></g>
+    <clipPath id="clip-prev-fish"><path transform="translate(483.78 243.48) rotate(174.00) scale(0.72) translate(-256 -256)" d="M256 26 A230 230 0 0 1 256 486 A115 115 0 0 1 256 256 A115 115 0 0 0 256 26 Z"/><circle transform="translate(483.78 243.48) rotate(174.00) scale(0.72) translate(-256 -256)" cx="256" cy="141" r="52"/></clipPath>
+    <clipPath id="clip-seam-fish"><path transform="translate(595.43 255.21) rotate(198.00) scale(0.56) translate(-256 -256)" d="M256 26 A230 230 0 0 1 256 486 A115 115 0 0 1 256 256 A115 115 0 0 0 256 26 Z"/><circle transform="translate(595.43 255.21) rotate(198.00) scale(0.56) translate(-256 -256)" cx="256" cy="141" r="52"/></clipPath>
+  </defs>
+  <use xlink:href="#fish" transform="translate(595.43 255.21) rotate(198.00) scale(0.56) translate(-256 -256)" fill="#22A374"/>
+  <use xlink:href="#fish" transform="translate(692.67 311.35) rotate(222.00) scale(0.64) translate(-256 -256)" fill="#2E7CD6"/>
+  <use xlink:href="#fish" transform="translate(758.66 402.18) rotate(246.00) scale(0.72) translate(-256 -256)" fill="#7A5AF5"/>
+  <use xlink:href="#fish" transform="translate(782.00 512.00) rotate(-90.00) scale(0.56) translate(-256 -256)" fill="#E8503F"/>
+  <use xlink:href="#fish" transform="translate(758.66 621.82) rotate(-66.00) scale(0.64) translate(-256 -256)" fill="#E8A93D"/>
+  <use xlink:href="#fish" transform="translate(692.67 712.65) rotate(-42.00) scale(0.72) translate(-256 -256)" fill="#22A374"/>
+  <use xlink:href="#fish" transform="translate(595.43 768.79) rotate(-18.00) scale(0.56) translate(-256 -256)" fill="#2E7CD6"/>
+  <use xlink:href="#fish" transform="translate(483.78 780.52) rotate(6.00) scale(0.64) translate(-256 -256)" fill="#7A5AF5"/>
+  <use xlink:href="#fish" transform="translate(377.00 745.83) rotate(30.00) scale(0.72) translate(-256 -256)" fill="#E8503F"/>
+  <use xlink:href="#fish" transform="translate(293.57 670.70) rotate(54.00) scale(0.56) translate(-256 -256)" fill="#E8A93D"/>
+  <use xlink:href="#fish" transform="translate(247.90 568.14) rotate(78.00) scale(0.64) translate(-256 -256)" fill="#22A374"/>
+  <use xlink:href="#fish" transform="translate(247.90 455.86) rotate(102.00) scale(0.72) translate(-256 -256)" fill="#2E7CD6"/>
+  <use xlink:href="#fish" transform="translate(293.57 353.30) rotate(126.00) scale(0.56) translate(-256 -256)" fill="#7A5AF5"/>
+  <use xlink:href="#fish" transform="translate(377.00 278.17) rotate(150.00) scale(0.64) translate(-256 -256)" fill="#E8503F"/>
+  <use xlink:href="#fish" transform="translate(483.78 243.48) rotate(174.00) scale(0.72) translate(-256 -256)" fill="#E8A93D"/>
+  <g clip-path="url(#clip-prev-fish)">
+    <g clip-path="url(#clip-seam-fish)">
+      <use xlink:href="#fish" transform="translate(595.43 255.21) rotate(198.00) scale(0.56) translate(-256 -256)" fill="#22A374"/>
+    </g>
+  </g>
+</svg>

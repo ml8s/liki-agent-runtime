@@ -16,7 +16,7 @@
 
 ## 示例
 
-- [simple-chat](../../examples/simple-chat)：最小 AG-UI 浏览器聊天示例。
+- [chat](../../examples/chat)：最小 AG-UI 浏览器聊天示例。
 - [agentgo-assistant](../../examples/agentgo-assistant)：点击解释助手示例。
 
 ## 核心文档

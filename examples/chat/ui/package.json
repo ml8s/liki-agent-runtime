@@ -1,0 +1,9 @@
+{
+  "name": "agentgo-chat-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check app.js && node --check src/voice-input.js",
+    "test": "node --test test/*.test.js"
+  }
+}

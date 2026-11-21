@@ -134,6 +134,10 @@ func appendPendingClientTools(
 	for _, id := range event.LongRunningToolIDs {
 		waiting[id] = struct{}{}
 	}
+	seenCalls := make(map[string]struct{}, len(pending))
+	for _, call := range pending {
+		seenCalls[call.ToolCallID] = struct{}{}
+	}
 	for _, part := range event.Content.Parts {
 		if part == nil || part.FunctionCall == nil || part.FunctionCall.ID == "" {
 			continue
@@ -141,6 +145,10 @@ func appendPendingClientTools(
 		if _, ok := waiting[part.FunctionCall.ID]; !ok {
 			continue
 		}
+		if _, ok := seenCalls[part.FunctionCall.ID]; ok {
+			continue
+		}
+		seenCalls[part.FunctionCall.ID] = struct{}{}
 		args, err := json.Marshal(part.FunctionCall.Args)
 		if err != nil || bytesEqualJSON(args) {
 			args = []byte("{}")

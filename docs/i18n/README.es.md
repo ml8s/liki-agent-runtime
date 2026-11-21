@@ -16,7 +16,7 @@ La delegación del agente raíz a los subagentes se ejecuta como un grafo ADK lo
 
 ## Ejemplos
 
-- [simple-chat](../../examples/simple-chat): chat mínimo de navegador con AG-UI.
+- [chat](../../examples/chat): chat mínimo de navegador con AG-UI.
 - [agentgo-assistant](../../examples/agentgo-assistant): asistente de explicación al hacer clic.
 
 ## Documentación principal

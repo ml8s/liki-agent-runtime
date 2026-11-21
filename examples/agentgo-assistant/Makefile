@@ -1,8 +1,12 @@
 COMPOSE ?= docker compose
+NODE_VERSION := $(shell cat ../../.nvmrc 2>/dev/null || echo 24.14.1)
+NPM_FROM_PATH := $(shell command -v npm 2>/dev/null)
+NPM ?= $(if $(NPM_FROM_PATH),$(NPM_FROM_PATH),$(HOME)/.nvm/versions/node/v$(NODE_VERSION)/bin/npm)
+export PATH := $(dir $(NPM)):$(PATH)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup run start logs stop clean
+.PHONY: help test setup run start logs stop clean
 
 help:
 	@echo "Targets:"
@@ -12,6 +16,9 @@ help:
 	@echo "  make logs    Follow agentgo and assistant-ui logs"
 	@echo "  make stop    Stop and remove the demo containers"
 	@echo "  make clean   Stop, remove containers, and delete local demo volumes"
+
+test:
+	$(NPM) --prefix assistant-ui test
 
 setup:
 	@if [ ! -f .env ]; then \

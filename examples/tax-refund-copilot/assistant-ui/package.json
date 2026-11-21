@@ -1,0 +1,9 @@
+{
+  "name": "tax-refund-copilot-assistant-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check app.js && node --check src/contract.js && node --check src/reducer.js",
+    "test": "node --test test/*.test.js"
+  }
+}

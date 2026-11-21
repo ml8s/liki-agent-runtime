@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>agentgo introduction</title>
+  <link rel="icon" href="./assets/agentgo-mark.svg" type="image/svg+xml">
   <style>
     :root {
       color-scheme: light;
@@ -85,6 +86,13 @@
     }
 
     #assistant-launcher:hover { transform: translateY(-.1rem); }
+
+    #assistant-launcher img,
+    .assistant-dialog-title img {
+      height: 1.4rem;
+      width: 1.4rem;
+      flex: 0 0 auto;
+    }
 
     #assistant-dialog {
       background: var(--assistant-panel);
@@ -418,7 +426,7 @@
 
     <section id="quick-start">
       <h2>Quick start</h2>
-      <pre><code>cd examples/simple-chat
+      <pre><code>cd examples/chat
 make setup
 # Edit .env and set AGENTGO_LLM_API_KEY
 make run</code></pre>
@@ -441,14 +449,14 @@ make run</code></pre>
   </main>
 
       <button id="assistant-launcher" type="button" aria-controls="assistant-dialog" aria-expanded="false">
-        <span aria-hidden="true">🧚</span>
+        <img src="./assets/agentgo-mark.svg" alt="" aria-hidden="true">
         agentgo assistant
       </button>
 
   <aside id="assistant-dialog" hidden aria-label="agentgo assistant">
     <header>
       <div class="assistant-dialog-title">
-        <h2>agentgo assistant</h2>
+        <h2><img src="./assets/agentgo-mark.svg" alt="" aria-hidden="true"> agentgo assistant</h2>
         <p id="response-language"></p>
       </div>
       <div class="assistant-header-controls">

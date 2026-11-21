@@ -18,33 +18,42 @@ shared code.
 | `SelectedPageElement` | The visible page content selected for explanation, limited to 600 characters. |
 | `ResponseLanguage` | Explicit `navigator.language`, shown as **Browser language** and included in the selection prompt. |
 
-Runnable examples own their local Makefile. The repository root Makefile does
-not register individual examples.
+Runnable examples own their local Makefile. Per-example lifecycle targets are
+authoritative; the root Makefile may expose a convenience default, but it does
+not turn examples into shared runtime features.
 
 Use the local Makefile from inside an example directory. Keep example lifecycle
-targets consistent across examples: `setup`, `run`, `start`, `logs`, `stop`,
-and `clean`.
+targets consistent across examples: `setup`, `test` where examples have local
+logic, `run`, `start`, `logs`, `stop`, and `clean`.
 
 | Example | Purpose |
 |---|---|
-| [`simple-chat`](./simple-chat) | Minimal in-memory browser chat showing AG-UI streaming and task state |
+| [`chat`](./chat) | Minimal browser chat showing AG-UI streaming, hold-to-talk voice input, and streamed replies |
 | [`agentgo-assistant`](./agentgo-assistant) | Minimal click-to-explain assistant showing small selected-element context |
+| [`tax-refund-copilot`](./tax-refund-copilot) | Embedded assistant that fills a generic tax refund claim through AG-UI client tools |
 
-## simple-chat
+## chat
 
-**What it is:** the shortest browser conversation path.
-**What to look at:** streaming text and the status pill moving through
-connecting, running, streaming, complete, stopped, or failed states.
+**What it is:** the smallest browser conversation path, with optional voice
+input.
+
+![agentgo chat screenshot](./chat/assets/chat.png)
+
+**What to look at:** streaming text, the run status, a single message box that
+supports tap-to-type and press-and-hold-to-talk, visible transcript feedback,
+and optional spoken replies.
 **Port:** `8080`.
 
 ```bash
-cd examples/simple-chat
+cd examples/chat
 make setup
 # Edit .env: set AGENTGO_LLM_API_KEY.
+make test
 make run
 ```
 
-![agentgo simple chat animated demo](./simple-chat/assets/simple-chat-demo.gif)
+AgentGo receives only the final transcript, not the microphone stream. Browser
+speech implementations may send audio to the browser vendor's speech service.
 
 ## agentgo-assistant
 
@@ -63,8 +72,29 @@ make run
 
 ![agentgo assistant animated demo](./agentgo-assistant/assets/assistant-demo.gif)
 
+## tax-refund-copilot
+
+**What it is:** an embedded tax-draft form copilot with no tax backend.
+**What to look at:** a declared AG-UI client tool (`tax_refund_form_patch`),
+incremental structured patches, a realistic tax refund claim form, confidence/source
+metadata, and protected user-edited fields.
+**Port:** `8082`.
+
+```bash
+cd examples/tax-refund-copilot
+make setup
+# Edit .env: set AGENTGO_LLM_API_KEY.
+make test
+make run
+```
+
+It prepares a frontend-only refund claim draft and does not provide tax advice,
+calculate final eligibility, submit to a tax authority, or persist to a tax
+backend.
+
 ## Common rules
 
-Both examples are self-contained agentgo consumers. They use the same local
-lifecycle targets and send public protocol requests to agentgo. They do not add
-product capabilities, user management, or session storage to the runtime.
+All examples are self-contained agentgo consumers. They use consistent local
+lifecycle targets and send public protocol requests to agentgo. Examples with
+local logic also expose `make test`. They do not add product capabilities, user
+management, or session storage to the runtime.
